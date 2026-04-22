@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <title>TUBE FACTORY | OmniVoice</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="logo">YT</div>
+      <div>
+        <b>TUBE FACTORY</b>
+        <div class="muted">OmniVoice Studio</div>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="group-title">Projects</div>
+      <button id="nav-projects" class="nav active" type="button">All Projects</button>
+    </div>
+
+    <div class="group" id="workflow-nav" hidden>
+      <div class="group-title">Workflow</div>
+      <button class="nav step" data-step="1" type="button">1. Script</button>
+      <button class="nav step" data-step="2" type="button">2. Media</button>
+      <button class="nav step" data-step="3" type="button">3. TTS</button>
+      <button class="nav step" data-step="4" type="button">4. Render</button>
+      <button class="nav step" data-step="5" type="button">5. YouTube</button>
+    </div>
+  </aside>
+
+  <main class="main">
+    <section id="view-projects" class="view">
+      <header class="header">
+        <h1>프로젝트</h1>
+        <div class="subtitle">스크립트, 미디어, TTS, 렌더, YouTube 업로드까지 한 번에 관리합니다.</div>
+      </header>
+
+      <div class="actions">
+        <input id="new-title" placeholder="새 프로젝트 제목" />
+        <button id="btn-new" class="btn primary" type="button">프로젝트 만들기</button>
+      </div>
+
+      <div id="projects-list" class="projects-list"></div>
+
+      <div id="projects-empty" class="empty" hidden>
+        <div class="empty-icon">+</div>
+        <div class="empty-title">아직 프로젝트가 없습니다.</div>
+        <div class="muted">첫 프로젝트를 만들어 워크플로를 시작해 보세요.</div>
+      </div>
+    </section>
+
+    <section id="view-workflow" class="view" hidden>
+      <header class="header row between">
+        <div>
+          <button id="back" class="linklike" type="button">Projects</button>
+          <h1 id="wf-title">프로젝트</h1>
+          <div class="subtitle" id="wf-id"></div>
+        </div>
+
+        <div class="progress-wrap">
+          <div class="progress-caption">전체 제작 단계 진행률</div>
+          <div class="progress"><div id="progress-bar"></div></div>
+          <div class="muted" id="progress-label">0%</div>
+        </div>
+      </header>
+
+      <section id="step-1" class="step-view">
+        <h2>스크립트 작성</h2>
+        <input id="s1-title" placeholder="영상 제목" />
+        <textarea id="s1-script" placeholder="문장 단위 스크립트를 입력하세요. 저장 후 문장 수가 자동으로 계산됩니다."></textarea>
+        <div class="row between">
+          <div class="muted" id="s1-count">문장 0개</div>
+          <button id="s1-save" class="btn primary" type="button">저장</button>
+        </div>
+      </section>
+
+      <section id="step-2" class="step-view" hidden>
+        <div class="row between">
+          <div>
+            <h2>미디어 업로드</h2>
+            <div class="muted" id="media-workflow-hint">전체 제작 단계와 별개로 업로드 진행률을 표시합니다.</div>
+          </div>
+        </div>
+
+        <div id="dropzone" class="dropzone" tabindex="0" role="button">
+          <div>이미지와 영상을 끌어다 놓거나 클릭해서 업로드하세요.</div>
+          <div class="muted">지원 형식: jpg, jpeg, png, webp, mp4, mov, webm</div>
+          <input type="file" id="file-input" accept="image/*,video/*" multiple hidden>
+        </div>
+
+        <div id="media-upload-panel" class="card upload-panel">
+          <div class="upload-panel-header">
+            <strong>업로드 상태</strong>
+            <span class="muted" id="media-upload-status">대기 중</span>
+          </div>
+
+          <div class="upload-metric">
+            <div class="row between">
+              <span>브라우저 전송</span>
+              <span class="muted" id="media-transfer-label">0%</span>
+            </div>
+            <div class="progress thin"><div id="media-transfer-bar"></div></div>
+          </div>
+
+          <div class="upload-metric">
+            <div class="row between">
+              <span>서버 저장</span>
+              <span class="muted" id="media-server-label">0%</span>
+            </div>
+            <div class="progress thin secondary"><div id="media-server-bar"></div></div>
+          </div>
+
+          <div id="media-upload-summary" class="upload-summary muted">업로드를 시작하면 파일별 진행 상황이 여기에 표시됩니다.</div>
+        </div>
+
+        <div class="media-layout">
+          <section class="media-stage">
+            <div class="section-head row between">
+              <div>
+                <strong>업로드된 미디어</strong>
+                <div class="muted">썸네일로 확인하고 드래그 또는 이동 버튼으로 순서를 바꿀 수 있습니다.</div>
+              </div>
+              <div class="muted" id="media-count">0 items</div>
+            </div>
+            <div id="media-grid" class="media-grid"></div>
+          </section>
+
+          <aside class="card media-preview-card">
+            <div class="section-head">
+              <strong>선택한 미디어 미리보기</strong>
+            </div>
+            <div id="media-preview-stage" class="media-preview-stage">
+              <div class="media-empty">업로드한 이미지나 영상을 선택하면 이곳에서 크게 볼 수 있습니다.</div>
+            </div>
+            <div id="media-preview-meta" class="media-preview-meta muted"></div>
+          </aside>
+        </div>
+      </section>
+
+      <section id="step-3" class="step-view" hidden>
+        <h2>TTS 생성</h2>
+        <label for="s3-voice">보이스 프리셋</label>
+        <select id="s3-voice">
+          <option value="auto">Auto</option>
+          <option value="male-calm">Male Calm</option>
+          <option value="female-bright">Female Bright</option>
+          <option value="narrator">Narrator</option>
+          <option value="male-30s-40s-lowmid">30~40대 중저음 남성</option>
+          <option value="male-40s-50s-lowmid">40~50대 중저음 남성</option>
+          <option value="male-announcer-30s-40s">30~40대 남성 아나운서</option>
+          <option value="male-low-30s-40s">30~40대 남성 저음</option>
+          <option value="male-pastor-30s-40s">30~40대 남성 목사님</option>
+        </select>
+        <div class="row">
+          <button id="s3-run" class="btn primary" type="button">TTS 시작</button>
+          <span id="s3-state" class="muted">idle · 0%</span>
+        </div>
+        <div id="s3-list" class="tts-list"></div>
+      </section>
+
+      <section id="step-4" class="step-view" hidden>
+        <h2>렌더링 및 미리보기</h2>
+        <div class="row">
+          <button id="s4-run" class="btn primary" type="button">렌더 시작</button>
+          <span id="s4-state" class="muted">idle · 0%</span>
+        </div>
+        <video id="s4-video" controls hidden></video>
+      </section>
+
+      <section id="step-5" class="step-view" hidden>
+        <h2>YouTube 업로드</h2>
+        <div id="oauth-panel" class="card"></div>
+
+        <label for="s5-title">제목</label>
+        <input id="s5-title" />
+
+        <label for="s5-desc">설명</label>
+        <textarea id="s5-desc" rows="4"></textarea>
+
+        <label for="s5-tags">태그</label>
+        <input id="s5-tags" placeholder="ai, omnivoice, tutorial" />
+
+        <label for="s5-privacy">공개 설정</label>
+        <select id="s5-privacy">
+          <option value="private">Private</option>
+          <option value="unlisted">Unlisted</option>
+          <option value="public">Public</option>
+        </select>
+
+        <div class="row">
+          <button id="s5-run" class="btn primary" type="button">업로드 시작</button>
+          <span id="s5-state" class="muted">idle · 0%</span>
+        </div>
+
+        <div id="s5-link"></div>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

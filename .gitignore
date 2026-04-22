@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+node_modules/
+storage/
+omnivoice_env/
+.claude/
+_run_stdout.log
+_run_stderr.log

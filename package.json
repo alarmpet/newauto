@@ -1,0 +1,10 @@
+{
+  "name": "tube-factory-frontend",
+  "private": true,
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  },
+  "scripts": {
+    "typecheck:frontend": "npx tsc -p tsconfig.json"
+  }
+}

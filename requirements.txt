@@ -1,0 +1,15 @@
+fastapi>=0.115
+uvicorn[standard]>=0.32
+python-multipart
+jinja2
+pydantic>=2.0
+typing-extensions>=4.8
+soundfile
+numpy
+ffmpeg-python
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2
+# Heavy deps — install separately with matching CUDA build:
+#   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
+#   pip install omnivoice

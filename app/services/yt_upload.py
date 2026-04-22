@@ -1,0 +1,88 @@
+import traceback
+from typing import cast
+
+from .. import db
+from ..config import CLIENT_SECRET_PATH, TOKEN_PATH
+from ..types import OAuthStatus, PrivacyValue
+
+SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
+
+
+def _load_creds() -> object | None:
+    from google.auth.transport.requests import Request  # noqa: WPS433
+    from google.oauth2.credentials import Credentials  # noqa: WPS433
+
+    if not TOKEN_PATH.exists():
+        return None
+    credentials = Credentials.from_authorized_user_file(str(TOKEN_PATH), SCOPES)
+    if credentials and credentials.expired and credentials.refresh_token:
+        credentials.refresh(Request())
+        TOKEN_PATH.write_text(credentials.to_json(), encoding="utf-8")
+    return cast(object, credentials)
+
+
+def has_credentials() -> bool:
+    try:
+        credentials = _load_creds()
+        return bool(credentials and cast(bool, getattr(credentials, "valid", False)))
+    except Exception:
+        return False
+
+
+def oauth_status() -> OAuthStatus:
+    return {
+        "client_secret_present": CLIENT_SECRET_PATH.exists(),
+        "authorized": has_credentials(),
+    }
+
+
+def run_oauth_flow() -> None:
+    from google_auth_oauthlib.flow import InstalledAppFlow  # noqa: WPS433
+
+    if not CLIENT_SECRET_PATH.exists():
+        raise FileNotFoundError(
+            f"Place your OAuth client_secret.json at {CLIENT_SECRET_PATH}"
+        )
+    flow = InstalledAppFlow.from_client_secrets_file(str(CLIENT_SECRET_PATH), SCOPES)
+    credentials = flow.run_local_server(port=0)
+    TOKEN_PATH.write_text(credentials.to_json(), encoding="utf-8")
+
+
+def run_upload_job(
+    pid: str,
+    title: str,
+    description: str,
+    tags: list[str],
+    privacy: PrivacyValue,
+) -> None:
+    try:
+        from googleapiclient.discovery import build  # noqa: WPS433
+        from googleapiclient.http import MediaFileUpload  # noqa: WPS433
+
+        credentials = _load_creds()
+        if not credentials or not cast(bool, getattr(credentials, "valid", False)):
+            raise RuntimeError("YouTube credentials invalid - re-authorize")
+
+        video_path = db.project_dir(pid) / "output.mp4"
+        if not video_path.exists():
+            raise RuntimeError("output.mp4 not found - render first")
+
+        youtube = build("youtube", "v3", credentials=credentials)
+        body = {
+            "snippet": {"title": title, "description": description, "tags": tags},
+            "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False},
+        }
+        media = MediaFileUpload(str(video_path), chunksize=1024 * 1024, resumable=True)
+        request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+
+        response = None
+        while response is None:
+            status, response = request.next_chunk()
+            if status:
+                db.update_project(pid, upload_progress=int(status.progress() * 100))
+
+        video_id = response.get("id")
+        db.update_project(pid, upload_state="done", upload_progress=100, youtube_id=video_id)
+    except Exception:
+        traceback.print_exc()
+        db.update_project(pid, upload_state="error")

@@ -1,0 +1,283 @@
+# TUBE FACTORY 스타일 오디오/영상 자동화 앱 리서치
+
+## 개요
+
+`C:\Users\petbl\newauto` 기준으로, FastAPI 기반 유튜브 영상 자동 제작 앱의 구조, 현재 구현 상태, 그리고 이 PC에서의 실행 가능 여부를 정리한 문서다.
+
+앱은 다음 5단계 흐름으로 설계되어 있다.
+
+1. 프로젝트 생성
+2. 대본 입력
+3. 미디어 업로드 및 순서 조정
+4. OmniVoice TTS 생성과 FFmpeg 렌더링
+5. YouTube OAuth 인증 및 업로드
+
+## 현재 PC 점검 결과
+
+- 저장소 위치: `C:\Users\petbl\newauto`
+- Git 저장소: 2026-04-23 기준으로 로컬 Git 저장소 초기화 완료
+- `origin`: `https://github.com/alarmpet/newauto.git`
+- FFmpeg: 시스템 `PATH`에서 확인됨
+- GPU: NVIDIA GeForce RTX 4060 Laptop GPU
+- CUDA: `torch.cuda.is_available() == True`
+- 로컬 전용 OmniVoice 환경:
+  - `C:\Users\petbl\newauto\omnivoice_env`
+  - Python `3.10.11`
+  - `omnivoice 0.1.4`
+  - `torch 2.8.0+cu128`
+  - `torchaudio 2.8.0+cu128`
+- 보조 폴백 환경:
+  - `C:\Users\petbl\music-auto\.venv_omnivoice`
+- OmniVoice 헬스체크:
+  - `storage/voice_samples/_healthcheck/healthcheck_male_low.wav`
+  - `storage/voice_samples/_healthcheck/healthcheck_log.json`
+  - 상태: `ok`
+- YouTube OAuth 파일:
+  - `storage/oauth/client_secret.json` 없음
+  - `storage/oauth/token.json` 없음
+
+## 완성된 구조
+
+```text
+C:\Users\petbl\newauto\
+├─ app/
+│  ├─ main.py                ← FastAPI 엔트리
+│  ├─ config.py              ← 경로, 상수, Voice 프리셋
+│  ├─ db.py                  ← SQLite 프로젝트/상태 관리
+│  ├─ text.py                ← 대본 문장 분리 및 TTS 필터링
+│  ├─ routers/
+│  │  ├─ projects.py         ← 프로젝트 CRUD, 미디어 업로드/정렬
+│  │  ├─ render.py           ← TTS/렌더 시작과 상태 조회
+│  │  └─ youtube.py          ← OAuth 상태/인증, 업로드 시작
+│  ├─ services/
+│  │  ├─ tts.py              ← OmniVoice 래퍼와 TTS 실행
+│  │  ├─ subtitle.py         ← SRT 생성
+│  │  ├─ render.py           ← FFmpeg 오디오 결합, 영상 생성, 자막 합성
+│  │  └─ yt_upload.py        ← YouTube resumable upload
+│  └─ static/
+│     ├─ index.html          ← 단일 페이지 UI
+│     ├─ style.css           ← 스타일
+│     └─ app.js              ← 프런트 상태/요청 처리
+├─ scripts/
+│  ├─ check_omnivoice_health.py
+│  ├─ generate_voice_samples.py
+│  ├─ open_browser.ps1
+│  ├─ resolve_omnivoice_python.ps1
+│  └─ typecheck.ps1
+├─ tests/
+├─ storage/
+│  ├─ app.db
+│  ├─ oauth/
+│  ├─ projects/
+│  └─ voice_samples/
+├─ requirements.txt
+├─ requirements-dev.txt
+├─ run.bat
+└─ research.md
+```
+
+## 주요 구현 내용
+
+### 백엔드 구조
+
+- `app/main.py`
+  - FastAPI 앱을 초기화하고 라우터를 등록한다.
+  - startup 시 SQLite 초기화를 수행한다.
+- `app/db.py`
+  - `projects` 테이블을 관리한다.
+  - 앱 기동 시 누락된 컬럼을 자동 추가하는 마이그레이션 로직이 있다.
+- `app/text.py`
+  - 대본을 문장 단위로 분리한다.
+  - 구두점만 있는 조각이나 읽을 수 없는 텍스트는 TTS 대상에서 제거한다.
+- `app/services/tts.py`
+  - OmniVoice를 lazy import 하므로 ML 의존성이 없어도 기본 UI 개발은 가능하다.
+  - CUDA 가능 시 `float16`, 아니면 `float32`를 선택한다.
+  - 문장별 WAV와 `timings.json`을 생성한다.
+- `app/services/render.py`
+  - FFmpeg 존재 여부를 확인한다.
+  - TTS WAV를 하나로 합치고, 자막을 만들고, 미디어와 오디오를 mux 한다.
+- `app/services/yt_upload.py`
+  - Google OAuth와 YouTube 업로드를 담당한다.
+  - 실제 업로드는 OAuth 파일이 있어야 가능하다.
+
+### 프런트엔드 구조
+
+- 사이드바 기반 단일 페이지 UI
+- 프로젝트 선택, 대본 저장, 미디어 업로드, TTS, 렌더링, 업로드 상태를 한 화면에서 처리
+- 업로드 상태와 워크플로우 상태를 분리해서 보여줌
+- 미디어 순서 재정렬 지원
+
+## 실행 방법
+
+### 1. 개발 서버 실행
+
+`run.bat` 는 아래 순서로 동작한다.
+
+- OmniVoice 실행용 Python 경로를 자동 탐색
+- 기본 브라우저에서 `http://127.0.0.1:8000` 오픈
+- Uvicorn 개발 서버 실행
+
+우선순위는 다음과 같다.
+
+1. `OMNIVOICE_PYTHON` 환경 변수
+2. `OMNIVOICE_ENV_DIR\Scripts\python.exe`
+3. 로컬 `omnivoice_env\Scripts\python.exe`
+4. `C:\Users\petbl\music-auto\.venv_omnivoice\Scripts\python.exe`
+
+실행:
+
+```powershell
+.\run.bat
+```
+
+### 2. 타입 체크
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
+```
+
+이 스크립트는 다음을 수행한다.
+
+- 프런트엔드 `tsc`
+- OmniVoice Python 환경을 자동 탐색한 뒤 `mypy`
+
+### 3. OmniVoice 연결 확인
+
+```powershell
+.\omnivoice_env\Scripts\python.exe .\scripts\check_omnivoice_health.py
+```
+
+검증 항목:
+
+- 런타임 device/dtype 결정
+- 모델 로드
+- 단문 추론
+- WAV 저장
+
+### 4. YouTube 업로드 사용
+
+현재 이 PC에는 OAuth 파일이 없으므로 업로드 기능은 아직 미연결 상태다.
+
+필요 파일:
+
+- `storage/oauth/client_secret.json`
+- 최초 인증 후 생성되는 `storage/oauth/token.json`
+
+절차:
+
+1. Google Cloud Console에서 데스크톱 앱용 OAuth Client ID를 발급한다.
+2. `client_secret.json` 을 `storage/oauth/client_secret.json` 에 둔다.
+3. 앱에서 `Authorize` 를 실행한다.
+4. 브라우저 인증 완료 후 `token.json` 이 생성되면 업로드 가능하다.
+
+## 테스트 및 검증 메모
+
+2026-04-23 기준 확인한 내용:
+
+- `app.main` import 성공
+- 로컬 `omnivoice_env` 에 OmniVoice 및 프로젝트 의존성 설치 완료
+- OmniVoice 헬스체크 성공
+- FFmpeg 명령 사용 가능
+
+추가로 권장되는 검증:
+
+- `python -m unittest discover -s tests -v`
+- 실제 브라우저에서 프로젝트 생성 → 대본 저장 → TTS → 렌더 → 출력 확인
+- OAuth 파일 배치 후 YouTube 업로드 연동 테스트
+
+## 2026-04-22 Update
+
+### Architecture changes
+
+- Added project-level media upload tracking fields in SQLite:
+  - `media_upload_state`
+  - `media_upload_progress`
+  - `media_upload_completed`
+  - `media_upload_total`
+  - `media_upload_error`
+- Added schema migration logic in `app/db.py` so existing local databases gain the new columns automatically at startup.
+- Expanded `/api/projects/{pid}/status` to include media upload state so the browser can distinguish upload transfer, server save progress, and post-upload readiness.
+- Changed `/api/projects/{pid}/media` to return a richer payload with:
+  - updated project snapshot
+  - accepted file list
+  - skipped file list
+- Hardened `/api/projects/{pid}/media/order` so partial reorder payloads do not accidentally drop existing media entries.
+
+### Workflow changes
+
+- Split "workflow progress" from "media upload progress" in the browser UI.
+- Added a dedicated upload status panel with:
+  - browser transfer progress
+  - server-side save progress
+  - accepted/skipped file summary
+- Upgraded media confirmation UX so uploaded images and videos can be:
+  - checked immediately in the browser
+  - previewed in a larger panel
+  - reordered via drag and drop
+  - reordered via left/right controls
+- Prevented concurrent confusion by disabling the media picker while an upload request is active.
+- Blocked render start while media upload state is still `running`.
+
+### Typing and verification workflow
+
+- Added `app/types.py` TypedDict-based response and project types for backend state consistency.
+- Added frontend type checking with `@ts-check` and `tsc` via `tsconfig.json`.
+- Added backend type checking with `mypy` via `mypy.ini` and `requirements-dev.txt`.
+- Added `tests/test_media_workflow.py` to verify:
+  - mixed media upload response shape
+  - skipped file reporting
+  - media upload status persistence
+  - reorder persistence without dropping unspecified files
+- Added `scripts/typecheck.ps1` as a single verification entry point for frontend and backend type checks.
+
+## 2026-04-23 Update
+
+### OmniVoice validation
+
+- Confirmed real OmniVoice inference works in this environment with CUDA enabled.
+- Added `scripts/check_omnivoice_health.py` to validate:
+  - model load
+  - runtime device/dtype resolution
+  - one-sentence inference
+  - WAV output writing
+- Healthcheck output location:
+  - `storage/voice_samples/_healthcheck/healthcheck_male_low.wav`
+  - `storage/voice_samples/_healthcheck/healthcheck_log.json`
+
+### New male voice presets
+
+- Added five new male voice presets:
+  - `male-30s-40s-lowmid`
+  - `male-40s-50s-lowmid`
+  - `male-announcer-30s-40s`
+  - `male-low-30s-40s`
+  - `male-pastor-30s-40s`
+- Exact age bands and persona nuance are approximated with OmniVoice-supported `instruct` tokens plus `pitch` and optional `speed`.
+- Added matching Korean labels for the UI TTS dropdown.
+
+### Voice sample generation
+
+- Added `scripts/generate_voice_samples.py` for repeatable preset sample generation.
+- Default output directory:
+  - `storage/voice_samples/2026-04-male-presets/`
+- Generated artifact layout:
+  - preset-specific `.wav` files
+  - `manifest.json` with preset id, label, output filename, and kwargs
+
+### Workflow changes
+
+- Updated `run.bat` to open the default browser to `http://127.0.0.1:8000`.
+- Kept the launch flow simple by leaving Uvicorn as the foreground process while browser opening runs in a short-lived background process.
+
+### TTS robustness changes
+
+- Centralized script sentence normalization in `app/text.py` so script save and TTS execution share the same filtering rules.
+- Filtered punctuation-only and separator-only fragments before TTS synthesis.
+- Hardened `run_tts_job()` to:
+  - normalize legacy stored sentence lists before synthesis
+  - fail fast on empty OmniVoice audio buffers
+  - clear stale partial `.wav` outputs and `timings.json` before and after failed runs
+- Added `tests/test_tts_pipeline.py` to verify:
+  - punctuation-only fragments are removed from split results
+  - legacy stored projects are normalized during TTS runs
+  - stale TTS artifacts are removed after empty-audio failures
