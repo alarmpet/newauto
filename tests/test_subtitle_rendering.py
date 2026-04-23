@@ -70,7 +70,7 @@ class SubtitleRenderingTests(unittest.TestCase):
         timings: list[TimingEntry] = [
             {
                 "idx": 0,
-                "text": "첫 번째 문장입니다. 두 번째 줄입니다.",
+                "text": "첫 번째 문장입니다. 두 번째 줄로 자연스럽게 나뉘는지 확인합니다.",
                 "start": 0.0,
                 "end": 2.5,
                 "dur": 2.5,
@@ -83,7 +83,7 @@ class SubtitleRenderingTests(unittest.TestCase):
             "position": "top",
             "margin_h": 144,
             "effect": "fade",
-            "max_line_chars": 12,
+            "max_line_chars": 18,
         }
         with TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir) / "subtitles.ass"
@@ -96,23 +96,32 @@ class SubtitleRenderingTests(unittest.TestCase):
         self.assertIn(r"{\fad(120,120)}", content)
         self.assertIn(r"\N", content)
 
-    def test_write_ass_supports_five_position_layout(self) -> None:
+    def test_write_ass_supports_adjusted_upper_and_lower_layout(self) -> None:
         timings: list[TimingEntry] = [
-            {"idx": 0, "text": "가운데보다 조금 위에 배치되는 자막입니다.", "start": 0.0, "end": 0.7, "dur": 0.7}
+            {"idx": 0, "text": "위쪽 고정 위치 테스트", "start": 0.0, "end": 0.7, "dur": 0.7}
         ]
-        style: SubtitleStyle = {
+        upper_style: SubtitleStyle = {
             **DEFAULT_SUBTITLE_STYLE,
             "position": "upper",
             "margin_v": 48,
             "min_display_sec": 1.4,
         }
+        lower_style: SubtitleStyle = {
+            **DEFAULT_SUBTITLE_STYLE,
+            "position": "lower",
+            "margin_v": 48,
+        }
         with TemporaryDirectory() as temp_dir:
-            output_path = Path(temp_dir) / "subtitles.ass"
-            write_ass(timings, output_path, style)
-            content = output_path.read_text(encoding="utf-8")
+            upper_output = Path(temp_dir) / "upper.ass"
+            lower_output = Path(temp_dir) / "lower.ass"
+            write_ass(timings, upper_output, upper_style)
+            write_ass(timings, lower_output, lower_style)
+            upper_content = upper_output.read_text(encoding="utf-8")
+            lower_content = lower_output.read_text(encoding="utf-8")
 
-        self.assertIn(",8,120,120,270,", content)
-        self.assertIn("Dialogue: 0,0:00:00.00,0:00:01.40,", content)
+        self.assertIn(",8,120,120,220,", upper_content)
+        self.assertIn(",2,120,120,140,", lower_content)
+        self.assertIn("Dialogue: 0,0:00:00.00,0:00:01.40,", upper_content)
 
     def test_write_srt_extends_short_cues_without_overlap(self) -> None:
         timings: list[TimingEntry] = [
@@ -139,12 +148,13 @@ class SubtitleRenderingTests(unittest.TestCase):
         self.assertEqual(style["position"], "lower")
         self.assertEqual(style["margin_h"], 180)
         self.assertEqual(style["min_display_sec"], 2.25)
+        self.assertEqual(style["max_line_chars"], 26)
 
-    def test_write_ass_wraps_long_lines_into_two_lines(self) -> None:
+    def test_write_ass_wraps_long_lines_with_shorter_default_policy(self) -> None:
         timings: list[TimingEntry] = [
             {
                 "idx": 0,
-                "text": "이 문장은 자동 줄바꿈이 필요할 만큼 충분히 길어서 보기 좋은 두 줄 자막으로 나뉘어야 합니다.",
+                "text": "이 문장은 화면에 너무 길게 보이지 않도록 더 짧은 두 줄 자막으로 나뉘어야 합니다.",
                 "start": 0.0,
                 "end": 2.4,
                 "dur": 2.4,
@@ -152,11 +162,12 @@ class SubtitleRenderingTests(unittest.TestCase):
         ]
         with TemporaryDirectory() as temp_dir:
             output_path = Path(temp_dir) / "subtitles.ass"
-            write_ass(timings, output_path, {**DEFAULT_SUBTITLE_STYLE, "max_line_chars": 24})
+            write_ass(timings, output_path, DEFAULT_SUBTITLE_STYLE)
             content = output_path.read_text(encoding="utf-8")
 
         self.assertIn(r"\N", content)
         self.assertNotIn(r"\N\N", content)
+        self.assertNotIn("화면에 너무 길게 보이지 않도록 더 짧은 두 줄 자막으로 나뉘어야 합니다.", content)
 
     def test_youtube_upload_sets_thumbnail_when_present(self) -> None:
         db.init_db()

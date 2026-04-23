@@ -62,6 +62,8 @@ class ProjectRecord(TypedDict):
     tts_progress: int
     render_state: TaskState
     render_progress: int
+    render_phase: str
+    render_last_log: str
     upload_state: TaskState
     upload_progress: int
     media_upload_state: TaskState
@@ -90,6 +92,8 @@ class ProjectStatus(TypedDict):
     tts_progress: int
     render_state: TaskState
     render_progress: int
+    render_phase: str
+    render_last_log: str
     upload_state: TaskState
     upload_progress: int
     media_upload_state: TaskState

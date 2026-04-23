@@ -119,6 +119,21 @@ class FeatureWorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"shorts")
 
+    def test_status_route_exposes_render_phase_and_log(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            render_state="running",
+            render_progress=38,
+            render_phase="normalize_audio",
+            render_last_log="ffmpeg started",
+        )
+        response = self.client.get(f"/api/projects/{project_id}/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["render_phase"], "normalize_audio")
+        self.assertEqual(payload["render_last_log"], "ffmpeg started")
+
     def test_word_timing_builder_and_karaoke_render(self) -> None:
         timings: list[TimingEntry] = [
             {"idx": 0, "text": "alpha beta", "start": 0.0, "end": 1.0, "dur": 1.0}

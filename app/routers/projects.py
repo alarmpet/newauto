@@ -58,7 +58,7 @@ class SubtitleStylePayload(BaseModel):
     position: SubtitlePosition | None = None
     margin_h: int | None = Field(default=None, ge=0, le=400)
     margin_v: int | None = Field(default=None, ge=0, le=240)
-    max_line_chars: int | None = Field(default=None, ge=16, le=80)
+    max_line_chars: int | None = Field(default=None, ge=16, le=40)
     min_display_sec: float | None = Field(default=None, ge=0.5, le=3.0)
     effect: SubtitleEffect | None = None
 

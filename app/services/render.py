@@ -11,6 +11,17 @@ from .subtitle import write_ass
 from .transcribe import save_word_timings
 
 
+def _tail_lines(text: str, limit: int = 12) -> str:
+    lines = [line for line in text.strip().splitlines() if line.strip()]
+    if not lines:
+        return ""
+    return "\n".join(lines[-limit:])
+
+
+def _set_render_stage(pid: str, progress: int, phase: str, log: str = "") -> None:
+    db.update_project(pid, render_progress=progress, render_phase=phase, render_last_log=log)
+
+
 def _ffmpeg() -> str:
     executable = shutil.which("ffmpeg")
     if not executable:
@@ -18,11 +29,12 @@ def _ffmpeg() -> str:
     return executable
 
 
-def _run(command: list[str]) -> None:
+def _run(command: list[str]) -> str:
     process = subprocess.run(command, capture_output=True, text=True, check=False)
     if process.returncode != 0:
         stderr_tail = process.stderr.strip().splitlines()[-20:]
         raise RuntimeError("ffmpeg failed:\n" + "\n".join(stderr_tail))
+    return _tail_lines(process.stderr)
 
 
 def _probe_duration(media_path: Path) -> float:
@@ -253,24 +265,33 @@ def run_render_job(pid: str) -> None:
         if not media_files:
             raise RuntimeError("no valid media files")
 
-        db.update_project(pid, render_progress=10)
+        _set_render_stage(pid, 10, "prepare_media")
 
         raw_audio_wav = project_dir / "audio_raw.wav"
+        _set_render_stage(pid, 22, "concat_audio")
         _concat_audio(tts_dir, timings, raw_audio_wav)
-        db.update_project(pid, render_progress=30)
+        _set_render_stage(pid, 30, "concat_audio_done")
 
         word_timings = save_word_timings(tts_dir / "timings_words.json", timings)
-        db.update_project(pid, render_progress=35)
+        _set_render_stage(pid, 36, "build_word_timings")
 
         normalized_audio_wav = project_dir / "audio.wav"
-        _normalize_audio(raw_audio_wav, normalized_audio_wav)
-        db.update_project(pid, render_progress=45)
+        _set_render_stage(pid, 40, "normalize_audio")
+        normalize_log = ""
+        try:
+            _normalize_audio(raw_audio_wav, normalized_audio_wav)
+        except Exception as exc:
+            _set_render_stage(pid, 40, "normalize_audio", str(exc))
+            raise
+        else:
+            _set_render_stage(pid, 48, "normalize_audio_done", normalize_log)
 
         final_audio_wav = normalized_audio_wav
         if project["bgm_file"]:
             bgm_path = project_dir / "bgm" / project["bgm_file"]
             if bgm_path.exists():
                 mixed_audio_wav = project_dir / "audio_bgm.wav"
+                _set_render_stage(pid, 52, "mix_bgm")
                 _mix_background_audio(
                     normalized_audio_wav,
                     bgm_path,
@@ -279,17 +300,19 @@ def run_render_job(pid: str) -> None:
                     project["bgm_ducking_enabled"],
                 )
                 final_audio_wav = mixed_audio_wav
-        db.update_project(pid, render_progress=55)
+        _set_render_stage(pid, 58, "audio_ready")
 
         subtitle_path = project_dir / "subtitles.ass"
+        _set_render_stage(pid, 62, "write_subtitles")
         write_ass(timings, subtitle_path, project["subtitle_style"], word_timings)
-        db.update_project(pid, render_progress=65)
+        _set_render_stage(pid, 68, "subtitles_ready")
 
         render_formats = project["render_formats"] or ["landscape"]
-        progress_step = max(1, int(30 / max(1, len(render_formats))))
-        current_progress = 65
+        progress_step = max(1, int(24 / max(1, len(render_formats))))
+        current_progress = 68
         for render_format in render_formats:
             silent_video = project_dir / f"_visual_{render_format}.mp4"
+            _set_render_stage(pid, current_progress + 2, f"build_visual_{render_format}")
             _build_visual_track(
                 media_files,
                 total_duration,
@@ -298,12 +321,13 @@ def run_render_job(pid: str) -> None:
                 project["kenburns_enabled"],
             )
             output_path = _render_output_path(project_dir, render_format)
+            _set_render_stage(pid, current_progress + 8, f"mux_{render_format}")
             _mux(silent_video, final_audio_wav, subtitle_path, output_path)
             silent_video.unlink(missing_ok=True)
             current_progress = min(95, current_progress + progress_step)
-            db.update_project(pid, render_progress=current_progress)
+            _set_render_stage(pid, current_progress, f"done_{render_format}")
 
-        db.update_project(pid, render_state="done", render_progress=100)
+        db.update_project(pid, render_state="done", render_progress=100, render_phase="done", render_last_log="")
     except Exception:
         traceback.print_exc()
-        db.update_project(pid, render_state="error")
+        db.update_project(pid, render_state="error", render_last_log=traceback.format_exc())

@@ -15,7 +15,7 @@ DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
     "position": "bottom",
     "margin_h": 120,
     "margin_v": 80,
-    "max_line_chars": 40,
+    "max_line_chars": 26,
     "min_display_sec": 1.0,
     "effect": "none",
 }
@@ -35,42 +35,43 @@ def _fmt_ts(sec: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
 
-def _find_split_index(text: str, max_len: int, markers: str) -> int | None:
+def _candidate_split_points(text: str, markers: str) -> list[int]:
+    return [index for index, char in enumerate(text[:-1], start=1) if char in markers]
+
+
+def _score_split(text: str, split_index: int, max_len: int) -> tuple[int, int, int]:
+    left = text[:split_index].rstrip()
+    right = text[split_index:].lstrip(" ,;:")
+    longest = max(len(left), len(right))
+    overflow = max(0, len(left) - max_len) + max(0, len(right) - max_len)
+    imbalance = abs(len(left) - len(right))
+    midpoint_distance = abs(split_index - (len(text) // 2))
+    return (overflow, longest, imbalance + midpoint_distance)
+
+
+def _choose_split_index(text: str, max_len: int) -> int | None:
     if len(text) <= max_len:
         return None
-    midpoint = len(text) // 2
-    min_index = max(1, min(len(text) - 1, int(len(text) * 0.25)))
-    max_index = min(len(text) - 1, max(min_index + 1, int(len(text) * 0.75)))
-    candidates = [index for index, char in enumerate(text[:-1], start=1) if char in markers]
-    filtered = [index for index in candidates if min_index <= index <= max_index]
-    if not filtered:
-        return None
-    return min(filtered, key=lambda index: abs(index - midpoint))
+    min_index = max(1, min(len(text) - 1, int(len(text) * 0.2)))
+    max_index = min(len(text) - 1, max(min_index + 1, int(len(text) * 0.8)))
+    candidate_groups = [
+        _candidate_split_points(text, ".!?"),
+        _candidate_split_points(text, ",;:"),
+        _candidate_split_points(text, " "),
+    ]
+    for candidates in candidate_groups:
+        filtered = [index for index in candidates if min_index <= index <= max_index]
+        if filtered:
+            return min(filtered, key=lambda index: _score_split(text, index, max_len))
+    return None
 
 
-def _find_whitespace_split(text: str, max_len: int) -> int | None:
-    if len(text) <= max_len:
-        return None
-    midpoint = len(text) // 2
-    min_index = max(1, min(len(text) - 1, int(len(text) * 0.25)))
-    max_index = min(len(text) - 1, max(min_index + 1, int(len(text) * 0.75)))
-    candidates = [index for index, char in enumerate(text[:-1], start=1) if char.isspace()]
-    filtered = [index for index in candidates if min_index <= index <= max_index]
-    if not filtered:
-        return None
-    return min(filtered, key=lambda index: abs(index - midpoint))
-
-
-def _smart_wrap(text: str, max_len: int = 40) -> str:
+def _smart_wrap(text: str, max_len: int = 26) -> str:
     normalized = " ".join(text.strip().split())
     if len(normalized) <= max_len:
         return normalized
 
-    split_index = _find_split_index(normalized, max_len, ".!?")
-    if split_index is None:
-        split_index = _find_split_index(normalized, max_len, ",;:")
-    if split_index is None:
-        split_index = _find_whitespace_split(normalized, max_len)
+    split_index = _choose_split_index(normalized, max_len)
     if split_index is None:
         split_index = len(normalized) // 2
 
@@ -151,7 +152,7 @@ def normalize_subtitle_style(style: dict[str, object] | SubtitleStyle | None) ->
             source.get("max_line_chars"),
             defaults["max_line_chars"],
             16,
-            80,
+            40,
         ),
         "min_display_sec": _coerce_float(
             source.get("min_display_sec"),
@@ -181,11 +182,20 @@ def _ass_alignment(position: SubtitlePosition) -> int:
 
 
 def _ass_margin_v(position: SubtitlePosition, user_margin_v: int) -> int:
-    if position in {"upper", "lower"}:
-        return int(1080 * 0.25)
+    if position == "upper":
+        return 220
+    if position == "lower":
+        return 140
     if position == "middle":
         return 0
     return user_margin_v
+
+
+def _effective_max_line_chars(style: SubtitleStyle) -> int:
+    available_width = max(480, 1920 - (style["margin_h"] * 2))
+    estimated_char_width = max(24.0, style["font_size"] * 1.35)
+    safe_chars = int(available_width / estimated_char_width)
+    return max(16, min(style["max_line_chars"], safe_chars, 40))
 
 
 def _escape_ass_text(text: str) -> str:
@@ -246,10 +256,11 @@ def _apply_min_display_time(
 def write_srt(timings: list[TimingEntry], out_path: Path) -> Path:
     lines: list[str] = []
     adjusted_timings = _apply_min_display_time(timings, DEFAULT_SUBTITLE_STYLE["min_display_sec"])
+    max_line_chars = _effective_max_line_chars(DEFAULT_SUBTITLE_STYLE)
     for index, timing in enumerate(adjusted_timings, start=1):
         lines.append(str(index))
         lines.append(f"{_fmt_ts(timing['start'])} --> {_fmt_ts(timing['end'])}")
-        lines.append(_smart_wrap(timing["text"]))
+        lines.append(_smart_wrap(timing["text"], max_line_chars))
         lines.append("")
     out_path.write_text("\n".join(lines), encoding="utf-8")
     return out_path
@@ -272,6 +283,7 @@ def write_ass(
     word_timings: list[WordTimingEntry] | None = None,
 ) -> Path:
     normalized = normalize_subtitle_style(style)
+    max_line_chars = _effective_max_line_chars(normalized)
     adjusted_timings = _apply_min_display_time(timings, normalized["min_display_sec"])
     lines = [
         "[Script Info]",
@@ -310,9 +322,9 @@ def write_ass(
     ]
     for timing in adjusted_timings:
         text = (
-            _karaoke_text(timing, word_timings or [], normalized["max_line_chars"])
+            _karaoke_text(timing, word_timings or [], max_line_chars)
             if normalized["effect"] == "karaoke"
-            else _escape_ass_text(_smart_wrap(timing["text"], normalized["max_line_chars"]))
+            else _escape_ass_text(_smart_wrap(timing["text"], max_line_chars))
         )
         lines.append(
             "Dialogue: 0,"

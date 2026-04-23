@@ -35,7 +35,7 @@
     <section id="view-projects" class="view">
       <header class="header">
         <h1>프로젝트</h1>
-        <div class="subtitle">스크립트, 미디어, TTS, 렌더, YouTube 업로드까지 한 번에 관리합니다.</div>
+        <div class="subtitle">스크립트 작성부터 미디어 업로드, TTS, 렌더, YouTube 업로드까지 한 화면에서 관리합니다.</div>
       </header>
 
       <div class="actions">
@@ -48,7 +48,7 @@
       <div id="projects-empty" class="empty" hidden>
         <div class="empty-icon">+</div>
         <div class="empty-title">아직 프로젝트가 없습니다.</div>
-        <div class="muted">첫 프로젝트를 만들어 워크플로를 시작해 보세요.</div>
+        <div class="muted">첫 프로젝트를 만들고 작업을 시작해 보세요.</div>
       </div>
     </section>
 
@@ -64,7 +64,7 @@
           <button id="clone-project" class="btn" type="button">Clone Project</button>
         </div>
         <div class="progress-wrap">
-          <div class="progress-caption">전체 제작 단계 진행률</div>
+          <div class="progress-caption">전체 작업 진행률</div>
           <div class="progress"><div id="progress-bar"></div></div>
           <div class="muted" id="progress-label">0%</div>
         </div>
@@ -73,7 +73,7 @@
       <section id="step-1" class="step-view">
         <h2>스크립트 작성</h2>
         <input id="s1-title" placeholder="영상 제목" />
-        <textarea id="s1-script" placeholder="문장 단위 스크립트를 입력하세요. 저장 후 문장 수가 자동으로 계산됩니다."></textarea>
+        <textarea id="s1-script" placeholder="문장 단위 스크립트를 입력하세요. 저장하면 문장 단위로 자동 분리됩니다."></textarea>
         <div class="row between">
           <div class="muted" id="s1-count">문장 0개</div>
           <button id="s1-save" class="btn primary" type="button">저장</button>
@@ -84,12 +84,12 @@
         <div class="row between">
           <div>
             <h2>미디어 업로드</h2>
-            <div class="muted" id="media-workflow-hint">전체 제작 단계와 별개로 업로드 진행률을 표시합니다.</div>
+            <div class="muted" id="media-workflow-hint">전체 작업 진행률과 별도로 아래 패널에서 미디어 업로드 상태를 보여줍니다.</div>
           </div>
         </div>
 
         <div id="dropzone" class="dropzone" tabindex="0" role="button">
-          <div>이미지와 영상을 끌어다 놓거나 클릭해서 업로드하세요.</div>
+          <div>이미지나 영상을 드래그해서 올리거나 클릭해서 업로드하세요.</div>
           <div class="muted">지원 형식: jpg, jpeg, png, webp, mp4, mov, webm</div>
           <input type="file" id="file-input" accept="image/*,video/*" multiple hidden>
         </div>
@@ -98,7 +98,7 @@
           <div class="section-head row between">
             <div>
               <strong>YouTube Thumbnail</strong>
-              <div class="muted">영상 미디어와 별도로 업로드됩니다. 권장: 1280x720, 16:9, JPG/PNG/WebP.</div>
+              <div class="muted">영상 미디어와 별도로 업로드합니다. 권장: 1280x720, 16:9, JPG/PNG/WebP.</div>
             </div>
             <div class="thumbnail-actions">
               <button id="thumbnail-upload" class="btn" type="button">Upload Thumbnail</button>
@@ -107,7 +107,7 @@
             </div>
           </div>
           <div id="thumbnail-preview" class="thumbnail-preview">
-            <div class="media-empty">아직 업로드된 썸네일이 없습니다.</div>
+            <div class="media-empty">아직 업로드한 썸네일이 없습니다.</div>
           </div>
           <div id="thumbnail-meta" class="media-preview-meta muted"></div>
         </section>
@@ -116,7 +116,7 @@
           <div class="section-head row between">
             <div>
               <strong>Background Music</strong>
-              <div class="muted">Upload one BGM track and mix it during render.</div>
+              <div class="muted">렌더 중 섞을 BGM 트랙 하나를 업로드합니다.</div>
             </div>
             <div class="thumbnail-actions">
               <button id="bgm-upload" class="btn" type="button">Upload BGM</button>
@@ -143,20 +143,20 @@
 
           <div class="upload-metric">
             <div class="row between">
-              <span>서버 저장</span>
+              <span>서버 처리</span>
               <span class="muted" id="media-server-label">0%</span>
             </div>
             <div class="progress thin secondary"><div id="media-server-bar"></div></div>
           </div>
 
-          <div id="media-upload-summary" class="upload-summary muted">업로드를 시작하면 파일별 진행 상황이 여기에 표시됩니다.</div>
+          <div id="media-upload-summary" class="upload-summary muted">업로드를 시작하면 파일별 진행 상황을 여기에서 확인할 수 있습니다.</div>
         </div>
 
         <div class="media-layout">
           <section class="media-stage">
             <div class="section-head row between">
               <div>
-                <strong>업로드된 미디어</strong>
+                <strong>업로드한 미디어</strong>
                 <div class="muted">썸네일로 확인하고 드래그 또는 이동 버튼으로 순서를 바꿀 수 있습니다.</div>
               </div>
               <div class="muted" id="media-count">0 items</div>
@@ -169,7 +169,7 @@
               <strong>선택한 미디어 미리보기</strong>
             </div>
             <div id="media-preview-stage" class="media-preview-stage">
-              <div class="media-empty">업로드한 이미지나 영상을 선택하면 이곳에서 크게 볼 수 있습니다.</div>
+              <div class="media-empty">업로드한 이미지나 영상을 선택하면 여기에서 크게 볼 수 있습니다.</div>
             </div>
             <div id="media-preview-meta" class="media-preview-meta muted"></div>
           </aside>
@@ -188,7 +188,7 @@
           <option value="male-40s-50s-lowmid">40~50대 중저음 남성</option>
           <option value="male-announcer-30s-40s">30~40대 남성 아나운서</option>
           <option value="male-low-30s-40s">30~40대 남성 저음</option>
-          <option value="male-pastor-30s-40s">30~40대 남성 목사님</option>
+          <option value="male-pastor-30s-40s">30~40대 남성 목소리</option>
           <option value="male-deep-calm">Male Deep Calm</option>
           <option value="male-mid-clear">Male Mid Clear</option>
           <option value="female-bright-clear">Female Bright Clear</option>
@@ -241,24 +241,24 @@
             </label>
           </div>
           <label for="s3-instruct">Instruction
-            <textarea id="s3-instruct" rows="3" placeholder="Describe the target voice only when using design mode."></textarea>
+            <textarea id="s3-instruct" rows="3" placeholder="Design 모드에서만 목표 목소리 설명을 입력하세요."></textarea>
           </label>
-          <div class="muted">Korean scripts now pass a language hint to OmniVoice, and the presets are spread farther apart for clearer voice contrast.</div>
+          <div class="muted">한국어 스크립트는 OmniVoice에 언어 힌트를 전달하고, 프리셋 차이가 더 크게 들리도록 기본 세트를 넓혔습니다.</div>
         </section>
         <div class="row">
           <button id="s3-run" class="btn primary" type="button">TTS 시작</button>
-          <span id="s3-state" class="muted">idle · 0%</span>
+          <span id="s3-state" class="muted">idle 0%</span>
         </div>
         <div id="s3-list" class="tts-list"></div>
       </section>
 
       <section id="step-4" class="step-view" hidden>
-        <h2>렌더링 및 미리보기</h2>
+        <h2>렌더와 미리보기</h2>
         <section class="card subtitle-style-panel">
           <div class="section-head row between">
             <div>
               <strong>Render Readiness</strong>
-              <div class="muted">Run pre-flight checks and inspect local system status.</div>
+              <div class="muted">로컬 상태를 점검하고 렌더 단계 로그를 확인합니다.</div>
             </div>
             <div class="row">
               <button id="preflight-run" class="btn" type="button">Run Pre-flight</button>
@@ -297,7 +297,7 @@
           <div class="section-head row between">
             <div>
               <strong>Subtitle Style</strong>
-              <div class="muted">렌더링 전에 자막 색상, 크기, 위치, 외곽선, 그림자, 배경, 효과를 설정합니다.</div>
+              <div class="muted">자막 색상, 크기, 위치, 여백, 줄 길이와 효과를 조절합니다.</div>
             </div>
             <button id="subtitle-save" class="btn" type="button">Save subtitle style</button>
           </div>
@@ -346,7 +346,7 @@
               <input id="subtitle-background-opacity" type="range" min="0" max="1" step="0.05">
             </label>
             <label>Line Length
-              <input id="subtitle-max-line-chars" type="number" min="16" max="80" step="1">
+              <input id="subtitle-max-line-chars" type="number" min="16" max="40" step="1">
             </label>
             <label>Effect
               <select id="subtitle-effect">
@@ -369,7 +369,7 @@
           </div>
 
           <div id="subtitle-position-hint" class="muted subtitle-position-hint">
-            Upper, middle, lower positions use fixed screen anchors. Vertical margin mainly affects top and bottom.
+            Upper, middle, and lower use fixed anchors. Top and bottom use the vertical margin directly.
           </div>
 
           <div class="subtitle-preview-stage">
@@ -378,8 +378,9 @@
         </section>
         <div class="row">
           <button id="s4-run" class="btn primary" type="button">렌더 시작</button>
-          <span id="s4-state" class="muted">idle · 0%</span>
+          <span id="s4-state" class="muted">idle 0%</span>
         </div>
+        <div id="s4-log" class="card muted"></div>
         <video id="s4-video" controls hidden></video>
       </section>
 
@@ -408,7 +409,7 @@
 
         <div class="row">
           <button id="s5-run" class="btn primary" type="button">업로드 시작</button>
-          <span id="s5-state" class="muted">idle · 0%</span>
+          <span id="s5-state" class="muted">idle 0%</span>
         </div>
 
         <div id="s5-link"></div>

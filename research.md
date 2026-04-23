@@ -445,3 +445,27 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `scripts/typecheck.ps1`.
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
+## 2026-04-23 Render And Subtitle Fixes Update
+
+### Architecture changes
+
+- Extended project persistence with `render_phase` and `render_last_log` so render jobs can expose the current stage and recent FFmpeg output instead of only a coarse percentage.
+- Added `scripts/check_encoding.py` and wired it into `scripts/typecheck.ps1` so mojibake in user-facing files is caught during the normal validation flow.
+
+### Workflow changes
+
+- Render jobs now update status by phase, including media preparation, audio concatenation, loudness normalization, subtitle generation, and per-format mux steps.
+- Step 4 now shows the active render phase and the latest render log snippet in the UI.
+- Subtitle defaults were tightened for readability:
+  - default `max_line_chars` reduced to `26`
+  - width-aware effective line length calculation based on `font_size` and `margin_h`
+  - smarter two-line wrapping for long cues
+- `lower` subtitle placement was rebalanced so preview and actual ASS rendering land closer to the intended lower-third area.
+- Rewrote the main static HTML entry and remaining critical app.js messages as clean UTF-8 Korean strings for render, upload, thumbnail, and OAuth flows.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.

@@ -93,7 +93,13 @@ def start_render(pid: str, bg: BackgroundTasks) -> dict[str, bool]:
     if project["render_state"] == "running":
         raise HTTPException(409, "render already running")
 
-    db.update_project(pid, render_state="running", render_progress=0)
+    db.update_project(
+        pid,
+        render_state="running",
+        render_progress=0,
+        render_phase="queued",
+        render_last_log="",
+    )
     bg.add_task(render_svc.run_render_job, pid)
     return {"ok": True}
 
@@ -113,6 +119,8 @@ def status(pid: str) -> ProjectStatus:
         "tts_progress": project["tts_progress"],
         "render_state": project["render_state"],
         "render_progress": project["render_progress"],
+        "render_phase": project["render_phase"],
+        "render_last_log": project["render_last_log"],
         "upload_state": project["upload_state"],
         "upload_progress": project["upload_progress"],
         "media_upload_state": project["media_upload_state"],

@@ -33,6 +33,8 @@ CREATE TABLE IF NOT EXISTS projects (
     tts_progress INTEGER NOT NULL DEFAULT 0,
     render_state TEXT NOT NULL DEFAULT 'idle',
     render_progress INTEGER NOT NULL DEFAULT 0,
+    render_phase TEXT NOT NULL DEFAULT '',
+    render_last_log TEXT NOT NULL DEFAULT '',
     upload_state TEXT NOT NULL DEFAULT 'idle',
     upload_progress INTEGER NOT NULL DEFAULT 0,
     media_upload_state TEXT NOT NULL DEFAULT 'idle',
@@ -61,6 +63,8 @@ MIGRATION_COLUMNS: dict[str, str] = {
     "bgm_ducking_enabled": "INTEGER NOT NULL DEFAULT 1",
     "render_formats": "TEXT NOT NULL DEFAULT '[\"landscape\"]'",
     "youtube_schedule_at": "TEXT NOT NULL DEFAULT ''",
+    "render_phase": "TEXT NOT NULL DEFAULT ''",
+    "render_last_log": "TEXT NOT NULL DEFAULT ''",
 }
 
 
@@ -131,6 +135,8 @@ def _row_to_project(row: sqlite3.Row) -> ProjectRecord:
         "tts_progress": int(row["tts_progress"]),
         "render_state": cast(TaskState, row["render_state"]),
         "render_progress": int(row["render_progress"]),
+        "render_phase": str(row["render_phase"] or ""),
+        "render_last_log": str(row["render_last_log"] or ""),
         "upload_state": cast(TaskState, row["upload_state"]),
         "upload_progress": int(row["upload_progress"]),
         "media_upload_state": cast(TaskState, row["media_upload_state"]),

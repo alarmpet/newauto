@@ -7,3 +7,4 @@
 - `[2026-04-23-17-33] 자막 표시 개선 구현: 자동 2줄 분할, 최소 표시 시간, 5단계 위치, margin_h, 프리셋 UI, ASS/SRT 반영`
 - `[2026-04-23-18-20] 기능 추천 P0~P2 구현: preflight, loudnorm, Ken Burns, BGM+ducking, clone, shorts, YouTube 예약/통계, karaoke, stock search`
 - `[2026-04-23-20-05] OmniVoice 튜닝 P0 구현: tts_profile 저장, language/generation_config 전달, 한국어 중심 신규 프리셋/UI 재설계`
+- `[2026-04-23-22-27] 렌더/자막 수정: render_phase 로그, 26자 기본 자막 정책, width-aware 줄바꿈, lower 위치 보정, UTF-8 UI 정리, 인코딩 검사 추가`

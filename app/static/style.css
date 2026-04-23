@@ -599,6 +599,10 @@ video {
   transition: all 0.15s ease;
 }
 
+#s4-log {
+  white-space: pre-wrap;
+}
+
 #s5-link a {
   color: var(--green-soft);
   word-break: break-all;
