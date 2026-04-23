@@ -1,4 +1,5 @@
 import io
+import subprocess
 import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
@@ -10,6 +11,7 @@ from fastapi.testclient import TestClient
 from app import db
 from app.main import app
 from app.services.preflight import build_preflight_report
+from app.services.render import _run, _tail_lines
 from app.services.stock import search_stock_media
 from app.services.subtitle import DEFAULT_SUBTITLE_STYLE, write_ass
 from app.services.transcribe import build_word_timings
@@ -133,6 +135,23 @@ class FeatureWorkflowTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(payload["render_phase"], "normalize_audio")
         self.assertEqual(payload["render_last_log"], "ffmpeg started")
+
+    def test_render_tail_lines_handles_none(self) -> None:
+        self.assertEqual(_tail_lines(None), "")
+
+    def test_render_tail_lines_handles_empty_text(self) -> None:
+        self.assertEqual(_tail_lines("   "), "")
+
+    def test_render_run_handles_success_with_none_stderr(self) -> None:
+        completed = subprocess.CompletedProcess(args=["ffmpeg"], returncode=0, stdout="", stderr=None)
+        with patch("app.services.render.subprocess.run", return_value=completed):
+            self.assertEqual(_run(["ffmpeg"]), "")
+
+    def test_render_run_handles_failure_with_none_stderr(self) -> None:
+        completed = subprocess.CompletedProcess(args=["ffmpeg"], returncode=1, stdout="", stderr=None)
+        with patch("app.services.render.subprocess.run", return_value=completed):
+            with self.assertRaisesRegex(RuntimeError, "no stderr output"):
+                _run(["ffmpeg"])
 
     def test_word_timing_builder_and_karaoke_render(self) -> None:
         timings: list[TimingEntry] = [

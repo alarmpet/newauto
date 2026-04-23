@@ -11,7 +11,9 @@ from .subtitle import write_ass
 from .transcribe import save_word_timings
 
 
-def _tail_lines(text: str, limit: int = 12) -> str:
+def _tail_lines(text: str | None, limit: int = 12) -> str:
+    if not text:
+        return ""
     lines = [line for line in text.strip().splitlines() if line.strip()]
     if not lines:
         return ""
@@ -31,9 +33,10 @@ def _ffmpeg() -> str:
 
 def _run(command: list[str]) -> str:
     process = subprocess.run(command, capture_output=True, text=True, check=False)
+    stderr_tail = _tail_lines(process.stderr, limit=20)
     if process.returncode != 0:
-        stderr_tail = process.stderr.strip().splitlines()[-20:]
-        raise RuntimeError("ffmpeg failed:\n" + "\n".join(stderr_tail))
+        detail = stderr_tail or "ffmpeg failed with no stderr output"
+        raise RuntimeError("ffmpeg failed:\n" + detail)
     return _tail_lines(process.stderr)
 
 

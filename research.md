@@ -469,6 +469,30 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
 - Verified the preset catalog exposes the new labels and instruct tokens.
 
+## 2026-04-24 Render stderr None Crash Fix
+
+### Architecture changes
+
+- Hardened `app/services/render.py` log helpers so render bookkeeping no longer assumes FFmpeg always returns stderr text.
+- `_tail_lines()` now accepts nullable text safely.
+- `_run()` now uses the safe tail helper in both success and failure branches.
+
+### Workflow changes
+
+- Rendering no longer crashes with `NoneType.strip` during `build_visual_landscape` or other FFmpeg phases when stderr is empty or missing.
+- If FFmpeg actually fails without stderr output, the renderer now raises a fallback runtime message instead of a secondary Python attribute error.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+- Added regression tests for:
+  - `_tail_lines(None)`
+  - `_tail_lines("   ")`
+  - `_run()` success with `stderr=None`
+  - `_run()` failure with `stderr=None`
+
 ## 2026-04-23 OmniVoice Preview Error Fix
 
 ### Architecture changes
