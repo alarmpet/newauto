@@ -16,11 +16,11 @@ from app.types import VoiceSampleEntry, VoiceSampleManifest
 
 DEFAULT_OUTPUT_DIR = VOICE_SAMPLES_DIR / "2026-04-male-presets"
 DEFAULT_PRESETS = [
-    "male-30s-40s-lowmid",
-    "male-40s-50s-lowmid",
-    "male-announcer-30s-40s",
-    "male-low-30s-40s",
-    "male-pastor-30s-40s",
+    "male-deep-calm",
+    "male-mid-clear",
+    "female-bright-clear",
+    "elder-narration",
+    "whisper-story",
 ]
 
 

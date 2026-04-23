@@ -8,7 +8,8 @@ PrivacyValue = Literal["private", "unlisted", "public"]
 RenderFormat = Literal["landscape", "shorts"]
 SubtitlePosition = Literal["top", "upper", "middle", "lower", "bottom"]
 SubtitleEffect = Literal["none", "fade", "pop", "karaoke"]
-VoicePresetArg = str | float
+TtsMode = Literal["auto", "design", "clone"]
+VoicePresetArg = str | float | int | bool
 VoiceRuntimeDType = Literal["float16", "float32"]
 
 
@@ -29,6 +30,18 @@ class SubtitleStyle(TypedDict):
     effect: SubtitleEffect
 
 
+class TtsProfile(TypedDict):
+    mode: TtsMode
+    language: str
+    instruct: str
+    speed: float
+    duration: float | None
+    num_step: int
+    guidance_scale: float
+    denoise: bool
+    postprocess_output: bool
+
+
 class ProjectRecord(TypedDict):
     id: str
     title: str
@@ -38,6 +51,7 @@ class ProjectRecord(TypedDict):
     thumbnail_file: str
     subtitle_style: SubtitleStyle
     voice_preset: str
+    tts_profile: TtsProfile
     kenburns_enabled: bool
     bgm_file: str
     bgm_volume_db: int

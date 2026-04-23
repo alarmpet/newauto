@@ -6,6 +6,7 @@
  * @typedef {"idle" | "uploading" | "processing" | "done" | "error"} MediaClientPhase
  * @typedef {"top" | "upper" | "middle" | "lower" | "bottom"} SubtitlePosition
  * @typedef {"none" | "fade" | "pop" | "karaoke"} SubtitleEffect
+ * @typedef {"auto" | "design" | "clone"} TtsMode
  * @typedef {"landscape" | "shorts"} RenderFormat
  */
 
@@ -30,6 +31,20 @@
 
 /**
  * @typedef {{
+ *   mode: TtsMode,
+ *   language: string,
+ *   instruct: string,
+ *   speed: number,
+ *   duration: number | null,
+ *   num_step: number,
+ *   guidance_scale: number,
+ *   denoise: boolean,
+ *   postprocess_output: boolean,
+ * }} TtsProfile
+ */
+
+/**
+ * @typedef {{
  *   id: string,
  *   title: string,
  *   script: string,
@@ -38,6 +53,7 @@
  *   thumbnail_file: string,
  *   subtitle_style: SubtitleStyle,
  *   voice_preset: string,
+ *   tts_profile: TtsProfile,
  *   kenburns_enabled: boolean,
  *   bgm_file: string,
  *   bgm_volume_db: number,
@@ -335,6 +351,17 @@ function effectiveSubtitleStyle(project) {
 }
 
 /**
+ * @param {Project} project
+ * @returns {TtsProfile}
+ */
+function effectiveTtsProfile(project) {
+  return {
+    ...DEFAULT_TTS_PROFILE,
+    ...project.tts_profile,
+  };
+}
+
+/**
  * @param {TaskState} state
  * @returns {string}
  */
@@ -384,6 +411,80 @@ const DEFAULT_SUBTITLE_STYLE = {
   max_line_chars: 40,
   min_display_sec: 1,
   effect: "none",
+};
+
+/** @type {TtsProfile} */
+const DEFAULT_TTS_PROFILE = {
+  mode: "auto",
+  language: "ko",
+  instruct: "",
+  speed: 1,
+  duration: null,
+  num_step: 32,
+  guidance_scale: 2.6,
+  denoise: true,
+  postprocess_output: true,
+};
+
+/** @type {Record<string, Partial<TtsProfile>>} */
+const TTS_PROFILE_PRESETS = {
+  auto: { ...DEFAULT_TTS_PROFILE },
+  "male-deep-calm": {
+    mode: "design",
+    language: "ko",
+    instruct: "adult male, deep calm studio narration voice",
+    speed: 0.96,
+    num_step: 36,
+    guidance_scale: 2.9,
+  },
+  "male-mid-clear": {
+    mode: "design",
+    language: "ko",
+    instruct: "adult male, clear neutral explainer voice",
+    speed: 1,
+    num_step: 34,
+    guidance_scale: 2.7,
+  },
+  "female-bright-clear": {
+    mode: "design",
+    language: "ko",
+    instruct: "adult female, bright clear presenter voice",
+    speed: 1.03,
+    num_step: 35,
+    guidance_scale: 3,
+  },
+  "female-low-calm": {
+    mode: "design",
+    language: "ko",
+    instruct: "adult female, low calm documentary voice",
+    speed: 0.97,
+    num_step: 36,
+    guidance_scale: 2.8,
+  },
+  "elder-narration": {
+    mode: "design",
+    language: "ko",
+    instruct: "older adult, warm authoritative narration voice",
+    speed: 0.94,
+    num_step: 38,
+    guidance_scale: 3.1,
+  },
+  "whisper-story": {
+    mode: "design",
+    language: "ko",
+    instruct: "soft intimate storytelling voice, close mic",
+    speed: 0.92,
+    num_step: 40,
+    guidance_scale: 3.2,
+  },
+  "english-bright": {
+    mode: "design",
+    language: "en",
+    instruct: "bright clear English presenter voice",
+    speed: 1,
+    num_step: 34,
+    guidance_scale: 2.8,
+  },
 };
 
 /** @type {Record<string, Partial<SubtitleStyle>>} */
@@ -445,6 +546,15 @@ const mediaCount = /** @type {HTMLElement} */ (query("#media-count"));
 const mediaPreviewStage = /** @type {HTMLElement} */ (query("#media-preview-stage"));
 const mediaPreviewMeta = /** @type {HTMLElement} */ (query("#media-preview-meta"));
 const voiceSelect = /** @type {HTMLSelectElement} */ (query("#s3-voice"));
+const ttsModeSelect = /** @type {HTMLSelectElement} */ (query("#s3-mode"));
+const ttsLanguageSelect = /** @type {HTMLSelectElement} */ (query("#s3-language"));
+const ttsSpeedInput = /** @type {HTMLInputElement} */ (query("#s3-speed"));
+const ttsDurationInput = /** @type {HTMLInputElement} */ (query("#s3-duration"));
+const ttsNumStepInput = /** @type {HTMLInputElement} */ (query("#s3-num-step"));
+const ttsGuidanceInput = /** @type {HTMLInputElement} */ (query("#s3-guidance"));
+const ttsDenoiseSelect = /** @type {HTMLSelectElement} */ (query("#s3-denoise"));
+const ttsPostprocessSelect = /** @type {HTMLSelectElement} */ (query("#s3-postprocess"));
+const ttsInstructInput = /** @type {HTMLTextAreaElement} */ (query("#s3-instruct"));
 const ttsState = /** @type {HTMLElement} */ (query("#s3-state"));
 const ttsList = /** @type {HTMLElement} */ (query("#s3-list"));
 const renderState = /** @type {HTMLElement} */ (query("#s4-state"));
@@ -587,7 +697,6 @@ async function openProject(pid) {
   workflowId.textContent = current.id;
   scriptTitleInput.value = current.title;
   scriptInput.value = current.script;
-  voiceSelect.value = current.voice_preset;
   uploadTitleInput.value = current.title || "";
   uploadDescInput.value = "";
   uploadTagsInput.value = "";
@@ -597,6 +706,7 @@ async function openProject(pid) {
   renderMedia();
   renderThumbnail();
   renderBgmMeta();
+  renderTtsProfileControls();
   renderFeatureControls();
   renderMediaUploadStatus();
   renderSubtitleStyleControls();
@@ -614,6 +724,71 @@ async function openProject(pid) {
  */
 function renderScriptStats() {
   scriptCount.textContent = `문장 ${estimateSentenceCount(scriptInput.value)}개`;
+}
+
+/**
+ * @returns {void}
+ */
+function renderTtsProfileControls() {
+  const project = requireCurrent();
+  const profile = effectiveTtsProfile(project);
+  voiceSelect.value = project.voice_preset;
+  ttsModeSelect.value = profile.mode === "design" ? "design" : "auto";
+  ttsLanguageSelect.value = profile.language || "ko";
+  ttsSpeedInput.value = String(profile.speed);
+  ttsDurationInput.value = profile.duration === null ? "" : String(profile.duration);
+  ttsNumStepInput.value = String(profile.num_step);
+  ttsGuidanceInput.value = String(profile.guidance_scale);
+  ttsDenoiseSelect.value = profile.denoise ? "on" : "off";
+  ttsPostprocessSelect.value = profile.postprocess_output ? "on" : "off";
+  ttsInstructInput.value = profile.instruct;
+}
+
+/**
+ * @returns {TtsProfile}
+ */
+function readTtsProfileInputs() {
+  const durationValue = ttsDurationInput.value.trim();
+  return {
+    mode: /** @type {TtsMode} */ (ttsModeSelect.value === "design" ? "design" : "auto"),
+    language: ttsLanguageSelect.value,
+    instruct: ttsInstructInput.value.trim(),
+    speed: numberInRange(ttsSpeedInput.value, DEFAULT_TTS_PROFILE.speed, 0.75, 1.25),
+    duration: durationValue ? numberInRange(durationValue, 0, 0, 30) : null,
+    num_step: Math.round(numberInRange(ttsNumStepInput.value, DEFAULT_TTS_PROFILE.num_step, 16, 64)),
+    guidance_scale: numberInRange(
+      ttsGuidanceInput.value,
+      DEFAULT_TTS_PROFILE.guidance_scale,
+      1,
+      5,
+    ),
+    denoise: ttsDenoiseSelect.value === "on",
+    postprocess_output: ttsPostprocessSelect.value === "on",
+  };
+}
+
+/**
+ * @param {string} presetId
+ * @returns {void}
+ */
+function applyTtsPreset(presetId) {
+  const preset = TTS_PROFILE_PRESETS[presetId];
+  if (!preset) {
+    return;
+  }
+  const merged = {
+    ...DEFAULT_TTS_PROFILE,
+    ...preset,
+  };
+  ttsModeSelect.value = merged.mode === "design" ? "design" : "auto";
+  ttsLanguageSelect.value = merged.language;
+  ttsSpeedInput.value = String(merged.speed);
+  ttsDurationInput.value = merged.duration === null ? "" : String(merged.duration);
+  ttsNumStepInput.value = String(merged.num_step);
+  ttsGuidanceInput.value = String(merged.guidance_scale);
+  ttsDenoiseSelect.value = merged.denoise ? "on" : "off";
+  ttsPostprocessSelect.value = merged.postprocess_output ? "on" : "off";
+  ttsInstructInput.value = merged.instruct;
 }
 
 /**
@@ -1770,13 +1945,30 @@ cloneProjectButton.addEventListener("click", () => {
   void cloneProject().catch((error) => handleError(error, "Project clone failed."));
 });
 
+voiceSelect.addEventListener("change", () => {
+  applyTtsPreset(voiceSelect.value);
+});
+
 ttsRunButton.addEventListener("click", async () => {
   const project = requireCurrent();
   try {
+    const ttsProfile = readTtsProfileInputs();
     await requestJson(`/api/projects/${project.id}/tts`, {
       method: "POST",
-      body: formDataFromObject({ voice_preset: voiceSelect.value }),
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        voice_preset: voiceSelect.value,
+        tts_profile: ttsProfile,
+      }),
     });
+    current = {
+      ...project,
+      voice_preset: voiceSelect.value,
+      tts_profile: ttsProfile,
+      tts_state: "running",
+      tts_progress: 0,
+    };
+    renderTtsProfileControls();
     toast("TTS ?앹꽦???쒖옉?덉뒿?덈떎.");
   } catch (error) {
     handleError(error, "TTS ?앹꽦???쒖옉?섏? 紐삵뻽?듬땲??");

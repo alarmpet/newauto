@@ -1,12 +1,53 @@
-from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
 
 from .. import db
 from ..services import preflight as preflight_svc
 from ..services import render as render_svc
 from ..services import tts as tts_svc
-from ..types import PreflightReport, ProjectRecord, ProjectStatus
+from ..tts_profiles import normalize_tts_profile
+from ..types import PreflightReport, ProjectRecord, ProjectStatus, TtsMode
 
 router = APIRouter(prefix="/api/projects", tags=["render"])
+
+
+class TtsProfilePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: TtsMode | None = None
+    language: str | None = Field(default=None, pattern=r"^(auto|ko|en)$")
+    instruct: str | None = Field(default=None, max_length=200)
+    speed: float | None = Field(default=None, ge=0.75, le=1.25)
+    duration: float | None = Field(default=None, ge=0.0, le=30.0)
+    num_step: int | None = Field(default=None, ge=16, le=64)
+    guidance_scale: float | None = Field(default=None, ge=1.0, le=5.0)
+    denoise: bool | None = None
+    postprocess_output: bool | None = None
+
+    def to_payload(self) -> dict[str, object]:
+        payload: dict[str, object] = {}
+        for key in (
+            "mode",
+            "language",
+            "instruct",
+            "speed",
+            "duration",
+            "num_step",
+            "guidance_scale",
+            "denoise",
+            "postprocess_output",
+        ):
+            value = getattr(self, key)
+            if value is not None:
+                payload[key] = value
+        return payload
+
+
+class TtsRunPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    voice_preset: str = "auto"
+    tts_profile: TtsProfilePayload | None = None
 
 
 def _require(pid: str) -> ProjectRecord:
@@ -17,14 +58,25 @@ def _require(pid: str) -> ProjectRecord:
 
 
 @router.post("/{pid}/tts")
-def start_tts(pid: str, bg: BackgroundTasks, voice_preset: str = Form("auto")) -> dict[str, bool]:
+def start_tts(pid: str, bg: BackgroundTasks, payload: TtsRunPayload) -> dict[str, bool]:
     project = _require(pid)
     if not project["sentences"]:
         raise HTTPException(400, "script is empty - save title and script first")
     if project["tts_state"] == "running":
         raise HTTPException(409, "TTS already running")
 
-    db.update_project(pid, voice_preset=voice_preset, tts_state="running", tts_progress=0)
+    voice_preset, tts_profile = normalize_tts_profile(
+        payload.tts_profile.to_payload() if payload.tts_profile is not None else {},
+        payload.voice_preset,
+        project["script"],
+    )
+    db.update_project(
+        pid,
+        voice_preset=voice_preset,
+        tts_profile=tts_profile,
+        tts_state="running",
+        tts_progress=0,
+    )
     bg.add_task(tts_svc.run_tts_job, pid)
     return {"ok": True}
 

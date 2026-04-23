@@ -5,9 +5,10 @@ from typing import Protocol
 from typing import cast
 
 from .. import db
-from ..config import SAMPLE_RATE, VOICE_PRESETS
+from ..config import SAMPLE_RATE
 from ..text import filter_tts_segments
-from ..types import TimingEntry, TtsRuntimeInfo, VoicePresetArg, VoiceRuntimeDType
+from ..tts_profiles import normalize_tts_profile, tts_profile_to_manifest_kwargs
+from ..types import ProjectRecord, TimingEntry, TtsProfile, TtsRuntimeInfo, VoicePresetArg, VoiceRuntimeDType
 from .transcribe import save_word_timings
 
 
@@ -56,13 +57,42 @@ def get_runtime_info() -> TtsRuntimeInfo:
 
 
 def get_preset_kwargs(preset: str) -> dict[str, VoicePresetArg]:
-    if preset == "auto":
-        return {}
-    return dict(VOICE_PRESETS.get(preset, {}))
+    _, profile = normalize_tts_profile({}, preset)
+    return tts_profile_to_manifest_kwargs(profile)
 
 
-def _synthesize_one(model: OmniVoiceModel, text: str, preset: str) -> AudioBufferLike:
-    kwargs = get_preset_kwargs(preset)
+def _project_tts_profile(project: ProjectRecord) -> tuple[str, TtsProfile]:
+    return normalize_tts_profile(project["tts_profile"], project["voice_preset"], project["script"])
+
+
+def _build_generation_config(profile: TtsProfile) -> object:
+    from omnivoice import OmniVoiceGenerationConfig  # noqa: WPS433
+
+    return OmniVoiceGenerationConfig(
+        num_step=profile["num_step"],
+        guidance_scale=profile["guidance_scale"],
+        denoise=profile["denoise"],
+        postprocess_output=profile["postprocess_output"],
+    )
+
+
+def _build_generate_kwargs(profile: TtsProfile) -> dict[str, object]:
+    kwargs: dict[str, object] = {
+        "generation_config": _build_generation_config(profile),
+    }
+    if profile["language"]:
+        kwargs["language"] = profile["language"]
+    if profile["mode"] == "design" and profile["instruct"]:
+        kwargs["instruct"] = profile["instruct"]
+    if profile["speed"] != 1.0:
+        kwargs["speed"] = profile["speed"]
+    if profile["duration"] is not None:
+        kwargs["duration"] = profile["duration"]
+    return kwargs
+
+
+def _synthesize_one(model: OmniVoiceModel, text: str, profile: TtsProfile) -> AudioBufferLike:
+    kwargs = _build_generate_kwargs(profile)
     generated = model.generate(text=text, **kwargs)
     if isinstance(generated, (list, tuple)):
         if not generated:
@@ -73,7 +103,8 @@ def _synthesize_one(model: OmniVoiceModel, text: str, preset: str) -> AudioBuffe
 
 def synthesize_preview(text: str, preset: str) -> AudioBufferLike:
     model = _get_model()
-    return _synthesize_one(model, text, preset)
+    _, profile = normalize_tts_profile({}, preset, text)
+    return _synthesize_one(model, text, profile)
 
 
 def save_audio_file(audio: AudioBufferLike, out_path: Path) -> None:
@@ -96,7 +127,7 @@ def run_tts_job(pid: str) -> None:
     if project is None:
         return
     sentences: list[str] = filter_tts_segments(project["sentences"])
-    preset: str = project["voice_preset"]
+    preset, profile = _project_tts_profile(project)
     output_dir: Path = db.project_dir(pid) / "tts"
     output_dir.mkdir(parents=True, exist_ok=True)
     _clear_tts_outputs(output_dir)
@@ -114,7 +145,7 @@ def run_tts_job(pid: str) -> None:
         timings: list[TimingEntry] = []
         cursor = 0.0
         for index, text in enumerate(sentences):
-            audio = _synthesize_one(model, text, preset)
+            audio = _synthesize_one(model, text, profile)
             if len(audio) == 0:
                 raise ValueError(
                     f"OmniVoice returned empty audio for sentence {index}: {text[:80]}"
@@ -138,7 +169,13 @@ def run_tts_job(pid: str) -> None:
             encoding="utf-8",
         )
         save_word_timings(output_dir / "timings_words.json", timings)
-        db.update_project(pid, tts_state="done", tts_progress=100)
+        db.update_project(
+            pid,
+            voice_preset=preset,
+            tts_profile=profile,
+            tts_state="done",
+            tts_progress=100,
+        )
     except Exception:
         traceback.print_exc()
         _clear_tts_outputs(output_dir)

@@ -189,7 +189,62 @@
           <option value="male-announcer-30s-40s">30~40대 남성 아나운서</option>
           <option value="male-low-30s-40s">30~40대 남성 저음</option>
           <option value="male-pastor-30s-40s">30~40대 남성 목사님</option>
+          <option value="male-deep-calm">Male Deep Calm</option>
+          <option value="male-mid-clear">Male Mid Clear</option>
+          <option value="female-bright-clear">Female Bright Clear</option>
+          <option value="female-low-calm">Female Low Calm</option>
+          <option value="elder-narration">Elder Narration</option>
+          <option value="whisper-story">Whisper Story</option>
+          <option value="english-bright">English Bright</option>
         </select>
+        <section class="card subtitle-style-panel">
+          <div class="section-head">
+            <strong>Voice Tuning</strong>
+          </div>
+          <div class="subtitle-controls">
+            <label for="s3-mode">Mode
+              <select id="s3-mode">
+                <option value="auto">Auto</option>
+                <option value="design">Design</option>
+              </select>
+            </label>
+            <label for="s3-language">Language
+              <select id="s3-language">
+                <option value="ko">Korean</option>
+                <option value="en">English</option>
+                <option value="auto">Auto</option>
+              </select>
+            </label>
+            <label for="s3-speed">Speed
+              <input id="s3-speed" type="number" min="0.75" max="1.25" step="0.01">
+            </label>
+            <label for="s3-duration">Duration Override
+              <input id="s3-duration" type="number" min="0" max="30" step="0.1" placeholder="Auto">
+            </label>
+            <label for="s3-num-step">Sampling Steps
+              <input id="s3-num-step" type="number" min="16" max="64" step="1">
+            </label>
+            <label for="s3-guidance">Guidance Scale
+              <input id="s3-guidance" type="number" min="1" max="5" step="0.1">
+            </label>
+            <label for="s3-denoise">Denoise
+              <select id="s3-denoise">
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+            <label for="s3-postprocess">Postprocess
+              <select id="s3-postprocess">
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+          </div>
+          <label for="s3-instruct">Instruction
+            <textarea id="s3-instruct" rows="3" placeholder="Describe the target voice only when using design mode."></textarea>
+          </label>
+          <div class="muted">Korean scripts now pass a language hint to OmniVoice, and the presets are spread farther apart for clearer voice contrast.</div>
+        </section>
         <div class="row">
           <button id="s3-run" class="btn primary" type="button">TTS 시작</button>
           <span id="s3-state" class="muted">idle · 0%</span>

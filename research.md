@@ -415,3 +415,33 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `scripts/typecheck.ps1`.
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
+## 2026-04-23 OmniVoice Tuning P0 Update
+
+### Architecture changes
+
+- Added `app/tts_profiles.py` as the shared source of truth for TTS preset definitions, legacy preset alias normalization, language detection, and `tts_profile` normalization.
+- Extended the project persistence model with `tts_profile` JSON storage so voice tuning is no longer limited to a single preset string.
+- Added `app/services/tts_profile.py` as a thin export layer for TTS profile helpers reused by scripts and future UI work.
+
+### Workflow changes
+
+- Step 3 now captures and persists a structured TTS profile:
+  - `mode`
+  - `language`
+  - `instruct`
+  - `speed`
+  - `duration`
+  - `num_step`
+  - `guidance_scale`
+  - `denoise`
+  - `postprocess_output`
+- TTS execution now passes `language` and `OmniVoiceGenerationConfig` into `OmniVoice.generate(...)`.
+- Replaced the old narrow male-low preset cluster with a broader preset set for clearer contrast in Korean workflows.
+- Preserved backward compatibility by mapping old preset ids such as `male-calm` and `narrator` onto the new canonical presets.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.

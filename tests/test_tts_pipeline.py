@@ -15,10 +15,11 @@ class FakeOmniVoiceModel:
     def __init__(self, empty_text: str | None = None) -> None:
         self.empty_text = empty_text
         self.seen: list[str] = []
+        self.kwargs_seen: list[dict[str, object]] = []
 
     def generate(self, text: str, **kwargs: object) -> list[list[float]]:
-        del kwargs
         self.seen.append(text)
+        self.kwargs_seen.append(dict(kwargs))
         if text == self.empty_text:
             return [[]]
         return [[0.0, 0.25, -0.25, 0.0]]
@@ -57,17 +58,17 @@ class TtsPipelineTests(unittest.TestCase):
             "첫 문장입니다.\n"
             ".\n"
             "--------------------------------------------------------------------------------\n"
-            "둘째 문장입니다?\n"
+            "두 번째 문장입니다.\n"
         )
-        self.assertEqual(split_sentences(script), ["첫 문장입니다.", "둘째 문장입니다?"])
+        self.assertEqual(split_sentences(script), ["첫 문장입니다.", "두 번째 문장입니다."])
 
     def test_run_tts_job_filters_existing_invalid_segments(self) -> None:
         project_id = self.create_project()
         db.update_project(
             project_id,
             script="placeholder",
-            sentences=["첫 문장입니다.", ".", "둘째 문장입니다?", "--------------------"],
-            voice_preset="male-30s-40s-lowmid",
+            sentences=["첫 문장입니다.", ".", "두 번째 문장입니다.", "--------------------"],
+            voice_preset="male-deep-calm",
             tts_state="running",
             tts_progress=0,
         )
@@ -83,9 +84,17 @@ class TtsPipelineTests(unittest.TestCase):
         assert project is not None
         self.assertEqual(project["tts_state"], "done")
         self.assertEqual(project["tts_progress"], 100)
-        self.assertEqual(project["sentences"], ["첫 문장입니다.", "둘째 문장입니다?"])
-        self.assertEqual(fake_model.seen, ["첫 문장입니다.", "둘째 문장입니다?"])
+        self.assertEqual(project["sentences"], ["첫 문장입니다.", "두 번째 문장입니다."])
+        self.assertEqual(fake_model.seen, ["첫 문장입니다.", "두 번째 문장입니다."])
         self.assertEqual(write_mock.call_count, 2)
+        self.assertEqual(project["tts_profile"]["language"], "ko")
+        self.assertEqual(project["tts_profile"]["mode"], "design")
+        first_kwargs = fake_model.kwargs_seen[0]
+        self.assertEqual(first_kwargs["language"], "ko")
+        self.assertEqual(first_kwargs["speed"], 0.96)
+        generation_config = first_kwargs["generation_config"]
+        self.assertEqual(getattr(generation_config, "num_step"), 36)
+        self.assertEqual(getattr(generation_config, "guidance_scale"), 2.9)
 
         timings_path = db.project_dir(project_id) / "tts" / "timings.json"
         timings = json.loads(timings_path.read_text(encoding="utf-8"))
@@ -102,7 +111,7 @@ class TtsPipelineTests(unittest.TestCase):
             project_id,
             script="placeholder",
             sentences=["정상 문장입니다."],
-            voice_preset="male-30s-40s-lowmid",
+            voice_preset="male-deep-calm",
             tts_state="running",
             tts_progress=0,
         )
@@ -119,3 +128,41 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertEqual(project["tts_state"], "error")
         self.assertFalse((output_dir / "0000.wav").exists())
         self.assertFalse((output_dir / "timings.json").exists())
+
+    def test_start_tts_route_persists_profile_payload(self) -> None:
+        project_id = self.create_project()
+        save_response = self.client.put(
+            f"/api/projects/{project_id}/script",
+            data={
+                "title": "tts profile",
+                "script": "첫 문장입니다. 두 번째 문장입니다.",
+            },
+        )
+        self.assertEqual(save_response.status_code, 200)
+
+        with patch("app.services.tts.run_tts_job"):
+            response = self.client.post(
+                f"/api/projects/{project_id}/tts",
+                json={
+                    "voice_preset": "female-bright-clear",
+                    "tts_profile": {
+                        "mode": "design",
+                        "language": "ko",
+                        "instruct": "adult female, bright clear presenter voice",
+                        "speed": 1.05,
+                        "num_step": 42,
+                        "guidance_scale": 3.4,
+                        "denoise": True,
+                        "postprocess_output": True,
+                    },
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["voice_preset"], "female-bright-clear")
+        self.assertEqual(project["tts_profile"]["language"], "ko")
+        self.assertEqual(project["tts_profile"]["speed"], 1.05)
+        self.assertEqual(project["tts_profile"]["num_step"], 42)

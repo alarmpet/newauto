@@ -496,6 +496,7 @@ def clone_project(
     cloned = db.create_project(title=f"{project['title']} Copy".strip())
     update_fields: dict[str, object] = {
         "voice_preset": project["voice_preset"],
+        "tts_profile": project["tts_profile"],
         "subtitle_style": project["subtitle_style"],
         "kenburns_enabled": project["kenburns_enabled"],
         "bgm_volume_db": project["bgm_volume_db"],
