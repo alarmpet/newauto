@@ -249,6 +249,20 @@
           <button id="s3-run" class="btn primary" type="button">TTS 시작</button>
           <span id="s3-state" class="muted">idle 0%</span>
         </div>
+        <section class="card tts-preview-panel">
+          <div class="section-head row between">
+            <div>
+              <strong>Voice Sample Preview</strong>
+              <div class="muted">현재 보이스 프리셋과 튜닝 값으로 짧은 샘플을 바로 들어볼 수 있습니다.</div>
+            </div>
+            <button id="s3-preview-run" class="btn" type="button">샘플 듣기</button>
+          </div>
+          <label for="s3-preview-text">Sample Text
+            <textarea id="s3-preview-text" rows="3" placeholder="샘플로 들어볼 문장을 입력하세요. 비워두면 기본 문장을 사용합니다."></textarea>
+          </label>
+          <div id="s3-preview-state" class="muted">샘플을 생성하면 여기에서 바로 재생할 수 있습니다.</div>
+          <audio id="s3-preview-audio" controls preload="none"></audio>
+        </section>
         <div id="s3-list" class="tts-list"></div>
       </section>
 

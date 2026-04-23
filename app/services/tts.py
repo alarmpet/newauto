@@ -107,6 +107,16 @@ def synthesize_preview(text: str, preset: str) -> AudioBufferLike:
     return _synthesize_one(model, text, profile)
 
 
+def synthesize_preview_with_profile(
+    text: str,
+    preset: str,
+    payload: object,
+) -> tuple[str, TtsProfile, AudioBufferLike]:
+    model = _get_model()
+    normalized_preset, profile = normalize_tts_profile(payload, preset, text)
+    return normalized_preset, profile, _synthesize_one(model, text, profile)
+
+
 def save_audio_file(audio: AudioBufferLike, out_path: Path) -> None:
     import soundfile as sf  # noqa: WPS433
 

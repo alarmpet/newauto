@@ -8,3 +8,4 @@
 - `[2026-04-23-18-20] 기능 추천 P0~P2 구현: preflight, loudnorm, Ken Burns, BGM+ducking, clone, shorts, YouTube 예약/통계, karaoke, stock search`
 - `[2026-04-23-20-05] OmniVoice 튜닝 P0 구현: tts_profile 저장, language/generation_config 전달, 한국어 중심 신규 프리셋/UI 재설계`
 - `[2026-04-23-22-27] 렌더/자막 수정: render_phase 로그, 26자 기본 자막 정책, width-aware 줄바꿈, lower 위치 보정, UTF-8 UI 정리, 인코딩 검사 추가`
+- `[2026-04-23-22-38] TTS 샘플 미리듣기 추가: Step 3 샘플 생성 API, 오디오 플레이어, 프로젝트별 tts_preview.wav, 기본 샘플 문구 정리`

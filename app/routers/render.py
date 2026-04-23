@@ -1,12 +1,14 @@
 from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import db
+from ..config import VOICE_SAMPLE_TEXT
 from ..services import preflight as preflight_svc
 from ..services import render as render_svc
 from ..services import tts as tts_svc
 from ..tts_profiles import normalize_tts_profile
-from ..types import PreflightReport, ProjectRecord, ProjectStatus, TtsMode
+from ..types import PreflightReport, ProjectRecord, ProjectStatus, TtsMode, TtsPreviewResponse
 
 router = APIRouter(prefix="/api/projects", tags=["render"])
 
@@ -50,6 +52,14 @@ class TtsRunPayload(BaseModel):
     tts_profile: TtsProfilePayload | None = None
 
 
+class TtsPreviewPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    voice_preset: str = "auto"
+    sample_text: str | None = Field(default=None, max_length=200)
+    tts_profile: TtsProfilePayload | None = None
+
+
 def _require(pid: str) -> ProjectRecord:
     project = db.get_project(pid)
     if project is None:
@@ -79,6 +89,34 @@ def start_tts(pid: str, bg: BackgroundTasks, payload: TtsRunPayload) -> dict[str
     )
     bg.add_task(tts_svc.run_tts_job, pid)
     return {"ok": True}
+
+
+@router.post("/{pid}/tts/preview")
+def generate_tts_preview(pid: str, payload: TtsPreviewPayload) -> TtsPreviewResponse:
+    _require(pid)
+    sample_text = (payload.sample_text or "").strip()[:200] or VOICE_SAMPLE_TEXT
+    preview_path = db.project_dir(pid) / "tts_preview.wav"
+    voice_preset, tts_profile, audio = tts_svc.synthesize_preview_with_profile(
+        sample_text,
+        payload.voice_preset,
+        payload.tts_profile.to_payload() if payload.tts_profile is not None else {},
+    )
+    tts_svc.save_audio_file(audio, preview_path)
+    return {
+        "preview_url": f"/api/projects/{pid}/tts-preview",
+        "sample_text": sample_text,
+        "voice_preset": voice_preset,
+        "tts_profile": tts_profile,
+    }
+
+
+@router.get("/{pid}/tts-preview")
+def get_tts_preview(pid: str) -> FileResponse:
+    _require(pid)
+    target = db.project_dir(pid) / "tts_preview.wav"
+    if not target.exists():
+        raise HTTPException(404, "TTS preview not found")
+    return FileResponse(target, media_type="audio/wav", filename="tts_preview.wav")
 
 
 @router.post("/{pid}/render")

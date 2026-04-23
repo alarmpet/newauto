@@ -173,6 +173,15 @@
  * }} SubtitleStyleResponse
  */
 
+/**
+ * @typedef {{
+ *   preview_url: string,
+ *   sample_text: string,
+ *   voice_preset: string,
+ *   tts_profile: TtsProfile,
+ * }} TtsPreviewResponse
+ */
+
 class HttpError extends Error {
   /**
    * @param {string} message
@@ -460,6 +469,8 @@ const DEFAULT_TTS_PROFILE = {
   postprocess_output: true,
 };
 
+const DEFAULT_TTS_SAMPLE_TEXT = "안녕하세요. 지금 들으시는 음성은 현재 보이스 설정으로 만든 짧은 샘플입니다.";
+
 /** @type {Record<string, Partial<TtsProfile>>} */
 const TTS_PROFILE_PRESETS = {
   auto: { ...DEFAULT_TTS_PROFILE },
@@ -590,6 +601,10 @@ const ttsDenoiseSelect = /** @type {HTMLSelectElement} */ (query("#s3-denoise"))
 const ttsPostprocessSelect = /** @type {HTMLSelectElement} */ (query("#s3-postprocess"));
 const ttsInstructInput = /** @type {HTMLTextAreaElement} */ (query("#s3-instruct"));
 const ttsState = /** @type {HTMLElement} */ (query("#s3-state"));
+const ttsPreviewRunButton = /** @type {HTMLButtonElement} */ (query("#s3-preview-run"));
+const ttsPreviewTextInput = /** @type {HTMLTextAreaElement} */ (query("#s3-preview-text"));
+const ttsPreviewState = /** @type {HTMLElement} */ (query("#s3-preview-state"));
+const ttsPreviewAudio = /** @type {HTMLAudioElement} */ (query("#s3-preview-audio"));
 const ttsList = /** @type {HTMLElement} */ (query("#s3-list"));
 const renderState = /** @type {HTMLElement} */ (query("#s4-state"));
 const renderLogPanel = /** @type {HTMLElement} */ (query("#s4-log"));
@@ -780,6 +795,12 @@ function renderTtsProfileControls() {
   ttsDenoiseSelect.value = profile.denoise ? "on" : "off";
   ttsPostprocessSelect.value = profile.postprocess_output ? "on" : "off";
   ttsInstructInput.value = profile.instruct;
+  if (!ttsPreviewTextInput.value.trim()) {
+    ttsPreviewTextInput.value = DEFAULT_TTS_SAMPLE_TEXT;
+  }
+  ttsPreviewState.textContent = "샘플을 생성하면 여기에서 바로 재생할 수 있습니다.";
+  ttsPreviewAudio.src = "";
+  ttsPreviewAudio.load();
 }
 
 /**
@@ -1580,6 +1601,36 @@ function renderTtsList() {
 }
 
 /**
+ * @returns {Promise<void>}
+ */
+async function generateTtsPreview() {
+  const project = requireCurrent();
+  ttsPreviewRunButton.disabled = true;
+  ttsPreviewState.textContent = "샘플 음성을 생성하고 있습니다...";
+  try {
+    const response = /** @type {TtsPreviewResponse} */ (
+      await requestJson(`/api/projects/${project.id}/tts/preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          voice_preset: voiceSelect.value,
+          sample_text: ttsPreviewTextInput.value.trim(),
+          tts_profile: readTtsProfileInputs(),
+        }),
+      })
+    );
+    ttsPreviewAudio.src = `${response.preview_url}?t=${Date.now()}`;
+    ttsPreviewAudio.load();
+    void ttsPreviewAudio.play().catch(() => {
+      // Some browsers block autoplay after async work.
+    });
+    ttsPreviewState.textContent = `샘플 준비 완료: ${response.sample_text}`;
+  } finally {
+    ttsPreviewRunButton.disabled = false;
+  }
+}
+
+/**
  * @returns {void}
  */
 function updateOutputVideo() {
@@ -1991,6 +2042,10 @@ cloneProjectButton.addEventListener("click", () => {
 
 voiceSelect.addEventListener("change", () => {
   applyTtsPreset(voiceSelect.value);
+});
+
+ttsPreviewRunButton.addEventListener("click", () => {
+  void generateTtsPreview().catch((error) => handleError(error, "샘플 음성을 생성하지 못했습니다."));
 });
 
 ttsRunButton.addEventListener("click", async () => {

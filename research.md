@@ -446,6 +446,26 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
 
+## 2026-04-23 TTS Preview Update
+
+### Architecture changes
+
+- Added a dedicated TTS preview API that synthesizes a short sample with the current voice preset and tuning profile without running the full project TTS job.
+- Added `TtsPreviewResponse` to keep the preview payload typed across the API and frontend.
+
+### Workflow changes
+
+- Step 3 now includes a sample text box, a `샘플 듣기` action, and an inline audio player.
+- Preview generation writes `tts_preview.wav` under the project directory and exposes it through a dedicated audio route.
+- Preview synthesis uses the same normalized preset and `tts_profile` pipeline as the real TTS job, so users can hear the actual tuning differences before launching full generation.
+- Cleaned the default OmniVoice sample text and Hangul language detection so blank preview requests use a readable Korean sample.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
 ## 2026-04-23 Render And Subtitle Fixes Update
 
 ### Architecture changes

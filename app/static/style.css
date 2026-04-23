@@ -521,6 +521,15 @@ label { font-size: 12px; color: #9aaaa3; }
   height: 28px;
 }
 
+.tts-preview-panel {
+  margin-top: 14px;
+}
+
+.tts-preview-panel audio {
+  width: 100%;
+  margin-top: 8px;
+}
+
 video {
   width: 100%;
   max-width: 920px;

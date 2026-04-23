@@ -4,7 +4,7 @@ from typing import cast
 from .types import TtsMode, TtsProfile, VoicePresetArg
 
 VOICE_SAMPLE_TEXT = (
-    "안녕하세요. 지금부터 OmniVoice 보이스 비교 샘플을 들려드리겠습니다. "
+    "안녕하세요. 지금 들으시는 음성은 OmniVoice 보이스 비교 샘플입니다. "
     "목소리 톤과 속도, 전달감의 차이를 확인해 주세요."
 )
 

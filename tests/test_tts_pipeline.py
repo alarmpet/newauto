@@ -166,3 +166,39 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertEqual(project["tts_profile"]["language"], "ko")
         self.assertEqual(project["tts_profile"]["speed"], 1.05)
         self.assertEqual(project["tts_profile"]["num_step"], 42)
+
+    def test_tts_preview_route_generates_audio_file(self) -> None:
+        project_id = self.create_project()
+        preview_path = db.project_dir(project_id) / "tts_preview.wav"
+        fake_model = FakeOmniVoiceModel()
+
+        with patch("app.services.tts._get_model", return_value=fake_model), patch(
+            "soundfile.write"
+        ) as write_mock:
+            response = self.client.post(
+                f"/api/projects/{project_id}/tts/preview",
+                json={
+                    "voice_preset": "female-bright-clear",
+                    "sample_text": "샘플 음성을 들어봅니다.",
+                    "tts_profile": {
+                        "mode": "design",
+                        "language": "ko",
+                        "instruct": "adult female, bright clear presenter voice",
+                        "speed": 1.04,
+                        "num_step": 38,
+                        "guidance_scale": 3.1,
+                        "denoise": True,
+                        "postprocess_output": True,
+                    },
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["preview_url"], f"/api/projects/{project_id}/tts-preview")
+        self.assertEqual(payload["sample_text"], "샘플 음성을 들어봅니다.")
+        self.assertEqual(payload["voice_preset"], "female-bright-clear")
+        self.assertEqual(payload["tts_profile"]["num_step"], 38)
+        self.assertEqual(fake_model.seen, ["샘플 음성을 들어봅니다."])
+        self.assertEqual(write_mock.call_count, 1)
+        self.assertEqual(write_mock.call_args.args[0], preview_path)

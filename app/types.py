@@ -178,6 +178,13 @@ class TtsRuntimeInfo(TypedDict):
     dtype: VoiceRuntimeDType
 
 
+class TtsPreviewResponse(TypedDict):
+    preview_url: str
+    sample_text: str
+    voice_preset: str
+    tts_profile: TtsProfile
+
+
 class PreflightCheck(TypedDict):
     key: str
     ok: bool
