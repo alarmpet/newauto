@@ -81,7 +81,23 @@ def run_upload_job(
             if status:
                 db.update_project(pid, upload_progress=int(status.progress() * 100))
 
-        video_id = response.get("id")
+        video_id = str(response.get("id") or "")
+        if not video_id:
+            raise RuntimeError("YouTube upload response did not include a video id")
+
+        project = db.get_project(pid)
+        if project is not None and project["thumbnail_file"]:
+            thumbnail_path = db.project_dir(pid) / "thumbnail" / project["thumbnail_file"]
+            if thumbnail_path.exists():
+                try:
+                    thumbnail_media = MediaFileUpload(str(thumbnail_path))
+                    youtube.thumbnails().set(
+                        videoId=video_id,
+                        media_body=thumbnail_media,
+                    ).execute()
+                except Exception:
+                    traceback.print_exc()
+
         db.update_project(pid, upload_state="done", upload_progress=100, youtube_id=video_id)
     except Exception:
         traceback.print_exc()

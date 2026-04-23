@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app import db
 from app.main import app
+from app.services.subtitle import DEFAULT_SUBTITLE_STYLE
 
 
 class MediaWorkflowTests(unittest.TestCase):
@@ -84,3 +85,76 @@ class MediaWorkflowTests(unittest.TestCase):
         refreshed = self.client.get(f"/api/projects/{project_id}")
         self.assertEqual(refreshed.status_code, 200)
         self.assertEqual(refreshed.json()["media_order"], ["three.jpg", "one.jpg", "two.jpg"])
+
+    def test_project_includes_default_thumbnail_and_subtitle_style(self) -> None:
+        project_id = self.create_project()
+        response = self.client.get(f"/api/projects/{project_id}")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["thumbnail_file"], "")
+        self.assertEqual(payload["subtitle_style"]["position"], DEFAULT_SUBTITLE_STYLE["position"])
+        self.assertEqual(payload["subtitle_style"]["effect"], DEFAULT_SUBTITLE_STYLE["effect"])
+
+    def test_thumbnail_upload_replace_get_and_delete(self) -> None:
+        project_id = self.create_project()
+        upload = self.client.post(
+            f"/api/projects/{project_id}/thumbnail",
+            files={"file": ("thumb.jpg", io.BytesIO(b"jpg-thumbnail"), "image/jpeg")},
+        )
+        self.assertEqual(upload.status_code, 200)
+        self.assertEqual(upload.json()["project"]["thumbnail_file"], "thumbnail.jpg")
+
+        thumbnail = self.client.get(f"/api/projects/{project_id}/thumbnail")
+        self.assertEqual(thumbnail.status_code, 200)
+        self.assertEqual(thumbnail.content, b"jpg-thumbnail")
+
+        replace = self.client.post(
+            f"/api/projects/{project_id}/thumbnail",
+            files={"file": ("thumb.png", io.BytesIO(b"png-thumbnail"), "image/png")},
+        )
+        self.assertEqual(replace.status_code, 200)
+        self.assertEqual(replace.json()["project"]["thumbnail_file"], "thumbnail.png")
+        self.assertFalse((db.project_dir(project_id) / "thumbnail" / "thumbnail.jpg").exists())
+
+        deleted = self.client.delete(f"/api/projects/{project_id}/thumbnail")
+        self.assertEqual(deleted.status_code, 200)
+        self.assertEqual(deleted.json()["thumbnail_file"], "")
+        missing = self.client.get(f"/api/projects/{project_id}/thumbnail")
+        self.assertEqual(missing.status_code, 404)
+
+    def test_thumbnail_rejects_unsupported_file_type(self) -> None:
+        project_id = self.create_project()
+        response = self.client.post(
+            f"/api/projects/{project_id}/thumbnail",
+            files={"file": ("thumb.txt", io.BytesIO(b"text"), "text/plain")},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_subtitle_style_save_merge_and_validation(self) -> None:
+        project_id = self.create_project()
+        response = self.client.put(
+            f"/api/projects/{project_id}/subtitle-style",
+            json={
+                "font_size": 54,
+                "primary_color": "#FFE66D",
+                "position": "top",
+                "effect": "fade",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        style = response.json()["effective_style"]
+        self.assertEqual(style["font_size"], 54)
+        self.assertEqual(style["primary_color"], "#FFE66D")
+        self.assertEqual(style["position"], "top")
+        self.assertEqual(style["effect"], "fade")
+        self.assertEqual(style["outline_width"], DEFAULT_SUBTITLE_STYLE["outline_width"])
+
+        refreshed = self.client.get(f"/api/projects/{project_id}/subtitle-style")
+        self.assertEqual(refreshed.status_code, 200)
+        self.assertEqual(refreshed.json()["font_size"], 54)
+
+        invalid = self.client.put(
+            f"/api/projects/{project_id}/subtitle-style",
+            json={"primary_color": "white"},
+        )
+        self.assertEqual(invalid.status_code, 422)

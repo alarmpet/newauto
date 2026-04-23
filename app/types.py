@@ -5,8 +5,25 @@ from typing_extensions import TypedDict
 TaskState = Literal["idle", "running", "done", "error"]
 MediaKind = Literal["image", "video"]
 PrivacyValue = Literal["private", "unlisted", "public"]
+SubtitlePosition = Literal["top", "middle", "bottom"]
+SubtitleEffect = Literal["none", "fade", "pop"]
 VoicePresetArg = str | float
 VoiceRuntimeDType = Literal["float16", "float32"]
+
+
+class SubtitleStyle(TypedDict):
+    font_family: str
+    font_size: int
+    primary_color: str
+    outline_color: str
+    background_color: str
+    background_opacity: float
+    outline_width: int
+    shadow: int
+    position: SubtitlePosition
+    margin_v: int
+    max_line_chars: int
+    effect: SubtitleEffect
 
 
 class ProjectRecord(TypedDict):
@@ -15,6 +32,8 @@ class ProjectRecord(TypedDict):
     script: str
     sentences: list[str]
     media_order: list[str]
+    thumbnail_file: str
+    subtitle_style: SubtitleStyle
     voice_preset: str
     tts_state: TaskState
     tts_progress: int
@@ -55,6 +74,8 @@ class ProjectStatus(TypedDict):
     media_upload_completed: int
     media_upload_total: int
     media_upload_error: str
+    thumbnail_file: str
+    subtitle_style: SubtitleStyle
     youtube_id: str | None
 
 
@@ -86,6 +107,16 @@ class MediaUploadResponse(TypedDict):
     project: ProjectRecord
     accepted_files: list[AcceptedUploadFile]
     skipped_files: list[SkippedUploadFile]
+
+
+class ThumbnailUploadResponse(TypedDict):
+    project: ProjectRecord
+    thumbnail_url: str
+
+
+class SubtitleStyleResponse(TypedDict):
+    project: ProjectRecord
+    effective_style: SubtitleStyle
 
 
 class TtsRuntimeInfo(TypedDict):

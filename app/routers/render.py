@@ -61,5 +61,7 @@ def status(pid: str) -> ProjectStatus:
         "media_upload_completed": project["media_upload_completed"],
         "media_upload_total": project["media_upload_total"],
         "media_upload_error": project["media_upload_error"],
+        "thumbnail_file": project["thumbnail_file"],
+        "subtitle_style": project["subtitle_style"],
         "youtube_id": project["youtube_id"],
     }

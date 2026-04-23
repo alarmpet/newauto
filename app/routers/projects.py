@@ -6,9 +6,11 @@ from pathlib import Path
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, ConfigDict, Field
 
 from .. import db
 from ..config import ALLOWED_IMAGE_EXT, ALLOWED_VIDEO_EXT
+from ..services.subtitle import normalize_subtitle_style
 from ..text import split_sentences
 from ..types import (
     AcceptedUploadFile,
@@ -17,10 +19,16 @@ from ..types import (
     ProjectCard,
     ProjectRecord,
     SkippedUploadFile,
+    SubtitleEffect,
+    SubtitlePosition,
+    SubtitleStyle,
+    SubtitleStyleResponse,
+    ThumbnailUploadResponse,
 )
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 logger = logging.getLogger(__name__)
+THUMBNAIL_MAX_BYTES = 10 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -29,6 +37,46 @@ class PreparedUpload:
     original_name: str
     sanitized_name: str
     kind: MediaKind
+
+
+class SubtitleStylePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    font_family: str | None = Field(default=None, min_length=1, max_length=80)
+    font_size: int | None = Field(default=None, ge=24, le=96)
+    primary_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    outline_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    background_color: str | None = Field(default=None, pattern=r"^#[0-9A-Fa-f]{6}$")
+    background_opacity: float | None = Field(default=None, ge=0.0, le=1.0)
+    outline_width: int | None = Field(default=None, ge=0, le=8)
+    shadow: int | None = Field(default=None, ge=0, le=8)
+    position: SubtitlePosition | None = None
+    margin_v: int | None = Field(default=None, ge=0, le=240)
+    max_line_chars: int | None = Field(default=None, ge=16, le=80)
+    effect: SubtitleEffect | None = None
+
+    def to_patch(self) -> dict[str, object]:
+        patch: dict[str, object] = {}
+        for key in (
+            "font_family",
+            "font_size",
+            "primary_color",
+            "outline_color",
+            "background_color",
+            "background_opacity",
+            "outline_width",
+            "shadow",
+            "position",
+            "margin_v",
+            "max_line_chars",
+            "effect",
+        ):
+            value = getattr(self, key)
+            if value is not None:
+                patch[key] = value
+        return patch
+
+
 def _require(pid: str) -> ProjectRecord:
     project = db.get_project(pid)
     if project is None:
@@ -61,6 +109,24 @@ def _unique_media_path(media_dir: Path, filename: str) -> Path:
         counter += 1
         target = media_dir / f"{target.stem}_{counter}{target.suffix}"
     return target
+
+
+def _thumbnail_dir(pid: str) -> Path:
+    return db.project_dir(pid) / "thumbnail"
+
+
+def _clear_thumbnail_dir(thumbnail_dir: Path, keep_path: Path | None = None) -> None:
+    if not thumbnail_dir.exists():
+        return
+    for path in thumbnail_dir.iterdir():
+        if keep_path is not None and path == keep_path:
+            continue
+        if path.is_file():
+            path.unlink()
+
+
+def _thumbnail_path(project: ProjectRecord) -> Path:
+    return _thumbnail_dir(project["id"]) / project["thumbnail_file"]
 
 
 @router.get("")
@@ -210,6 +276,92 @@ async def upload_media(pid: str, files: list[UploadFile] = File(...)) -> MediaUp
             media_upload_error=str(exc),
         )
         raise HTTPException(500, f"media upload failed: {exc}") from exc
+
+
+@router.post("/{pid}/thumbnail")
+async def upload_thumbnail(pid: str, file: UploadFile = File(...)) -> ThumbnailUploadResponse:
+    _require(pid)
+    original_name = Path(file.filename or "").name
+    extension = Path(original_name).suffix.lower()
+    if extension not in ALLOWED_IMAGE_EXT:
+        await file.close()
+        raise HTTPException(400, "thumbnail must be an image file")
+
+    thumbnail_dir = _thumbnail_dir(pid)
+    thumbnail_dir.mkdir(parents=True, exist_ok=True)
+    target_name = f"thumbnail{extension}"
+    target_path = thumbnail_dir / target_name
+    temp_path = thumbnail_dir / f"{target_name}.tmp"
+    total_bytes = 0
+
+    try:
+        try:
+            with temp_path.open("wb") as output_file:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > THUMBNAIL_MAX_BYTES:
+                        raise HTTPException(400, "thumbnail file is too large")
+                    output_file.write(chunk)
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
+    finally:
+        await file.close()
+
+    _clear_thumbnail_dir(thumbnail_dir, keep_path=temp_path)
+    temp_path.replace(target_path)
+    project = db.update_project(pid, thumbnail_file=target_name)
+    if project is None:
+        raise HTTPException(404, f"project {pid} not found")
+    return {
+        "project": project,
+        "thumbnail_url": f"/api/projects/{pid}/thumbnail",
+    }
+
+
+@router.get("/{pid}/thumbnail")
+def get_thumbnail(pid: str) -> FileResponse:
+    project = _require(pid)
+    if not project["thumbnail_file"]:
+        raise HTTPException(404, "thumbnail not found")
+    target = _thumbnail_path(project)
+    if not target.exists():
+        raise HTTPException(404, "thumbnail not found")
+    return FileResponse(target)
+
+
+@router.delete("/{pid}/thumbnail")
+def delete_thumbnail(pid: str) -> ProjectRecord:
+    _require(pid)
+    _clear_thumbnail_dir(_thumbnail_dir(pid))
+    project = db.update_project(pid, thumbnail_file="")
+    if project is None:
+        raise HTTPException(404, f"project {pid} not found")
+    return project
+
+
+@router.get("/{pid}/subtitle-style")
+def get_subtitle_style(pid: str) -> SubtitleStyle:
+    project = _require(pid)
+    return project["subtitle_style"]
+
+
+@router.put("/{pid}/subtitle-style")
+def save_subtitle_style(pid: str, payload: SubtitleStylePayload) -> SubtitleStyleResponse:
+    project = _require(pid)
+    style_input: dict[str, object] = dict(project["subtitle_style"])
+    style_input.update(payload.to_patch())
+    style = normalize_subtitle_style(style_input)
+    updated_project = db.update_project(pid, subtitle_style=style)
+    if updated_project is None:
+        raise HTTPException(404, f"project {pid} not found")
+    return {
+        "project": updated_project,
+        "effective_style": style,
+    }
 
 
 @router.put("/{pid}/media/order")

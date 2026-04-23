@@ -326,6 +326,35 @@ label { font-size: 12px; color: #9aaaa3; }
   min-height: 20px;
 }
 
+.thumbnail-panel {
+  margin-bottom: 16px;
+}
+
+.thumbnail-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.thumbnail-preview {
+  aspect-ratio: 16 / 9;
+  width: min(420px, 100%);
+  border-radius: 16px;
+  overflow: hidden;
+  background: #040807;
+  border: 1px solid rgba(40, 66, 57, 0.72);
+  display: grid;
+  place-items: center;
+}
+
+.thumbnail-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .media-layout {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(300px, 1fr);
@@ -498,6 +527,55 @@ video {
   border-radius: 12px;
   margin-top: 14px;
   background: #000;
+}
+
+.subtitle-style-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.subtitle-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.subtitle-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.subtitle-controls input[type="color"] {
+  min-height: 42px;
+  padding: 4px;
+}
+
+.subtitle-preview-stage {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  min-height: 260px;
+  max-width: 720px;
+  border-radius: 16px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 35%, rgba(34, 227, 151, 0.22), transparent 35%),
+    linear-gradient(135deg, #06130f, #13231e 55%, #050807);
+  border: 1px solid rgba(40, 66, 57, 0.72);
+}
+
+.subtitle-preview-caption {
+  position: absolute;
+  left: 50%;
+  max-width: 86%;
+  padding: 6px 12px;
+  border-radius: 10px;
+  text-align: center;
+  line-height: 1.25;
+  transform: translateX(-50%);
+  transition: all 0.15s ease;
 }
 
 #s5-link a {

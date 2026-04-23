@@ -91,6 +91,24 @@
           <input type="file" id="file-input" accept="image/*,video/*" multiple hidden>
         </div>
 
+        <section class="card thumbnail-panel">
+          <div class="section-head row between">
+            <div>
+              <strong>YouTube Thumbnail</strong>
+              <div class="muted">영상 미디어와 별도로 업로드됩니다. 권장: 1280x720, 16:9, JPG/PNG/WebP.</div>
+            </div>
+            <div class="thumbnail-actions">
+              <button id="thumbnail-upload" class="btn" type="button">Upload Thumbnail</button>
+              <button id="thumbnail-delete" class="btn danger" type="button">Delete</button>
+              <input type="file" id="thumbnail-input" accept="image/*" hidden>
+            </div>
+          </div>
+          <div id="thumbnail-preview" class="thumbnail-preview">
+            <div class="media-empty">아직 업로드된 썸네일이 없습니다.</div>
+          </div>
+          <div id="thumbnail-meta" class="media-preview-meta muted"></div>
+        </section>
+
         <div id="media-upload-panel" class="card upload-panel">
           <div class="upload-panel-header">
             <strong>업로드 상태</strong>
@@ -163,6 +181,66 @@
 
       <section id="step-4" class="step-view" hidden>
         <h2>렌더링 및 미리보기</h2>
+        <section class="card subtitle-style-panel">
+          <div class="section-head row between">
+            <div>
+              <strong>Subtitle Style</strong>
+              <div class="muted">렌더링 전에 자막 색상, 크기, 위치, 외곽선, 그림자, 배경, 효과를 설정합니다.</div>
+            </div>
+            <button id="subtitle-save" class="btn" type="button">Save subtitle style</button>
+          </div>
+
+          <div class="subtitle-controls">
+            <label>Font
+              <input id="subtitle-font" value="Malgun Gothic">
+            </label>
+            <label>Size
+              <input id="subtitle-size" type="number" min="24" max="96" step="1">
+            </label>
+            <label>Text Color
+              <input id="subtitle-primary-color" type="color">
+            </label>
+            <label>Outline Color
+              <input id="subtitle-outline-color" type="color">
+            </label>
+            <label>Outline
+              <input id="subtitle-outline-width" type="range" min="0" max="8" step="1">
+            </label>
+            <label>Shadow
+              <input id="subtitle-shadow" type="range" min="0" max="8" step="1">
+            </label>
+            <label>Position
+              <select id="subtitle-position">
+                <option value="bottom">Bottom</option>
+                <option value="middle">Middle</option>
+                <option value="top">Top</option>
+              </select>
+            </label>
+            <label>Vertical Margin
+              <input id="subtitle-margin-v" type="number" min="0" max="240" step="4">
+            </label>
+            <label>Background
+              <input id="subtitle-background-color" type="color">
+            </label>
+            <label>Background Opacity
+              <input id="subtitle-background-opacity" type="range" min="0" max="1" step="0.05">
+            </label>
+            <label>Line Length
+              <input id="subtitle-max-line-chars" type="number" min="16" max="80" step="1">
+            </label>
+            <label>Effect
+              <select id="subtitle-effect">
+                <option value="none">None</option>
+                <option value="fade">Fade</option>
+                <option value="pop">Pop</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="subtitle-preview-stage">
+            <div id="subtitle-preview-caption" class="subtitle-preview-caption">자막 스타일 미리보기</div>
+          </div>
+        </section>
         <div class="row">
           <button id="s4-run" class="btn primary" type="button">렌더 시작</button>
           <span id="s4-state" class="muted">idle · 0%</span>

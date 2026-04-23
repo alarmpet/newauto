@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import cast
 
 from .config import DB_PATH, PROJECTS_DIR
+from .services.subtitle import normalize_subtitle_style
 from .types import ProjectCard, ProjectRecord, TaskState
 
 SCHEMA = """
@@ -17,6 +18,8 @@ CREATE TABLE IF NOT EXISTS projects (
     script       TEXT NOT NULL DEFAULT '',
     sentences    TEXT NOT NULL DEFAULT '[]',
     media_order  TEXT NOT NULL DEFAULT '[]',
+    thumbnail_file TEXT NOT NULL DEFAULT '',
+    subtitle_style TEXT NOT NULL DEFAULT '{}',
     voice_preset TEXT NOT NULL DEFAULT 'auto',
     tts_state    TEXT NOT NULL DEFAULT 'idle',
     tts_progress INTEGER NOT NULL DEFAULT 0,
@@ -41,6 +44,8 @@ MIGRATION_COLUMNS: dict[str, str] = {
     "media_upload_completed": "INTEGER NOT NULL DEFAULT 0",
     "media_upload_total": "INTEGER NOT NULL DEFAULT 0",
     "media_upload_error": "TEXT NOT NULL DEFAULT ''",
+    "thumbnail_file": "TEXT NOT NULL DEFAULT ''",
+    "subtitle_style": "TEXT NOT NULL DEFAULT '{}'",
 }
 
 
@@ -80,12 +85,18 @@ def _now() -> str:
 def _row_to_project(row: sqlite3.Row) -> ProjectRecord:
     sentences = cast(list[str], json.loads(str(row["sentences"] or "[]")))
     media_order = cast(list[str], json.loads(str(row["media_order"] or "[]")))
+    subtitle_style_payload = json.loads(str(row["subtitle_style"] or "{}"))
+    subtitle_style = normalize_subtitle_style(
+        subtitle_style_payload if isinstance(subtitle_style_payload, dict) else {}
+    )
     return {
         "id": str(row["id"]),
         "title": str(row["title"]),
         "script": str(row["script"]),
         "sentences": sentences,
         "media_order": media_order,
+        "thumbnail_file": str(row["thumbnail_file"] or ""),
+        "subtitle_style": subtitle_style,
         "voice_preset": str(row["voice_preset"]),
         "tts_state": cast(TaskState, row["tts_state"]),
         "tts_progress": int(row["tts_progress"]),
@@ -149,7 +160,7 @@ def get_project(pid: str) -> ProjectRecord | None:
 def update_project(pid: str, **fields: object) -> ProjectRecord | None:
     if not fields:
         return get_project(pid)
-    for key in ("sentences", "media_order"):
+    for key in ("sentences", "media_order", "subtitle_style"):
         if key in fields and not isinstance(fields[key], str):
             fields[key] = json.dumps(fields[key], ensure_ascii=False)
     fields["updated_at"] = _now()

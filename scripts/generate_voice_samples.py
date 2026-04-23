@@ -50,7 +50,7 @@ def validate_presets(preset_ids: list[str]) -> list[str]:
     invalid = [preset_id for preset_id in preset_ids if preset_id not in VOICE_PRESETS]
     if invalid:
         invalid_text = ", ".join(invalid)
-        raise ValueError(f"Unknown preset id(s): {invalid_text}")
+        raise ValueError(f"Unsupported preset id(s): {invalid_text}")
     return preset_ids
 
 

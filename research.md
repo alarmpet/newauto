@@ -281,3 +281,42 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
   - punctuation-only fragments are removed from split results
   - legacy stored projects are normalized during TTS runs
   - stale TTS artifacts are removed after empty-audio failures
+
+## 2026-04-23 Thumbnail and Subtitle Settings Update
+
+### Architecture changes
+
+- Added project-level thumbnail and subtitle style fields in SQLite:
+  - `thumbnail_file`
+  - `subtitle_style`
+- Added migration logic so existing local databases gain the new columns automatically.
+- Extended project and status response types to include thumbnail metadata and effective subtitle style.
+- Added typed subtitle style defaults and normalization in `app/services/subtitle.py`.
+- Kept SRT generation for compatibility and added ASS generation for styled render output.
+
+### Workflow changes
+
+- Added a separate YouTube thumbnail workflow under the Media step:
+  - upload one thumbnail independently from render media
+  - replace the previous thumbnail on new upload
+  - preview and delete the current thumbnail
+- Added a Subtitle Style panel under the Render step with controls for:
+  - font family
+  - font size
+  - text color
+  - outline color and width
+  - shadow
+  - top/middle/bottom position
+  - vertical margin
+  - background color and opacity
+  - line length
+  - none/fade/pop effect
+- Changed render output to generate `subtitles.ass` and mux it with FFmpeg using the ASS filter.
+- Added YouTube thumbnail integration after successful video upload by calling `thumbnails.set` when a thumbnail exists.
+
+### Verification
+
+- Added backend tests for thumbnail upload, replacement, retrieval, deletion, and invalid file rejection.
+- Added tests for subtitle style merge/validation and ASS subtitle output.
+- Added a mocked YouTube upload test that verifies thumbnail upload is triggered.
+- Verified frontend and backend type checks with `scripts/typecheck.ps1`.

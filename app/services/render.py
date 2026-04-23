@@ -7,7 +7,7 @@ from pathlib import Path
 from .. import db
 from ..config import ALLOWED_IMAGE_EXT, FPS, VIDEO_H, VIDEO_W
 from ..types import TimingEntry
-from .subtitle import write_srt
+from .subtitle import write_ass
 
 
 def _ffmpeg() -> str:
@@ -93,9 +93,12 @@ def _build_visual_track(media_files: list[Path], total_duration: float, out_mp4:
     )
 
 
-def _mux(silent_video: Path, audio: Path, srt: Path, out_mp4: Path) -> None:
-    escaped_srt = srt.as_posix().replace(":", "\\:")
-    video_filter = f"subtitles='{escaped_srt}':charenc=UTF-8"
+def _escape_filter_path(path: Path) -> str:
+    return path.resolve().as_posix().replace(":", "\\:").replace("'", r"\'")
+
+
+def _mux(silent_video: Path, audio: Path, subtitle_path: Path, out_mp4: Path) -> None:
+    video_filter = f"ass='{_escape_filter_path(subtitle_path)}'"
     _run(
         [
             _ffmpeg(),
@@ -157,8 +160,8 @@ def run_render_job(pid: str) -> None:
         _concat_audio(tts_dir, timings, audio_wav)
         db.update_project(pid, render_progress=30)
 
-        subtitle_path = project_dir / "subtitles.srt"
-        write_srt(timings, subtitle_path)
+        subtitle_path = project_dir / "subtitles.ass"
+        write_ass(timings, subtitle_path, project["subtitle_style"])
         db.update_project(pid, render_progress=40)
 
         silent_video = project_dir / "_visual.mp4"

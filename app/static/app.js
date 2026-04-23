@@ -4,6 +4,25 @@
  * @typedef {"idle" | "running" | "done" | "error"} TaskState
  * @typedef {"image" | "video"} MediaKind
  * @typedef {"idle" | "uploading" | "processing" | "done" | "error"} MediaClientPhase
+ * @typedef {"top" | "middle" | "bottom"} SubtitlePosition
+ * @typedef {"none" | "fade" | "pop"} SubtitleEffect
+ */
+
+/**
+ * @typedef {{
+ *   font_family: string,
+ *   font_size: number,
+ *   primary_color: string,
+ *   outline_color: string,
+ *   background_color: string,
+ *   background_opacity: number,
+ *   outline_width: number,
+ *   shadow: number,
+ *   position: SubtitlePosition,
+ *   margin_v: number,
+ *   max_line_chars: number,
+ *   effect: SubtitleEffect,
+ * }} SubtitleStyle
  */
 
 /**
@@ -13,6 +32,8 @@
  *   script: string,
  *   sentences: string[],
  *   media_order: string[],
+ *   thumbnail_file: string,
+ *   subtitle_style: SubtitleStyle,
  *   voice_preset: string,
  *   tts_state: TaskState,
  *   tts_progress: number,
@@ -80,6 +101,8 @@
  *   media_upload_completed: number,
  *   media_upload_total: number,
  *   media_upload_error: string,
+ *   thumbnail_file: string,
+ *   subtitle_style: SubtitleStyle,
  *   youtube_id: string | null,
  * }} ProjectStatus
  */
@@ -99,6 +122,20 @@
  *   lastAccepted: AcceptedUploadFile[],
  *   lastSkipped: SkippedUploadFile[],
  * }} MediaClientState
+ */
+
+/**
+ * @typedef {{
+ *   project: Project,
+ *   thumbnail_url: string,
+ * }} ThumbnailUploadResponse
+ */
+
+/**
+ * @typedef {{
+ *   project: Project,
+ *   effective_style: SubtitleStyle,
+ * }} SubtitleStyleResponse
  */
 
 class HttpError extends Error {
@@ -235,6 +272,54 @@ function mediaKindFromName(name) {
 }
 
 /**
+ * @param {string} value
+ * @returns {SubtitlePosition}
+ */
+function subtitlePositionFromValue(value) {
+  if (value === "top" || value === "middle" || value === "bottom") {
+    return value;
+  }
+  return "bottom";
+}
+
+/**
+ * @param {string} value
+ * @returns {SubtitleEffect}
+ */
+function subtitleEffectFromValue(value) {
+  if (value === "fade" || value === "pop" || value === "none") {
+    return value;
+  }
+  return "none";
+}
+
+/**
+ * @param {string} value
+ * @param {number} fallback
+ * @param {number} min
+ * @param {number} max
+ * @returns {number}
+ */
+function numberInRange(value, fallback, min, max) {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, numericValue));
+}
+
+/**
+ * @param {Project} project
+ * @returns {SubtitleStyle}
+ */
+function effectiveSubtitleStyle(project) {
+  return {
+    ...DEFAULT_SUBTITLE_STYLE,
+    ...project.subtitle_style,
+  };
+}
+
+/**
  * @param {TaskState} state
  * @returns {string}
  */
@@ -268,6 +353,22 @@ let mediaClientState = {
   lastSkipped: [],
 };
 
+/** @type {SubtitleStyle} */
+const DEFAULT_SUBTITLE_STYLE = {
+  font_family: "Malgun Gothic",
+  font_size: 48,
+  primary_color: "#FFFFFF",
+  outline_color: "#000000",
+  background_color: "#000000",
+  background_opacity: 0,
+  outline_width: 2,
+  shadow: 1,
+  position: "bottom",
+  margin_v: 80,
+  max_line_chars: 40,
+  effect: "none",
+};
+
 const navProjects = /** @type {HTMLButtonElement} */ (query("#nav-projects"));
 const workflowNav = /** @type {HTMLElement} */ (query("#workflow-nav"));
 const viewProjects = /** @type {HTMLElement} */ (query("#view-projects"));
@@ -284,6 +385,11 @@ const scriptInput = /** @type {HTMLTextAreaElement} */ (query("#s1-script"));
 const scriptCount = /** @type {HTMLElement} */ (query("#s1-count"));
 const dropzone = /** @type {HTMLElement} */ (query("#dropzone"));
 const fileInput = /** @type {HTMLInputElement} */ (query("#file-input"));
+const thumbnailUploadButton = /** @type {HTMLButtonElement} */ (query("#thumbnail-upload"));
+const thumbnailDeleteButton = /** @type {HTMLButtonElement} */ (query("#thumbnail-delete"));
+const thumbnailInput = /** @type {HTMLInputElement} */ (query("#thumbnail-input"));
+const thumbnailPreview = /** @type {HTMLElement} */ (query("#thumbnail-preview"));
+const thumbnailMeta = /** @type {HTMLElement} */ (query("#thumbnail-meta"));
 const mediaWorkflowHint = /** @type {HTMLElement} */ (query("#media-workflow-hint"));
 const mediaUploadPanel = /** @type {HTMLElement} */ (query("#media-upload-panel"));
 const mediaUploadStatus = /** @type {HTMLElement} */ (query("#media-upload-status"));
@@ -301,6 +407,20 @@ const ttsState = /** @type {HTMLElement} */ (query("#s3-state"));
 const ttsList = /** @type {HTMLElement} */ (query("#s3-list"));
 const renderState = /** @type {HTMLElement} */ (query("#s4-state"));
 const renderVideo = /** @type {HTMLVideoElement} */ (query("#s4-video"));
+const subtitleSaveButton = /** @type {HTMLButtonElement} */ (query("#subtitle-save"));
+const subtitleFontInput = /** @type {HTMLInputElement} */ (query("#subtitle-font"));
+const subtitleSizeInput = /** @type {HTMLInputElement} */ (query("#subtitle-size"));
+const subtitlePrimaryColorInput = /** @type {HTMLInputElement} */ (query("#subtitle-primary-color"));
+const subtitleOutlineColorInput = /** @type {HTMLInputElement} */ (query("#subtitle-outline-color"));
+const subtitleOutlineWidthInput = /** @type {HTMLInputElement} */ (query("#subtitle-outline-width"));
+const subtitleShadowInput = /** @type {HTMLInputElement} */ (query("#subtitle-shadow"));
+const subtitlePositionSelect = /** @type {HTMLSelectElement} */ (query("#subtitle-position"));
+const subtitleMarginVInput = /** @type {HTMLInputElement} */ (query("#subtitle-margin-v"));
+const subtitleBackgroundColorInput = /** @type {HTMLInputElement} */ (query("#subtitle-background-color"));
+const subtitleBackgroundOpacityInput = /** @type {HTMLInputElement} */ (query("#subtitle-background-opacity"));
+const subtitleMaxLineCharsInput = /** @type {HTMLInputElement} */ (query("#subtitle-max-line-chars"));
+const subtitleEffectSelect = /** @type {HTMLSelectElement} */ (query("#subtitle-effect"));
+const subtitlePreviewCaption = /** @type {HTMLElement} */ (query("#subtitle-preview-caption"));
 const oauthPanel = /** @type {HTMLElement} */ (query("#oauth-panel"));
 const uploadTitleInput = /** @type {HTMLInputElement} */ (query("#s5-title"));
 const uploadDescInput = /** @type {HTMLTextAreaElement} */ (query("#s5-desc"));
@@ -416,7 +536,9 @@ async function openProject(pid) {
 
   renderScriptStats();
   renderMedia();
+  renderThumbnail();
   renderMediaUploadStatus();
+  renderSubtitleStyleControls();
   renderTtsList();
   renderStep5();
   updateOutputVideo();
@@ -606,6 +728,169 @@ function renderMedia() {
     <div><strong>형식</strong>: ${selectedKind}</div>
     <div><strong>순서</strong>: ${project.media_order.indexOf(selectedName) + 1} / ${project.media_order.length}</div>
   `;
+}
+
+/**
+ * @returns {void}
+ */
+function renderThumbnail() {
+  const project = requireCurrent();
+  thumbnailDeleteButton.disabled = !project.thumbnail_file;
+  if (!project.thumbnail_file) {
+    thumbnailPreview.innerHTML = '<div class="media-empty">아직 업로드된 썸네일이 없습니다.</div>';
+    thumbnailMeta.textContent = "YouTube 업로드용 썸네일을 별도로 관리할 수 있습니다.";
+    return;
+  }
+
+  const thumbnailUrl = `/api/projects/${project.id}/thumbnail`;
+  thumbnailPreview.innerHTML = `<img src="${escapeHtml(buildMediaUrl(thumbnailUrl))}" alt="YouTube thumbnail">`;
+  thumbnailMeta.innerHTML = `
+    <div><strong>파일</strong>: ${escapeHtml(project.thumbnail_file)}</div>
+    <div><strong>용도</strong>: YouTube 업로드 시 자동 썸네일 설정</div>
+  `;
+}
+
+/**
+ * @param {File | null} file
+ * @returns {Promise<void>}
+ */
+async function uploadThumbnail(file) {
+  if (!file) {
+    return;
+  }
+  const project = requireCurrent();
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = /** @type {ThumbnailUploadResponse} */ (
+    await requestJson(`/api/projects/${project.id}/thumbnail`, {
+      method: "POST",
+      body: formData,
+    })
+  );
+  current = response.project;
+  thumbnailInput.value = "";
+  renderThumbnail();
+  toast("썸네일을 업로드했습니다.");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function deleteThumbnail() {
+  const project = requireCurrent();
+  current = /** @type {Project} */ (
+    await requestJson(`/api/projects/${project.id}/thumbnail`, {
+      method: "DELETE",
+    })
+  );
+  renderThumbnail();
+  toast("썸네일을 삭제했습니다.");
+}
+
+/**
+ * @returns {SubtitleStyle}
+ */
+function readSubtitleStyleInputs() {
+  return {
+    font_family: subtitleFontInput.value.trim() || DEFAULT_SUBTITLE_STYLE.font_family,
+    font_size: numberInRange(subtitleSizeInput.value, DEFAULT_SUBTITLE_STYLE.font_size, 24, 96),
+    primary_color: subtitlePrimaryColorInput.value || DEFAULT_SUBTITLE_STYLE.primary_color,
+    outline_color: subtitleOutlineColorInput.value || DEFAULT_SUBTITLE_STYLE.outline_color,
+    background_color: subtitleBackgroundColorInput.value || DEFAULT_SUBTITLE_STYLE.background_color,
+    background_opacity: numberInRange(
+      subtitleBackgroundOpacityInput.value,
+      DEFAULT_SUBTITLE_STYLE.background_opacity,
+      0,
+      1,
+    ),
+    outline_width: numberInRange(
+      subtitleOutlineWidthInput.value,
+      DEFAULT_SUBTITLE_STYLE.outline_width,
+      0,
+      8,
+    ),
+    shadow: numberInRange(subtitleShadowInput.value, DEFAULT_SUBTITLE_STYLE.shadow, 0, 8),
+    position: subtitlePositionFromValue(subtitlePositionSelect.value),
+    margin_v: numberInRange(subtitleMarginVInput.value, DEFAULT_SUBTITLE_STYLE.margin_v, 0, 240),
+    max_line_chars: numberInRange(
+      subtitleMaxLineCharsInput.value,
+      DEFAULT_SUBTITLE_STYLE.max_line_chars,
+      16,
+      80,
+    ),
+    effect: subtitleEffectFromValue(subtitleEffectSelect.value),
+  };
+}
+
+/**
+ * @returns {void}
+ */
+function renderSubtitleStyleControls() {
+  const style = effectiveSubtitleStyle(requireCurrent());
+  subtitleFontInput.value = style.font_family;
+  subtitleSizeInput.value = String(style.font_size);
+  subtitlePrimaryColorInput.value = style.primary_color;
+  subtitleOutlineColorInput.value = style.outline_color;
+  subtitleBackgroundColorInput.value = style.background_color;
+  subtitleBackgroundOpacityInput.value = String(style.background_opacity);
+  subtitleOutlineWidthInput.value = String(style.outline_width);
+  subtitleShadowInput.value = String(style.shadow);
+  subtitlePositionSelect.value = style.position;
+  subtitleMarginVInput.value = String(style.margin_v);
+  subtitleMaxLineCharsInput.value = String(style.max_line_chars);
+  subtitleEffectSelect.value = style.effect;
+  renderSubtitlePreview();
+}
+
+/**
+ * @returns {void}
+ */
+function renderSubtitlePreview() {
+  const style = readSubtitleStyleInputs();
+  subtitlePreviewCaption.textContent = style.effect === "pop"
+    ? "자막 스타일 미리보기!"
+    : "자막 스타일 미리보기";
+  subtitlePreviewCaption.style.fontFamily = style.font_family;
+  subtitlePreviewCaption.style.fontSize = `${Math.max(18, Math.round(style.font_size * 0.62))}px`;
+  subtitlePreviewCaption.style.color = style.primary_color;
+  subtitlePreviewCaption.style.textShadow = `0 0 ${style.outline_width + 1}px ${style.outline_color}, ${style.shadow}px ${style.shadow}px ${style.shadow + 2}px rgba(0,0,0,.72)`;
+  subtitlePreviewCaption.style.backgroundColor = `rgba(0, 0, 0, ${style.background_opacity})`;
+  subtitlePreviewCaption.style.fontWeight = style.effect === "pop" ? "800" : "700";
+  subtitlePreviewCaption.style.transform = style.effect === "pop"
+    ? "translateX(-50%) scale(1.05)"
+    : "translateX(-50%)";
+  subtitlePreviewCaption.style.top = "";
+  subtitlePreviewCaption.style.bottom = "";
+  if (style.position === "top") {
+    subtitlePreviewCaption.style.top = `${Math.max(8, Math.round(style.margin_v * 0.25))}px`;
+    return;
+  }
+  if (style.position === "middle") {
+    subtitlePreviewCaption.style.top = "50%";
+    subtitlePreviewCaption.style.transform = style.effect === "pop"
+      ? "translate(-50%, -50%) scale(1.05)"
+      : "translate(-50%, -50%)";
+    return;
+  }
+  subtitlePreviewCaption.style.bottom = `${Math.max(8, Math.round(style.margin_v * 0.25))}px`;
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function saveSubtitleStyle() {
+  const project = requireCurrent();
+  const style = readSubtitleStyleInputs();
+  const response = /** @type {SubtitleStyleResponse} */ (
+    await requestJson(`/api/projects/${project.id}/subtitle-style`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(style),
+    })
+  );
+  current = response.project;
+  renderSubtitleStyleControls();
+  toast("자막 스타일을 저장했습니다.");
 }
 
 /**
@@ -1100,6 +1385,19 @@ fileInput.addEventListener("change", () => {
   uploadFiles(fileInput.files);
 });
 
+thumbnailUploadButton.addEventListener("click", () => {
+  thumbnailInput.click();
+});
+
+thumbnailInput.addEventListener("change", () => {
+  const file = thumbnailInput.files ? thumbnailInput.files[0] || null : null;
+  void uploadThumbnail(file).catch((error) => handleError(error, "썸네일을 업로드하지 못했습니다."));
+});
+
+thumbnailDeleteButton.addEventListener("click", () => {
+  void deleteThumbnail().catch((error) => handleError(error, "썸네일을 삭제하지 못했습니다."));
+});
+
 mediaGrid.addEventListener("click", (event) => {
   const target = /** @type {HTMLElement} */ (event.target);
   const action = target.dataset.action;
@@ -1126,6 +1424,28 @@ mediaGrid.addEventListener("click", (event) => {
   if (action === "delete") {
     void deleteMedia(name).catch((error) => handleError(error, "미디어를 삭제하지 못했습니다."));
   }
+});
+
+[
+  subtitleFontInput,
+  subtitleSizeInput,
+  subtitlePrimaryColorInput,
+  subtitleOutlineColorInput,
+  subtitleOutlineWidthInput,
+  subtitleShadowInput,
+  subtitlePositionSelect,
+  subtitleMarginVInput,
+  subtitleBackgroundColorInput,
+  subtitleBackgroundOpacityInput,
+  subtitleMaxLineCharsInput,
+  subtitleEffectSelect,
+].forEach((control) => {
+  control.addEventListener("input", renderSubtitlePreview);
+  control.addEventListener("change", renderSubtitlePreview);
+});
+
+subtitleSaveButton.addEventListener("click", () => {
+  void saveSubtitleStyle().catch((error) => handleError(error, "자막 스타일을 저장하지 못했습니다."));
 });
 
 ttsRunButton.addEventListener("click", async () => {

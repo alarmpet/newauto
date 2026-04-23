@@ -341,7 +341,7 @@ upload_error TEXT NOT NULL DEFAULT ''
 
 ## 구현 단계
 
-### Phase 1. 백엔드 데이터 모델
+### Phase 1. [완료] 백엔드 데이터 모델
 
 - `app/db.py`
   - `thumbnail_file`, `subtitle_style` 컬럼 추가
@@ -355,7 +355,7 @@ upload_error TEXT NOT NULL DEFAULT ''
   - 기존 DB에도 새 컬럼이 자동 추가되는지 확인
   - 기본 subtitle style이 merge 되는지 확인
 
-### Phase 2. 썸네일 API
+### Phase 2. [완료] 썸네일 API
 
 - `app/routers/projects.py`
   - `POST /{pid}/thumbnail`
@@ -368,7 +368,7 @@ upload_error TEXT NOT NULL DEFAULT ''
   - 비이미지 거부
   - 삭제 후 404
 
-### Phase 3. 자막 스타일 API
+### Phase 3. [완료] 자막 스타일 API
 
 - `app/routers/projects.py` 또는 새 `app/routers/subtitle.py`
   - `PUT /{pid}/subtitle-style`
@@ -380,7 +380,7 @@ upload_error TEXT NOT NULL DEFAULT ''
   - 잘못된 색상/크기/위치 거부
   - 일부 필드만 저장해도 기본값과 merge
 
-### Phase 4. ASS 자막 렌더링
+### Phase 4. [완료] ASS 자막 렌더링
 
 - `app/services/subtitle.py`
   - `write_ass()` 구현
@@ -393,7 +393,7 @@ upload_error TEXT NOT NULL DEFAULT ''
   - ASS 파일 내용에 스타일 필드가 반영되는지 확인
   - 렌더 명령 구성 테스트
 
-### Phase 5. 프런트엔드 UI
+### Phase 5. [완료] 프런트엔드 UI
 
 - `app/static/index.html`
   - Media 단계에 썸네일 패널 추가
@@ -410,7 +410,7 @@ upload_error TEXT NOT NULL DEFAULT ''
 - 테스트
   - `npx tsc -p tsconfig.json`
 
-### Phase 6. YouTube 썸네일 연동
+### Phase 6. [완료] YouTube 썸네일 연동
 
 - `app/services/yt_upload.py`
   - 영상 업로드 완료 후 썸네일 업로드 추가
