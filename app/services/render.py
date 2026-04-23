@@ -11,6 +11,14 @@ from .subtitle import write_ass
 from .transcribe import save_word_timings
 
 
+def _decode_process_text(raw: bytes | str | None) -> str:
+    if raw is None:
+        return ""
+    if isinstance(raw, bytes):
+        return raw.decode("utf-8", errors="replace")
+    return raw
+
+
 def _tail_lines(text: str | None, limit: int = 12) -> str:
     if not text:
         return ""
@@ -32,12 +40,13 @@ def _ffmpeg() -> str:
 
 
 def _run(command: list[str]) -> str:
-    process = subprocess.run(command, capture_output=True, text=True, check=False)
-    stderr_tail = _tail_lines(process.stderr, limit=20)
+    process = subprocess.run(command, capture_output=True, text=False, check=False)
+    stderr_text = _decode_process_text(process.stderr)
+    stderr_tail = _tail_lines(stderr_text, limit=20)
     if process.returncode != 0:
         detail = stderr_tail or "ffmpeg failed with no stderr output"
         raise RuntimeError("ffmpeg failed:\n" + detail)
-    return _tail_lines(process.stderr)
+    return _tail_lines(stderr_text)
 
 
 def _probe_duration(media_path: Path) -> float:
@@ -56,15 +65,55 @@ def _probe_duration(media_path: Path) -> float:
             str(media_path),
         ],
         capture_output=True,
-        text=True,
+        text=False,
         check=False,
     )
     if process.returncode != 0:
         return 0.0
     try:
-        return float(process.stdout.strip())
+        return float(_decode_process_text(process.stdout).strip())
     except ValueError:
         return 0.0
+
+
+def probe_media_dimensions(media_path: Path) -> tuple[int, int]:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return (0, 0)
+    process = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=width,height",
+            "-of",
+            "csv=p=0:s=x",
+            str(media_path),
+        ],
+        capture_output=True,
+        text=False,
+        check=False,
+    )
+    if process.returncode != 0:
+        return (0, 0)
+    output = _decode_process_text(process.stdout).strip()
+    try:
+        width_text, height_text = output.split("x", maxsplit=1)
+        return (int(width_text), int(height_text))
+    except ValueError:
+        return (0, 0)
+
+
+def find_invalid_media_files(media_files: list[Path]) -> list[str]:
+    invalid: list[str] = []
+    for media_path in media_files:
+        width, height = probe_media_dimensions(media_path)
+        if width <= 0 or height <= 0:
+            invalid.append(f"{media_path.name} (video stream metadata unavailable)")
+    return invalid
 
 
 def _concat_audio(tts_dir: Path, timings: list[TimingEntry], out_wav: Path) -> None:
@@ -139,9 +188,10 @@ def _mix_background_audio(voice_wav: Path, bgm_path: Path, out_wav: Path, volume
 def _zoompan_filter(index: int, per_item_duration: float, width: int, height: int) -> str:
     frame_count = max(1, int(per_item_duration * FPS))
     return (
-        f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
-        f"crop={width}:{height},zoompan=z='min(zoom+0.0012,1.10)':d={frame_count}:"
-        f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',fps={FPS},setsar=1,format=yuv420p[v{index}]"
+        f"[{index}:v]scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,"
+        f"crop={width * 2}:{height * 2},zoompan=z='min(zoom+0.0012,1.10)':d={frame_count}:"
+        f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height},"
+        f"fps={FPS},setsar=1,format=yuv420p[v{index}]"
     )
 
 
@@ -243,6 +293,29 @@ def _render_output_path(project_dir: Path, render_format: RenderFormat) -> Path:
     return project_dir / "output.mp4"
 
 
+def _friendly_render_error(detail: str) -> str:
+    if "Failed to configure output pad on Parsed_concat" in detail or "Input link in0:v0 parameters" in detail:
+        return "입력 이미지와 영상의 최종 해상도가 서로 달라 하나의 영상으로 합치지 못했습니다."
+    if "Invalid data found when processing input" in detail:
+        return "손상되었거나 지원되지 않는 미디어 파일이 포함되어 있습니다."
+    if "No such file or directory" in detail:
+        return "필요한 미디어 파일 또는 자막 파일을 찾지 못했습니다."
+    if "video stream metadata unavailable" in detail:
+        return "미디어 파일 중 일부에서 영상 크기를 읽지 못했습니다."
+    return ""
+
+
+def _format_render_error(exc: Exception) -> str:
+    detail = str(exc).strip() or exc.__class__.__name__
+    ffmpeg_prefix = "ffmpeg failed:\n"
+    if detail.startswith(ffmpeg_prefix):
+        detail = detail[len(ffmpeg_prefix):].strip()
+    friendly = _friendly_render_error(detail)
+    if friendly:
+        return f"{friendly}\n\n{detail}"
+    return detail
+
+
 def run_render_job(pid: str) -> None:
     project = db.get_project(pid)
     if project is None:
@@ -267,8 +340,13 @@ def run_render_job(pid: str) -> None:
         ]
         if not media_files:
             raise RuntimeError("no valid media files")
+        _set_render_stage(pid, 14, "validate_media")
+        invalid_media = find_invalid_media_files(media_files)
+        if invalid_media:
+            detail = "\n".join(f"- {name}" for name in invalid_media)
+            raise RuntimeError(f"Invalid media metadata:\n{detail}")
 
-        _set_render_stage(pid, 10, "prepare_media")
+        _set_render_stage(pid, 18, "prepare_media")
 
         raw_audio_wav = project_dir / "audio_raw.wav"
         _set_render_stage(pid, 22, "concat_audio")
@@ -331,6 +409,6 @@ def run_render_job(pid: str) -> None:
             _set_render_stage(pid, current_progress, f"done_{render_format}")
 
         db.update_project(pid, render_state="done", render_progress=100, render_phase="done", render_last_log="")
-    except Exception:
+    except Exception as exc:
         traceback.print_exc()
-        db.update_project(pid, render_state="error", render_last_log=traceback.format_exc())
+        db.update_project(pid, render_state="error", render_last_log=_format_render_error(exc))

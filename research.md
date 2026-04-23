@@ -446,6 +446,26 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
 
+## 2026-04-24 Render Visual Track Stability Update
+
+### Architecture changes
+
+- Changed FFmpeg and ffprobe subprocess handling in `app/services/render.py` to collect raw bytes and decode as UTF-8 with replacement so Windows locale differences no longer hide stderr.
+- Added media dimension probing and reusable invalid-media detection to catch unreadable or metadata-less inputs before the render pipeline reaches concat.
+- Tightened the Ken Burns image branch so `zoompan` now emits the explicit target resolution instead of silently falling back to FFmpeg defaults.
+
+### Workflow changes
+
+- Render jobs now enter a `validate_media` phase before building the visual track.
+- Step 4 error logs now surface a short Korean explanation for common FFmpeg failures such as concat size mismatches and invalid input media.
+- Pre-flight now includes a `media_metadata` check so users can spot broken media before launching render.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
 ## 2026-04-24 Step 4 Inline Help Update
 
 ### Workflow changes

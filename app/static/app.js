@@ -410,6 +410,7 @@ function readableRenderPhase(phase) {
   const labels = {
     "": "",
     queued: "대기 중",
+    validate_media: "미디어 사전 검사",
     prepare_media: "미디어 준비",
     concat_audio: "오디오 합치는 중",
     concat_audio_done: "오디오 결합 완료",
@@ -429,6 +430,44 @@ function readableRenderPhase(phase) {
     done: "렌더 완료",
   };
   return labels[phase] || phase;
+}
+
+/**
+ * @param {string} renderLog
+ * @returns {string}
+ */
+function readableRenderIssue(renderLog) {
+  if (renderLog.includes("Failed to configure output pad on Parsed_concat") || renderLog.includes("Input link in0:v0 parameters")) {
+    return "입력 이미지와 영상의 최종 해상도가 서로 달라 하나의 영상으로 합쳐지지 않았습니다.";
+  }
+  if (renderLog.includes("Invalid data found when processing input")) {
+    return "손상되었거나 지원되지 않는 미디어 파일이 포함되어 있습니다.";
+  }
+  if (renderLog.includes("video stream metadata unavailable")) {
+    return "미디어 파일 중 일부에서 영상 크기를 읽지 못했습니다.";
+  }
+  if (renderLog.includes("No such file or directory")) {
+    return "렌더에 필요한 파일을 찾지 못했습니다.";
+  }
+  return "";
+}
+
+/**
+ * @param {string} phase
+ * @param {string} renderLog
+ * @returns {string}
+ */
+function formatRenderLog(phase, renderLog) {
+  if (!renderLog) {
+    return "렌더를 시작하면 현재 단계와 마지막 로그를 여기에서 확인할 수 있습니다.";
+  }
+  const summary = readableRenderIssue(renderLog);
+  const lines = [`Current phase: ${readableRenderPhase(phase)}`];
+  if (summary) {
+    lines.push("", `문제 요약: ${summary}`);
+  }
+  lines.push("", renderLog);
+  return lines.join("\n");
 }
 
 /**
@@ -770,9 +809,7 @@ async function openProject(pid) {
   renderBgmMeta();
   renderTtsProfileControls();
   renderFeatureControls();
-  renderLogPanel.textContent = current.render_last_log
-    ? `Current phase: ${readableRenderPhase(current.render_phase)}\n\n${current.render_last_log}`
-    : "렌더를 시작하면 현재 단계와 마지막 로그를 여기에서 확인할 수 있습니다.";
+  renderLogPanel.textContent = formatRenderLog(current.render_phase, current.render_last_log);
   renderMediaUploadStatus();
   renderSubtitleStyleControls();
   renderTtsList();
@@ -1780,9 +1817,7 @@ async function pollProjectStatus() {
     ? ` | ${readableRenderPhase(status.render_phase)}`
     : "";
   renderState.textContent = `${readableTaskState(status.render_state)} ${status.render_progress}%${renderPhaseText}`;
-  renderLogPanel.textContent = status.render_last_log
-    ? `Current phase: ${readableRenderPhase(status.render_phase)}\n\n${status.render_last_log}`
-    : "렌더를 시작하면 현재 단계와 마지막 로그를 여기에서 확인할 수 있습니다.";
+  renderLogPanel.textContent = formatRenderLog(status.render_phase, status.render_last_log);
   uploadState.textContent = `${readableTaskState(status.upload_state)} ${status.upload_progress}%`;
   renderMediaUploadStatus();
   updateProgressBar();

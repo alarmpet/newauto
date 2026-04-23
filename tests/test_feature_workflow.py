@@ -207,7 +207,9 @@ class FeatureWorkflowTests(unittest.TestCase):
         project = db.get_project(project_id)
         self.assertIsNotNone(project)
         assert project is not None
-        report = build_preflight_report(project)
+        with patch("app.services.preflight.find_invalid_media_files", return_value=[]):
+            report = build_preflight_report(project)
         check_map = {check["key"]: check["ok"] for check in report["checks"]}
         self.assertTrue(check_map["script"])
         self.assertTrue(check_map["tts_state"])
+        self.assertTrue(check_map["media_metadata"])

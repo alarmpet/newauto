@@ -3,6 +3,7 @@ from pathlib import Path
 
 from .. import db
 from ..config import CLIENT_SECRET_PATH, PROJECTS_DIR
+from .render import find_invalid_media_files
 from ..types import PreflightCheck, PreflightReport, ProjectRecord
 
 
@@ -19,11 +20,22 @@ def _existing_media_count(project: ProjectRecord) -> int:
     return sum(1 for name in project["media_order"] if (media_dir / name).exists())
 
 
+def _existing_media_paths(project: ProjectRecord) -> list[Path]:
+    media_dir = db.project_dir(project["id"]) / "media"
+    return [
+        media_dir / name
+        for name in project["media_order"]
+        if (media_dir / name).exists()
+    ]
+
+
 def build_preflight_report(project: ProjectRecord) -> PreflightReport:
     project_dir = db.project_dir(project["id"])
     timings_path = project_dir / "tts" / "timings.json"
     output_parent = project_dir.parent
     usage = shutil.disk_usage(output_parent if output_parent.exists() else PROJECTS_DIR)
+    media_paths = _existing_media_paths(project)
+    invalid_media = find_invalid_media_files(media_paths) if media_paths else []
     checks: list[PreflightCheck] = [
         _check(
             "script",
@@ -49,6 +61,15 @@ def build_preflight_report(project: ProjectRecord) -> PreflightReport:
             "media_files",
             _existing_media_count(project) == len(project["media_order"]) and bool(project["media_order"]),
             "All referenced media files exist." if _existing_media_count(project) == len(project["media_order"]) and project["media_order"] else "Some media files are missing on disk.",
+        ),
+        _check(
+            "media_metadata",
+            not invalid_media if media_paths else False,
+            "All media files expose readable video dimensions."
+            if media_paths and not invalid_media
+            else "Some media files are unreadable or missing video dimensions: " + ", ".join(invalid_media)
+            if invalid_media
+            else "Upload at least one readable media file.",
         ),
         _check(
             "ffmpeg",
