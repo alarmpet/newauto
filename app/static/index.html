@@ -278,31 +278,33 @@
             </div>
             <div class="row">
               <button id="preflight-run" class="btn" type="button">Run Pre-flight</button>
+              <span class="inline-help" tabindex="0" data-help="렌더 전에 스크립트, TTS, 미디어, FFmpeg 같은 필수 조건이 준비됐는지 빠르게 점검합니다.">?</span>
               <button id="system-health-run" class="btn" type="button">System Health</button>
+              <span class="inline-help" tabindex="0" data-help="현재 PC에서 FFmpeg, OmniVoice, OAuth 파일, 저장 경로, 디스크 여유 공간 상태를 확인합니다.">?</span>
             </div>
           </div>
           <div id="preflight-results" class="card"></div>
           <div id="system-health-results" class="card"></div>
           <div class="subtitle-controls">
-            <label>Ken Burns
+            <label><span class="label-row">Ken Burns <span class="inline-help" tabindex="0" data-help="정지 이미지에 천천히 확대·이동 효과를 넣어 화면이 가만히 멈춰 보이지 않게 합니다.">?</span></span>
               <select id="feature-kenburns">
                 <option value="off">Off</option>
                 <option value="on">On</option>
               </select>
             </label>
-            <label>BGM Volume (dB)
+            <label><span class="label-row">BGM Volume (dB) <span class="inline-help" tabindex="0" data-help="배경음악 크기를 조절합니다. 값이 더 작은 음수일수록 BGM이 더 조용해집니다.">?</span></span>
               <input id="feature-bgm-volume" type="number" min="-40" max="6" step="1">
             </label>
-            <label>BGM Ducking
+            <label><span class="label-row">BGM Ducking <span class="inline-help" tabindex="0" data-help="내레이션이 나올 때 배경음악 볼륨을 자동으로 낮춰 목소리를 더 또렷하게 들리게 합니다.">?</span></span>
               <select id="feature-bgm-ducking">
                 <option value="on">On</option>
                 <option value="off">Off</option>
               </select>
             </label>
-            <label>Render Landscape
+            <label><span class="label-row">Render Landscape <span class="inline-help" tabindex="0" data-help="일반 유튜브 영상용 가로형 16:9 결과물을 렌더합니다.">?</span></span>
               <input id="feature-render-landscape" type="checkbox" checked>
             </label>
-            <label>Render Shorts
+            <label><span class="label-row">Render Shorts <span class="inline-help" tabindex="0" data-help="쇼츠 업로드용 세로형 9:16 결과물을 추가로 렌더합니다.">?</span></span>
               <input id="feature-render-shorts" type="checkbox">
             </label>
           </div>
@@ -319,25 +321,25 @@
           </div>
 
           <div class="subtitle-controls">
-            <label>Font
+            <label><span class="label-row">Font <span class="inline-help" tabindex="0" data-help="자막에 사용할 글꼴입니다. PC에 실제로 설치된 폰트가 가장 안정적으로 적용됩니다.">?</span></span>
               <input id="subtitle-font" value="Malgun Gothic">
             </label>
-            <label>Size
+            <label><span class="label-row">Size <span class="inline-help" tabindex="0" data-help="자막 글자 크기입니다. 값이 클수록 영상에서 더 크게 표시됩니다.">?</span></span>
               <input id="subtitle-size" type="number" min="24" max="96" step="1">
             </label>
-            <label>Text Color
+            <label><span class="label-row">Text Color <span class="inline-help" tabindex="0" data-help="자막 본문 색상입니다. 배경과 대비가 큰 색을 쓰면 가독성이 좋아집니다.">?</span></span>
               <input id="subtitle-primary-color" type="color">
             </label>
-            <label>Outline Color
+            <label><span class="label-row">Outline Color <span class="inline-help" tabindex="0" data-help="글자 바깥 테두리 색상입니다. 보통 검정이나 진한 색이 가장 안정적입니다.">?</span></span>
               <input id="subtitle-outline-color" type="color">
             </label>
-            <label>Outline
+            <label><span class="label-row">Outline <span class="inline-help" tabindex="0" data-help="자막 테두리 두께입니다. 값을 높이면 복잡한 배경에서도 글자가 덜 묻힙니다.">?</span></span>
               <input id="subtitle-outline-width" type="range" min="0" max="8" step="1">
             </label>
-            <label>Shadow
+            <label><span class="label-row">Shadow <span class="inline-help" tabindex="0" data-help="자막 그림자 강도입니다. 윤곽이 살짝 뜨는 느낌을 줄 때 유용합니다.">?</span></span>
               <input id="subtitle-shadow" type="range" min="0" max="8" step="1">
             </label>
-            <label>Position
+            <label><span class="label-row">Position <span class="inline-help" tabindex="0" data-help="자막 세로 위치를 정합니다. Top, Upper, Middle, Lower, Bottom 중 하나를 선택할 수 있습니다.">?</span></span>
               <select id="subtitle-position">
                 <option value="top">Top</option>
                 <option value="upper">Upper</option>
@@ -346,25 +348,25 @@
                 <option value="bottom">Bottom</option>
               </select>
             </label>
-            <label>Horizontal Margin
+            <label><span class="label-row">Horizontal Margin <span class="inline-help" tabindex="0" data-help="자막 좌우 여백입니다. 값을 키우면 자막 폭이 좁아져 줄바꿈이 더 빨라지고 화면 바깥 잘림도 줄어듭니다.">?</span></span>
               <input id="subtitle-margin-h" type="number" min="0" max="400" step="4">
             </label>
-            <label>Vertical Margin
+            <label><span class="label-row">Vertical Margin <span class="inline-help" tabindex="0" data-help="위아래 여백입니다. Top이나 Bottom처럼 가장자리 위치에서 자막을 화면 안쪽으로 더 띄울 때 사용합니다.">?</span></span>
               <input id="subtitle-margin-v" type="number" min="0" max="240" step="4">
             </label>
-            <label>Minimum Display
+            <label><span class="label-row">Minimum Display <span class="inline-help" tabindex="0" data-help="짧은 문장도 너무 빨리 사라지지 않도록 자막이 최소한 유지되는 시간을 정합니다.">?</span></span>
               <input id="subtitle-min-display-sec" type="number" min="0.5" max="3" step="0.1">
             </label>
-            <label>Background
+            <label><span class="label-row">Background <span class="inline-help" tabindex="0" data-help="자막 뒤에 깔리는 배경 박스 색상입니다. 강한 영상 위에서는 어두운 색이 유리합니다.">?</span></span>
               <input id="subtitle-background-color" type="color">
             </label>
-            <label>Background Opacity
+            <label><span class="label-row">Background Opacity <span class="inline-help" tabindex="0" data-help="자막 배경의 진하기입니다. 값을 높이면 배경 박스가 더 선명하게 보입니다.">?</span></span>
               <input id="subtitle-background-opacity" type="range" min="0" max="1" step="0.05">
             </label>
-            <label>Line Length
+            <label><span class="label-row">Line Length <span class="inline-help" tabindex="0" data-help="한 줄에 담을 자막 길이 기준입니다. 값을 낮추면 한 화면에 보이는 자막이 더 짧고 읽기 쉽게 나뉩니다.">?</span></span>
               <input id="subtitle-max-line-chars" type="number" min="16" max="40" step="1">
             </label>
-            <label>Effect
+            <label><span class="label-row">Effect <span class="inline-help" tabindex="0" data-help="자막 등장 방식입니다. None은 기본, Fade는 부드러운 등장, Pop은 튀는 효과, Karaoke는 단어 진행 강조입니다.">?</span></span>
               <select id="subtitle-effect">
                 <option value="none">None</option>
                 <option value="fade">Fade</option>

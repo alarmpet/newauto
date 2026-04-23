@@ -13,3 +13,4 @@
 - `[2026-04-24-00-29] TTS 성별 불일치 수정: /api/tts/presets 단일 소스 추가, legacy male preset 정규화, Step 3 dirty-state/실효 프로필 표시, 샘플 재생성 스크립트 기준 통일`
 - `[2026-04-24-01-26] TTS 남성 프리셋 추가: 40~50대 남성 중저음, 40~50대 남성 아나운서, 40~50대 남성 목사 스타일과 샘플 미리듣기 경로 연동`
 - `[2026-04-24-01-59] 렌더 stderr None 오류 수정: _tail_lines/_run null-safe 처리, FFmpeg stderr 없음 회귀 테스트 추가`
+- `[2026-04-24-02-11] Step 4 도움말 UI 추가: Render Readiness, 렌더 옵션, 자막 스타일 항목별 인라인 설명 툴팁 적용`

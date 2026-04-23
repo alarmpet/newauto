@@ -446,6 +446,20 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
 
+## 2026-04-24 Step 4 Inline Help Update
+
+### Workflow changes
+
+- Added inline help badges to the Step 4 render controls so users can see what each render toggle does without leaving the screen.
+- Added inline help badges to the Step 4 subtitle style controls covering font, size, colors, outline, shadow, placement, margins, timing, background, line length, and effects.
+- Help content is shown on hover and keyboard focus, so the screen stays compact while remaining readable and accessible.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
 ## 2026-04-24 Additional Male Voice Presets Update
 
 ### Architecture changes
