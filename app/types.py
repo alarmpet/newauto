@@ -185,6 +185,14 @@ class TtsPreviewResponse(TypedDict):
     tts_profile: TtsProfile
 
 
+class TtsPresetCatalogResponse(TypedDict):
+    order: list[str]
+    labels: dict[str, str]
+    aliases: dict[str, str]
+    presets: dict[str, TtsProfile]
+    sample_text: str
+
+
 class PreflightCheck(TypedDict):
     key: str
     ok: bool

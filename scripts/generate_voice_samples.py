@@ -10,18 +10,13 @@ ROOT_DIR = Path(__file__).resolve().parent.parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-from app.config import VOICE_PRESETS, VOICE_PRESET_LABELS, VOICE_SAMPLE_TEXT, VOICE_SAMPLES_DIR
+from app.config import VOICE_SAMPLE_TEXT, VOICE_SAMPLES_DIR
 from app.services import tts
+from app.tts_profiles import build_tts_preset_catalog
 from app.types import VoiceSampleEntry, VoiceSampleManifest
 
 DEFAULT_OUTPUT_DIR = VOICE_SAMPLES_DIR / "2026-04-male-presets"
-DEFAULT_PRESETS = [
-    "male-deep-calm",
-    "male-mid-clear",
-    "female-bright-clear",
-    "elder-narration",
-    "whisper-story",
-]
+DEFAULT_PRESETS = build_tts_preset_catalog()["order"]
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -47,7 +42,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def validate_presets(preset_ids: list[str]) -> list[str]:
-    invalid = [preset_id for preset_id in preset_ids if preset_id not in VOICE_PRESETS]
+    catalog = build_tts_preset_catalog()
+    invalid = [preset_id for preset_id in preset_ids if preset_id not in catalog["presets"]]
     if invalid:
         invalid_text = ", ".join(invalid)
         raise ValueError(f"Unsupported preset id(s): {invalid_text}")
@@ -61,6 +57,7 @@ def output_filename_for_preset(preset_id: str) -> str:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    catalog = build_tts_preset_catalog()
 
     preset_ids = validate_presets(args.presets or DEFAULT_PRESETS)
     output_dir: Path = args.output_dir
@@ -75,7 +72,7 @@ def main() -> int:
         samples.append(
             {
                 "preset_id": preset_id,
-                "label": VOICE_PRESET_LABELS[preset_id],
+                "label": catalog["labels"][preset_id],
                 "output_file": out_name,
                 "kwargs": tts.get_preset_kwargs(preset_id),
             }

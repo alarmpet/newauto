@@ -16,6 +16,7 @@ def on_startup() -> None:
 
 app.include_router(projects.router)
 app.include_router(render.router)
+app.include_router(render.meta_router)
 app.include_router(system.router)
 app.include_router(stock.router)
 app.include_router(youtube.router)

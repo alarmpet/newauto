@@ -1,7 +1,7 @@
 import re
 from typing import cast
 
-from .types import TtsMode, TtsProfile, VoicePresetArg
+from .types import TtsMode, TtsPresetCatalogResponse, TtsProfile, VoicePresetArg
 
 VOICE_SAMPLE_TEXT = (
     "안녕하세요. 지금 들으시는 음성은 OmniVoice 보이스 비교 샘플입니다. "
@@ -247,3 +247,16 @@ def tts_profile_to_manifest_kwargs(profile: TtsProfile) -> dict[str, VoicePreset
     if profile["duration"] is not None:
         payload["duration"] = profile["duration"]
     return payload
+
+
+def build_tts_preset_catalog() -> TtsPresetCatalogResponse:
+    presets: dict[str, TtsProfile] = {}
+    for preset_id in VOICE_PRESET_ORDER:
+        presets[preset_id] = cast(TtsProfile, dict(_PRESET_DEFINITIONS[preset_id]))
+    return {
+        "order": list(VOICE_PRESET_ORDER),
+        "labels": dict(VOICE_PRESET_LABELS),
+        "aliases": dict(LEGACY_VOICE_PRESET_ALIASES),
+        "presets": presets,
+        "sample_text": VOICE_SAMPLE_TEXT,
+    }

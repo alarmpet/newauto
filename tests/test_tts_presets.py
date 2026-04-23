@@ -1,12 +1,13 @@
 from pathlib import Path
 import unittest
 
-from app.config import VOICE_PRESETS, VOICE_PRESET_LABELS, VOICE_SAMPLE_TEXT
+from app.tts_profiles import build_tts_preset_catalog, normalize_tts_profile
 from scripts.generate_voice_samples import build_parser
 
 
 class TtsPresetTests(unittest.TestCase):
     def test_korean_voice_presets_exist(self) -> None:
+        catalog = build_tts_preset_catalog()
         preset_ids = {
             "male-deep-calm",
             "male-mid-clear",
@@ -15,37 +16,31 @@ class TtsPresetTests(unittest.TestCase):
             "elder-narration",
             "whisper-story",
         }
-        self.assertTrue(preset_ids.issubset(VOICE_PRESETS.keys()))
-        self.assertTrue(preset_ids.issubset(VOICE_PRESET_LABELS.keys()))
+        self.assertTrue(preset_ids.issubset(catalog["presets"].keys()))
+        self.assertTrue(preset_ids.issubset(catalog["labels"].keys()))
 
-    def test_new_presets_have_distinct_guidance(self) -> None:
-        deep = VOICE_PRESETS["male-deep-calm"]
-        bright = VOICE_PRESETS["female-bright-clear"]
-        whisper = VOICE_PRESETS["whisper-story"]
-
-        self.assertEqual(deep["language"], "ko")
-        self.assertEqual(deep["mode"], "design")
-        self.assertEqual(deep["speed"], 0.96)
-        self.assertEqual(deep["instruct"], "male, low pitch")
-
-        self.assertEqual(bright["language"], "ko")
-        self.assertEqual(bright["guidance_scale"], 3.0)
-        self.assertEqual(bright["instruct"], "female, high pitch")
-
-        self.assertEqual(whisper["num_step"], 40)
-        self.assertEqual(whisper["speed"], 0.92)
-        self.assertEqual(whisper["instruct"], "whisper, young adult")
+    def test_catalog_uses_single_source_of_truth(self) -> None:
+        catalog = build_tts_preset_catalog()
+        self.assertEqual(catalog["presets"]["male-deep-calm"]["instruct"], "male, low pitch")
+        self.assertEqual(catalog["presets"]["female-bright-clear"]["instruct"], "female, high pitch")
+        self.assertEqual(catalog["presets"]["whisper-story"]["instruct"], "whisper, young adult")
+        self.assertEqual(catalog["aliases"]["male-30s-40s-lowmid"], "male-deep-calm")
 
     def test_sample_text_mentions_comparison(self) -> None:
-        self.assertIn("OmniVoice", VOICE_SAMPLE_TEXT)
-        self.assertIn("비교", VOICE_SAMPLE_TEXT)
+        catalog = build_tts_preset_catalog()
+        self.assertIn("OmniVoice", catalog["sample_text"])
+        self.assertIn("비교", catalog["sample_text"])
 
-    def test_index_contains_new_preset_options(self) -> None:
+    def test_index_uses_runtime_voice_select(self) -> None:
         index_html = Path("app/static/index.html").read_text(encoding="utf-8")
-        self.assertIn('option value="male-deep-calm"', index_html)
-        self.assertIn('option value="female-bright-clear"', index_html)
-        self.assertIn('option value="whisper-story"', index_html)
-        self.assertIn('option value="english-bright"', index_html)
+        self.assertIn('<select id="s3-voice">', index_html)
+        self.assertIn('id="s3-effective-profile"', index_html)
+        self.assertIn('id="s3-dirty-badge"', index_html)
+
+    def test_legacy_male_id_resolves_to_male_canonical(self) -> None:
+        canonical, profile = normalize_tts_profile({}, "male-30s-40s-lowmid")
+        self.assertEqual(canonical, "male-deep-calm")
+        self.assertEqual(profile["instruct"], "male, low pitch")
 
     def test_sample_script_parser_supports_repeated_presets(self) -> None:
         parser = build_parser()

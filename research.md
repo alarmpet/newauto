@@ -466,6 +466,41 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
 - Reproduced `/api/projects/{pid}/tts/preview` returning `200` for a valid profile after the fix.
 
+## 2026-04-24 TTS Gender Mismatch Deterministic Fix
+
+### Architecture changes
+
+- Added `/api/tts/presets` as the single source of truth for TTS preset order, labels, legacy aliases, canonical preset payloads, and shared sample text.
+- Extended typed contracts with `TtsPresetCatalogResponse`.
+- Updated `scripts/generate_voice_samples.py` to use the canonical backend preset catalog instead of its own preset subset.
+
+### Workflow changes
+
+- Step 3 now hydrates the voice dropdown from the backend preset catalog instead of relying on a duplicated frontend preset table.
+- Legacy preset ids such as `male-30s-40s-lowmid` are normalized to canonical ids before the UI uses them.
+- Selecting a preset now rewrites the full Step 3 form from the canonical preset definition.
+- Added a dirty-state rule so unchanged preset selections do not keep sending stale advanced overrides.
+- Added effective profile visibility in Step 3:
+  - current canonical preset id
+  - mode
+  - language
+  - instruct
+  - speed
+  - sampling parameters
+- Added a warning badge when advanced controls are overriding the preset defaults.
+- Loading an old project saved with a legacy preset now resolves to the canonical male/female preset path instead of silently falling through.
+
+### Remaining limitation
+
+- This fixes deterministic app-level gender mismatches caused by stale form state and preset alias drift.
+- Korean voice-design consistency at the model level may still require further evaluation or clone-mode expansion.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
 ## 2026-04-23 TTS Preview Update
 
 ### Architecture changes

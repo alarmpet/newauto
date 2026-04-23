@@ -167,6 +167,13 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertEqual(project["tts_profile"]["speed"], 1.05)
         self.assertEqual(project["tts_profile"]["num_step"], 42)
 
+    def test_tts_preset_catalog_route_exposes_aliases(self) -> None:
+        response = self.client.get("/api/tts/presets")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["aliases"]["male-30s-40s-lowmid"], "male-deep-calm")
+        self.assertEqual(payload["presets"]["male-mid-clear"]["instruct"], "male, moderate pitch")
+
     def test_tts_preview_route_generates_audio_file(self) -> None:
         project_id = self.create_project()
         preview_path = db.project_dir(project_id) / "tts_preview.wav"

@@ -176,10 +176,20 @@
 /**
  * @typedef {{
  *   preview_url: string,
- *   sample_text: string,
- *   voice_preset: string,
- *   tts_profile: TtsProfile,
+  *   sample_text: string,
+  *   voice_preset: string,
+  *   tts_profile: TtsProfile,
  * }} TtsPreviewResponse
+ */
+
+/**
+ * @typedef {{
+ *   order: string[],
+ *   labels: Record<string, string>,
+ *   aliases: Record<string, string>,
+ *   presets: Record<string, TtsProfile>,
+ *   sample_text: string,
+ * }} TtsPresetCatalogResponse
  */
 
 class HttpError extends Error {
@@ -421,6 +431,62 @@ function readableRenderPhase(phase) {
   return labels[phase] || phase;
 }
 
+/**
+ * @returns {Promise<TtsPresetCatalogResponse>}
+ */
+async function ensureTtsPresetCatalog() {
+  if (ttsPresetCatalog) {
+    return ttsPresetCatalog;
+  }
+  ttsPresetCatalog = /** @type {TtsPresetCatalogResponse} */ (await requestJson("/api/tts/presets"));
+  return ttsPresetCatalog;
+}
+
+/**
+ * @param {string} presetId
+ * @returns {string}
+ */
+function canonicalVoicePresetId(presetId) {
+  const catalog = ttsPresetCatalog;
+  if (!catalog) {
+    return presetId;
+  }
+  return catalog.aliases[presetId] || presetId;
+}
+
+/**
+ * @param {string} presetId
+ * @returns {TtsProfile}
+ */
+function presetProfile(presetId) {
+  const catalog = ttsPresetCatalog;
+  const canonicalId = canonicalVoicePresetId(presetId);
+  const preset = catalog ? catalog.presets[canonicalId] : null;
+  return {
+    ...DEFAULT_TTS_PROFILE,
+    ...(preset || {}),
+  };
+}
+
+/**
+ * @returns {void}
+ */
+function populateVoiceSelect() {
+  const catalog = ttsPresetCatalog;
+  if (!catalog) {
+    return;
+  }
+  const currentValue = voiceSelect.value;
+  voiceSelect.innerHTML = "";
+  for (const presetId of catalog.order) {
+    const option = document.createElement("option");
+    option.value = presetId;
+    option.textContent = catalog.labels[presetId] || presetId;
+    voiceSelect.appendChild(option);
+  }
+  voiceSelect.value = canonicalVoicePresetId(currentValue) || catalog.order[0] || "auto";
+}
+
 /** @type {Project | null} */
 let current = null;
 /** @type {number | null} */
@@ -470,67 +536,9 @@ const DEFAULT_TTS_PROFILE = {
 };
 
 const DEFAULT_TTS_SAMPLE_TEXT = "안녕하세요. 지금 들으시는 음성은 현재 보이스 설정으로 만든 짧은 샘플입니다.";
-
-/** @type {Record<string, Partial<TtsProfile>>} */
-const TTS_PROFILE_PRESETS = {
-  auto: { ...DEFAULT_TTS_PROFILE },
-  "male-deep-calm": {
-    mode: "design",
-    language: "ko",
-    instruct: "adult male, deep calm studio narration voice",
-    speed: 0.96,
-    num_step: 36,
-    guidance_scale: 2.9,
-  },
-  "male-mid-clear": {
-    mode: "design",
-    language: "ko",
-    instruct: "adult male, clear neutral explainer voice",
-    speed: 1,
-    num_step: 34,
-    guidance_scale: 2.7,
-  },
-  "female-bright-clear": {
-    mode: "design",
-    language: "ko",
-    instruct: "adult female, bright clear presenter voice",
-    speed: 1.03,
-    num_step: 35,
-    guidance_scale: 3,
-  },
-  "female-low-calm": {
-    mode: "design",
-    language: "ko",
-    instruct: "adult female, low calm documentary voice",
-    speed: 0.97,
-    num_step: 36,
-    guidance_scale: 2.8,
-  },
-  "elder-narration": {
-    mode: "design",
-    language: "ko",
-    instruct: "older adult, warm authoritative narration voice",
-    speed: 0.94,
-    num_step: 38,
-    guidance_scale: 3.1,
-  },
-  "whisper-story": {
-    mode: "design",
-    language: "ko",
-    instruct: "soft intimate storytelling voice, close mic",
-    speed: 0.92,
-    num_step: 40,
-    guidance_scale: 3.2,
-  },
-  "english-bright": {
-    mode: "design",
-    language: "en",
-    instruct: "bright clear English presenter voice",
-    speed: 1,
-    num_step: 34,
-    guidance_scale: 2.8,
-  },
-};
+/** @type {TtsPresetCatalogResponse | null} */
+let ttsPresetCatalog = null;
+let ttsFormDirtyAfterPreset = false;
 
 /** @type {Record<string, Partial<SubtitleStyle>>} */
 const SUBTITLE_PRESETS = {
@@ -605,6 +613,8 @@ const ttsPreviewRunButton = /** @type {HTMLButtonElement} */ (query("#s3-preview
 const ttsPreviewTextInput = /** @type {HTMLTextAreaElement} */ (query("#s3-preview-text"));
 const ttsPreviewState = /** @type {HTMLElement} */ (query("#s3-preview-state"));
 const ttsPreviewAudio = /** @type {HTMLAudioElement} */ (query("#s3-preview-audio"));
+const ttsEffectiveProfile = /** @type {HTMLElement} */ (query("#s3-effective-profile"));
+const ttsDirtyBadge = /** @type {HTMLElement} */ (query("#s3-dirty-badge"));
 const ttsList = /** @type {HTMLElement} */ (query("#s3-list"));
 const renderState = /** @type {HTMLElement} */ (query("#s4-state"));
 const renderLogPanel = /** @type {HTMLElement} */ (query("#s4-log"));
@@ -732,6 +742,8 @@ async function loadProjects() {
  * @returns {Promise<void>}
  */
 async function openProject(pid) {
+  await ensureTtsPresetCatalog();
+  populateVoiceSelect();
   current = /** @type {Project} */ (await requestJson(`/api/projects/${pid}`));
   selectedMediaName = current.media_order[0] || null;
   mediaClientState = {
@@ -784,8 +796,11 @@ function renderScriptStats() {
  */
 function renderTtsProfileControls() {
   const project = requireCurrent();
-  const profile = effectiveTtsProfile(project);
-  voiceSelect.value = project.voice_preset;
+  const resolvedPreset = canonicalVoicePresetId(project.voice_preset);
+  const profile = project.voice_preset === resolvedPreset
+    ? effectiveTtsProfile(project)
+    : presetProfile(resolvedPreset);
+  voiceSelect.value = resolvedPreset;
   ttsModeSelect.value = profile.mode === "design" ? "design" : "auto";
   ttsLanguageSelect.value = profile.language || "ko";
   ttsSpeedInput.value = String(profile.speed);
@@ -796,11 +811,26 @@ function renderTtsProfileControls() {
   ttsPostprocessSelect.value = profile.postprocess_output ? "on" : "off";
   ttsInstructInput.value = profile.instruct;
   if (!ttsPreviewTextInput.value.trim()) {
-    ttsPreviewTextInput.value = DEFAULT_TTS_SAMPLE_TEXT;
+    ttsPreviewTextInput.value = ttsPresetCatalog ? ttsPresetCatalog.sample_text : DEFAULT_TTS_SAMPLE_TEXT;
   }
   ttsPreviewState.textContent = "샘플을 생성하면 여기에서 바로 재생할 수 있습니다.";
   ttsPreviewAudio.src = "";
   ttsPreviewAudio.load();
+  ttsFormDirtyAfterPreset = false;
+  updateTtsEffectiveProfile();
+}
+
+/**
+ * @returns {void}
+ */
+function updateTtsEffectiveProfile() {
+  const canonicalId = canonicalVoicePresetId(voiceSelect.value);
+  const profile = readTtsProfileInputs();
+  ttsEffectiveProfile.textContent =
+    `Effective: ${canonicalId} | mode=${profile.mode} | language=${profile.language} | ` +
+    `instruct="${profile.instruct || "(none)"}" | speed=${profile.speed} | ` +
+    `num_step=${profile.num_step} | guidance=${profile.guidance_scale}`;
+  ttsDirtyBadge.hidden = !ttsFormDirtyAfterPreset;
 }
 
 /**
@@ -831,14 +861,9 @@ function readTtsProfileInputs() {
  * @returns {void}
  */
 function applyTtsPreset(presetId) {
-  const preset = TTS_PROFILE_PRESETS[presetId];
-  if (!preset) {
-    return;
-  }
-  const merged = {
-    ...DEFAULT_TTS_PROFILE,
-    ...preset,
-  };
+  const canonicalId = canonicalVoicePresetId(presetId);
+  const merged = presetProfile(canonicalId);
+  voiceSelect.value = canonicalId;
   ttsModeSelect.value = merged.mode === "design" ? "design" : "auto";
   ttsLanguageSelect.value = merged.language;
   ttsSpeedInput.value = String(merged.speed);
@@ -848,6 +873,19 @@ function applyTtsPreset(presetId) {
   ttsDenoiseSelect.value = merged.denoise ? "on" : "off";
   ttsPostprocessSelect.value = merged.postprocess_output ? "on" : "off";
   ttsInstructInput.value = merged.instruct;
+  ttsFormDirtyAfterPreset = false;
+  updateTtsEffectiveProfile();
+}
+
+/**
+ * @returns {TtsProfile | null}
+ */
+function buildTtsProfilePayload() {
+  const canonicalId = canonicalVoicePresetId(voiceSelect.value);
+  if (!ttsFormDirtyAfterPreset && canonicalId !== "auto") {
+    return null;
+  }
+  return readTtsProfileInputs();
 }
 
 /**
@@ -1608,14 +1646,15 @@ async function generateTtsPreview() {
   ttsPreviewRunButton.disabled = true;
   ttsPreviewState.textContent = "샘플 음성을 생성하고 있습니다...";
   try {
+    const canonicalId = canonicalVoicePresetId(voiceSelect.value);
     const response = /** @type {TtsPreviewResponse} */ (
       await requestJson(`/api/projects/${project.id}/tts/preview`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          voice_preset: voiceSelect.value,
+          voice_preset: canonicalId,
           sample_text: ttsPreviewTextInput.value.trim(),
-          tts_profile: readTtsProfileInputs(),
+          tts_profile: buildTtsProfilePayload(),
         }),
       })
     );
@@ -1828,6 +1867,27 @@ function toast(message) {
   document.body.appendChild(popup);
   window.setTimeout(() => popup.remove(), 2400);
 }
+
+[
+  ttsModeSelect,
+  ttsLanguageSelect,
+  ttsSpeedInput,
+  ttsDurationInput,
+  ttsNumStepInput,
+  ttsGuidanceInput,
+  ttsDenoiseSelect,
+  ttsPostprocessSelect,
+  ttsInstructInput,
+].forEach((control) => {
+  control.addEventListener("input", () => {
+    ttsFormDirtyAfterPreset = true;
+    updateTtsEffectiveProfile();
+  });
+  control.addEventListener("change", () => {
+    ttsFormDirtyAfterPreset = true;
+    updateTtsEffectiveProfile();
+  });
+});
 
 navProjects.addEventListener("click", () => {
   stopPoll();
@@ -2051,19 +2111,20 @@ ttsPreviewRunButton.addEventListener("click", () => {
 ttsRunButton.addEventListener("click", async () => {
   const project = requireCurrent();
   try {
-    const ttsProfile = readTtsProfileInputs();
+    const canonicalId = canonicalVoicePresetId(voiceSelect.value);
+    const ttsProfile = buildTtsProfilePayload();
     await requestJson(`/api/projects/${project.id}/tts`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        voice_preset: voiceSelect.value,
+        voice_preset: canonicalId,
         tts_profile: ttsProfile,
       }),
     });
     current = {
       ...project,
-      voice_preset: voiceSelect.value,
-      tts_profile: ttsProfile,
+      voice_preset: canonicalId,
+      tts_profile: ttsProfile || presetProfile(canonicalId),
       tts_state: "running",
       tts_progress: 0,
     };
@@ -2107,4 +2168,9 @@ youtubeRunButton.addEventListener("click", async () => {
 });
 
 
-void loadProjects().catch((error) => handleError(error, "프로젝트 목록을 불러오지 못했습니다."));
+void ensureTtsPresetCatalog()
+  .then(() => {
+    populateVoiceSelect();
+    return loadProjects();
+  })
+  .catch((error) => handleError(error, "프로젝트 목록을 불러오지 못했습니다."));

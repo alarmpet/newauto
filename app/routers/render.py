@@ -7,10 +7,18 @@ from ..config import VOICE_SAMPLE_TEXT
 from ..services import preflight as preflight_svc
 from ..services import render as render_svc
 from ..services import tts as tts_svc
-from ..tts_profiles import normalize_tts_profile
-from ..types import PreflightReport, ProjectRecord, ProjectStatus, TtsMode, TtsPreviewResponse
+from ..tts_profiles import build_tts_preset_catalog, canonical_voice_preset, normalize_tts_profile
+from ..types import (
+    PreflightReport,
+    ProjectRecord,
+    ProjectStatus,
+    TtsMode,
+    TtsPresetCatalogResponse,
+    TtsPreviewResponse,
+)
 
 router = APIRouter(prefix="/api/projects", tags=["render"])
+meta_router = APIRouter(prefix="/api/tts", tags=["tts"])
 
 
 class TtsProfilePayload(BaseModel):
@@ -67,6 +75,11 @@ def _require(pid: str) -> ProjectRecord:
     return project
 
 
+@meta_router.get("/presets")
+def get_tts_presets() -> TtsPresetCatalogResponse:
+    return build_tts_preset_catalog()
+
+
 @router.post("/{pid}/tts")
 def start_tts(pid: str, bg: BackgroundTasks, payload: TtsRunPayload) -> dict[str, bool]:
     project = _require(pid)
@@ -96,10 +109,11 @@ def generate_tts_preview(pid: str, payload: TtsPreviewPayload) -> TtsPreviewResp
     _require(pid)
     sample_text = (payload.sample_text or "").strip()[:200] or VOICE_SAMPLE_TEXT
     preview_path = db.project_dir(pid) / "tts_preview.wav"
+    canonical_preset = canonical_voice_preset(payload.voice_preset)
     try:
         voice_preset, tts_profile, audio = tts_svc.synthesize_preview_with_profile(
             sample_text,
-            payload.voice_preset,
+            canonical_preset,
             payload.tts_profile.to_payload() if payload.tts_profile is not None else {},
         )
         tts_svc.save_audio_file(audio, preview_path)

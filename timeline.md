@@ -10,3 +10,4 @@
 - `[2026-04-23-22-27] 렌더/자막 수정: render_phase 로그, 26자 기본 자막 정책, width-aware 줄바꿈, lower 위치 보정, UTF-8 UI 정리, 인코딩 검사 추가`
 - `[2026-04-23-22-38] TTS 샘플 미리듣기 추가: Step 3 샘플 생성 API, 오디오 플레이어, 프로젝트별 tts_preview.wav, 기본 샘플 문구 정리`
 - `[2026-04-23-22-45] TTS 샘플 오류 수정: OmniVoice 지원 토큰으로 instruct 교체, 미리듣기 500을 400/정상 응답으로 보정`
+- `[2026-04-24-00-29] TTS 성별 불일치 수정: /api/tts/presets 단일 소스 추가, legacy male preset 정규화, Step 3 dirty-state/실효 프로필 표시, 샘플 재생성 스크립트 기준 통일`
