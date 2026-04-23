@@ -26,15 +26,15 @@ class TtsPresetTests(unittest.TestCase):
         self.assertEqual(deep["language"], "ko")
         self.assertEqual(deep["mode"], "design")
         self.assertEqual(deep["speed"], 0.96)
-        self.assertIn("deep calm", deep["instruct"])
+        self.assertEqual(deep["instruct"], "male, low pitch")
 
         self.assertEqual(bright["language"], "ko")
         self.assertEqual(bright["guidance_scale"], 3.0)
-        self.assertIn("bright clear", bright["instruct"])
+        self.assertEqual(bright["instruct"], "female, high pitch")
 
         self.assertEqual(whisper["num_step"], 40)
         self.assertEqual(whisper["speed"], 0.92)
-        self.assertIn("storytelling", whisper["instruct"])
+        self.assertEqual(whisper["instruct"], "whisper, young adult")
 
     def test_sample_text_mentions_comparison(self) -> None:
         self.assertIn("OmniVoice", VOICE_SAMPLE_TEXT)

@@ -148,7 +148,7 @@ class TtsPipelineTests(unittest.TestCase):
                     "tts_profile": {
                         "mode": "design",
                         "language": "ko",
-                        "instruct": "adult female, bright clear presenter voice",
+                        "instruct": "female, high pitch",
                         "speed": 1.05,
                         "num_step": 42,
                         "guidance_scale": 3.4,
@@ -183,7 +183,7 @@ class TtsPipelineTests(unittest.TestCase):
                     "tts_profile": {
                         "mode": "design",
                         "language": "ko",
-                        "instruct": "adult female, bright clear presenter voice",
+                        "instruct": "female, high pitch",
                         "speed": 1.04,
                         "num_step": 38,
                         "guidance_scale": 3.1,
@@ -202,3 +202,17 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertEqual(fake_model.seen, ["샘플 음성을 들어봅니다."])
         self.assertEqual(write_mock.call_count, 1)
         self.assertEqual(write_mock.call_args.args[0], preview_path)
+
+    def test_tts_preview_route_returns_400_for_invalid_preview_profile(self) -> None:
+        project_id = self.create_project()
+        with patch(
+            "app.services.tts.synthesize_preview_with_profile",
+            side_effect=ValueError("Unsupported instruct items"),
+        ):
+            response = self.client.post(
+                f"/api/projects/{project_id}/tts/preview",
+                json={"voice_preset": "male-deep-calm", "sample_text": "test"},
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Unsupported instruct items", response.text)

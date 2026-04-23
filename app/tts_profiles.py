@@ -25,7 +25,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
     "male-deep-calm": {
         "mode": "design",
         "language": "ko",
-        "instruct": "adult male, deep calm studio narration voice",
+        "instruct": "male, low pitch",
         "speed": 0.96,
         "duration": None,
         "num_step": 36,
@@ -36,7 +36,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
     "male-mid-clear": {
         "mode": "design",
         "language": "ko",
-        "instruct": "adult male, clear neutral explainer voice",
+        "instruct": "male, moderate pitch",
         "speed": 1.0,
         "duration": None,
         "num_step": 34,
@@ -47,7 +47,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
     "female-bright-clear": {
         "mode": "design",
         "language": "ko",
-        "instruct": "adult female, bright clear presenter voice",
+        "instruct": "female, high pitch",
         "speed": 1.03,
         "duration": None,
         "num_step": 35,
@@ -58,7 +58,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
     "female-low-calm": {
         "mode": "design",
         "language": "ko",
-        "instruct": "adult female, low calm documentary voice",
+        "instruct": "female, low pitch",
         "speed": 0.97,
         "duration": None,
         "num_step": 36,
@@ -69,7 +69,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
     "elder-narration": {
         "mode": "design",
         "language": "ko",
-        "instruct": "older adult, warm authoritative narration voice",
+        "instruct": "elderly, moderate pitch",
         "speed": 0.94,
         "duration": None,
         "num_step": 38,
@@ -80,7 +80,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
     "whisper-story": {
         "mode": "design",
         "language": "ko",
-        "instruct": "soft intimate storytelling voice, close mic",
+        "instruct": "whisper, young adult",
         "speed": 0.92,
         "duration": None,
         "num_step": 40,
@@ -91,7 +91,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
     "english-bright": {
         "mode": "design",
         "language": "en",
-        "instruct": "bright clear English presenter voice",
+        "instruct": "female, high pitch",
         "speed": 1.0,
         "duration": None,
         "num_step": 34,

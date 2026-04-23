@@ -446,6 +446,26 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
 
+## 2026-04-23 OmniVoice Preview Error Fix
+
+### Architecture changes
+
+- Replaced custom free-form preset `instruct` strings with OmniVoice-supported voice design tokens such as `male, low pitch` and `whisper, young adult`.
+- Added explicit preview error translation in the TTS preview route so invalid preview profiles return a client-visible `400` instead of an internal server error.
+
+### Workflow changes
+
+- `샘플 듣기` now uses preset instructions that OmniVoice can resolve without crashing.
+- Blank preview requests continue to use the shared sample text, and language detection now uses a clean Hangul regex.
+- When a preview profile is invalid, the UI receives the validation message instead of a generic `500`.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+- Reproduced `/api/projects/{pid}/tts/preview` returning `200` for a valid profile after the fix.
+
 ## 2026-04-23 TTS Preview Update
 
 ### Architecture changes

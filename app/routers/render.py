@@ -96,12 +96,17 @@ def generate_tts_preview(pid: str, payload: TtsPreviewPayload) -> TtsPreviewResp
     _require(pid)
     sample_text = (payload.sample_text or "").strip()[:200] or VOICE_SAMPLE_TEXT
     preview_path = db.project_dir(pid) / "tts_preview.wav"
-    voice_preset, tts_profile, audio = tts_svc.synthesize_preview_with_profile(
-        sample_text,
-        payload.voice_preset,
-        payload.tts_profile.to_payload() if payload.tts_profile is not None else {},
-    )
-    tts_svc.save_audio_file(audio, preview_path)
+    try:
+        voice_preset, tts_profile, audio = tts_svc.synthesize_preview_with_profile(
+            sample_text,
+            payload.voice_preset,
+            payload.tts_profile.to_payload() if payload.tts_profile is not None else {},
+        )
+        tts_svc.save_audio_file(audio, preview_path)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(500, str(exc)) from exc
     return {
         "preview_url": f"/api/projects/{pid}/tts-preview",
         "sample_text": sample_text,
