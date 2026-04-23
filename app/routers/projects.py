@@ -4,12 +4,12 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import db
-from ..config import ALLOWED_IMAGE_EXT, ALLOWED_VIDEO_EXT
+from ..config import ALLOWED_AUDIO_EXT, ALLOWED_IMAGE_EXT, ALLOWED_VIDEO_EXT
 from ..services.subtitle import normalize_subtitle_style
 from ..text import split_sentences
 from ..types import (
@@ -17,18 +17,23 @@ from ..types import (
     MediaKind,
     MediaUploadResponse,
     ProjectCard,
+    ProjectCloneResponse,
+    ProjectFeatureSettingsResponse,
     ProjectRecord,
+    RenderFormat,
     SkippedUploadFile,
     SubtitleEffect,
     SubtitlePosition,
     SubtitleStyle,
     SubtitleStyleResponse,
+    BgmUploadResponse,
     ThumbnailUploadResponse,
 )
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 logger = logging.getLogger(__name__)
 THUMBNAIL_MAX_BYTES = 10 * 1024 * 1024
+BGM_MAX_BYTES = 50 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -81,6 +86,27 @@ class SubtitleStylePayload(BaseModel):
         return patch
 
 
+class ProjectFeaturePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    kenburns_enabled: bool | None = None
+    bgm_volume_db: int | None = Field(default=None, ge=-40, le=6)
+    bgm_ducking_enabled: bool | None = None
+    render_formats: list[RenderFormat] | None = None
+
+    def to_patch(self) -> dict[str, object]:
+        patch: dict[str, object] = {}
+        if self.kenburns_enabled is not None:
+            patch["kenburns_enabled"] = self.kenburns_enabled
+        if self.bgm_volume_db is not None:
+            patch["bgm_volume_db"] = self.bgm_volume_db
+        if self.bgm_ducking_enabled is not None:
+            patch["bgm_ducking_enabled"] = self.bgm_ducking_enabled
+        if self.render_formats is not None:
+            patch["render_formats"] = self.render_formats or ["landscape"]
+        return patch
+
+
 def _require(pid: str) -> ProjectRecord:
     project = db.get_project(pid)
     if project is None:
@@ -119,6 +145,10 @@ def _thumbnail_dir(pid: str) -> Path:
     return db.project_dir(pid) / "thumbnail"
 
 
+def _bgm_dir(pid: str) -> Path:
+    return db.project_dir(pid) / "bgm"
+
+
 def _clear_thumbnail_dir(thumbnail_dir: Path, keep_path: Path | None = None) -> None:
     if not thumbnail_dir.exists():
         return
@@ -131,6 +161,16 @@ def _clear_thumbnail_dir(thumbnail_dir: Path, keep_path: Path | None = None) -> 
 
 def _thumbnail_path(project: ProjectRecord) -> Path:
     return _thumbnail_dir(project["id"]) / project["thumbnail_file"]
+
+
+def _clear_dir(target_dir: Path, keep_path: Path | None = None) -> None:
+    if not target_dir.exists():
+        return
+    for path in target_dir.iterdir():
+        if keep_path is not None and path == keep_path:
+            continue
+        if path.is_file():
+            path.unlink()
 
 
 @router.get("")
@@ -368,6 +408,139 @@ def save_subtitle_style(pid: str, payload: SubtitleStylePayload) -> SubtitleStyl
     }
 
 
+@router.put("/{pid}/features")
+def save_project_features(pid: str, payload: ProjectFeaturePayload) -> ProjectFeatureSettingsResponse:
+    _require(pid)
+    updated_project = db.update_project(pid, **payload.to_patch())
+    if updated_project is None:
+        raise HTTPException(404, f"project {pid} not found")
+    return {
+        "project": updated_project,
+    }
+
+
+@router.post("/{pid}/bgm")
+async def upload_bgm(pid: str, file: UploadFile = File(...)) -> BgmUploadResponse:
+    _require(pid)
+    original_name = Path(file.filename or "").name
+    extension = Path(original_name).suffix.lower()
+    if extension not in ALLOWED_AUDIO_EXT:
+        await file.close()
+        raise HTTPException(400, "bgm must be an audio file")
+
+    bgm_dir = _bgm_dir(pid)
+    bgm_dir.mkdir(parents=True, exist_ok=True)
+    target_name = f"bgm{extension}"
+    target_path = bgm_dir / target_name
+    temp_path = bgm_dir / f"{target_name}.tmp"
+    total_bytes = 0
+
+    try:
+        try:
+            with temp_path.open("wb") as output_file:
+                while True:
+                    chunk = await file.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    total_bytes += len(chunk)
+                    if total_bytes > BGM_MAX_BYTES:
+                        raise HTTPException(400, "bgm file is too large")
+                    output_file.write(chunk)
+        except Exception:
+            temp_path.unlink(missing_ok=True)
+            raise
+    finally:
+        await file.close()
+
+    _clear_dir(bgm_dir, keep_path=temp_path)
+    temp_path.replace(target_path)
+    project = db.update_project(pid, bgm_file=target_name)
+    if project is None:
+        raise HTTPException(404, f"project {pid} not found")
+    return {
+        "project": project,
+        "bgm_url": f"/api/projects/{pid}/bgm",
+    }
+
+
+@router.get("/{pid}/bgm")
+def get_bgm(pid: str) -> FileResponse:
+    project = _require(pid)
+    if not project["bgm_file"]:
+        raise HTTPException(404, "bgm not found")
+    target = _bgm_dir(pid) / project["bgm_file"]
+    if not target.exists():
+        raise HTTPException(404, "bgm not found")
+    return FileResponse(target)
+
+
+@router.delete("/{pid}/bgm")
+def delete_bgm(pid: str) -> ProjectRecord:
+    _require(pid)
+    _clear_dir(_bgm_dir(pid))
+    project = db.update_project(pid, bgm_file="")
+    if project is None:
+        raise HTTPException(404, f"project {pid} not found")
+    return project
+
+
+@router.post("/{pid}/clone")
+def clone_project(
+    pid: str,
+    include_script: bool = Query(default=True),
+    include_media: bool = Query(default=False),
+    include_thumbnail: bool = Query(default=False),
+    include_bgm: bool = Query(default=False),
+) -> ProjectCloneResponse:
+    project = _require(pid)
+    cloned = db.create_project(title=f"{project['title']} Copy".strip())
+    update_fields: dict[str, object] = {
+        "voice_preset": project["voice_preset"],
+        "subtitle_style": project["subtitle_style"],
+        "kenburns_enabled": project["kenburns_enabled"],
+        "bgm_volume_db": project["bgm_volume_db"],
+        "bgm_ducking_enabled": project["bgm_ducking_enabled"],
+        "render_formats": project["render_formats"],
+        "youtube_schedule_at": project["youtube_schedule_at"],
+    }
+    if include_script:
+        update_fields["script"] = project["script"]
+        update_fields["sentences"] = project["sentences"]
+    cloned_project = db.update_project(cloned["id"], **update_fields)
+    if cloned_project is None:
+        raise HTTPException(500, "failed to clone project settings")
+
+    source_dir = db.project_dir(pid)
+    target_dir = db.project_dir(cloned["id"])
+    if include_media:
+        media_dir = source_dir / "media"
+        target_media_dir = target_dir / "media"
+        target_media_dir.mkdir(parents=True, exist_ok=True)
+        for name in project["media_order"]:
+            source_path = media_dir / name
+            if source_path.exists():
+                shutil.copy2(source_path, target_media_dir / name)
+        cloned_project = db.update_project(cloned["id"], media_order=project["media_order"]) or cloned_project
+    if include_thumbnail and project["thumbnail_file"]:
+        source_thumb = _thumbnail_dir(pid) / project["thumbnail_file"]
+        if source_thumb.exists():
+            target_thumb_dir = _thumbnail_dir(cloned["id"])
+            target_thumb_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_thumb, target_thumb_dir / project["thumbnail_file"])
+            cloned_project = db.update_project(cloned["id"], thumbnail_file=project["thumbnail_file"]) or cloned_project
+    if include_bgm and project["bgm_file"]:
+        source_bgm = _bgm_dir(pid) / project["bgm_file"]
+        if source_bgm.exists():
+            target_bgm_dir = _bgm_dir(cloned["id"])
+            target_bgm_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(source_bgm, target_bgm_dir / project["bgm_file"])
+            cloned_project = db.update_project(cloned["id"], bgm_file=project["bgm_file"]) or cloned_project
+    return {
+        "project": cloned_project,
+        "source_project_id": pid,
+    }
+
+
 @router.put("/{pid}/media/order")
 def reorder_media(pid: str, order: list[str]) -> ProjectRecord:
     project = _require(pid)
@@ -427,8 +600,8 @@ def get_tts(pid: str, name: str) -> FileResponse:
 
 
 @router.get("/{pid}/output")
-def get_output(pid: str) -> FileResponse:
-    target = db.project_dir(pid) / "output.mp4"
+def get_output(pid: str, format: RenderFormat = Query(default="landscape")) -> FileResponse:
+    target = db.project_dir(pid) / ("output_shorts.mp4" if format == "shorts" else "output.mp4")
     if not target.exists():
         raise HTTPException(404, "render not complete")
     return FileResponse(target, media_type="video/mp4")

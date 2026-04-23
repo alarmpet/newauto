@@ -5,9 +5,10 @@ import traceback
 from pathlib import Path
 
 from .. import db
-from ..config import ALLOWED_IMAGE_EXT, FPS, VIDEO_H, VIDEO_W
-from ..types import TimingEntry
+from ..config import ALLOWED_IMAGE_EXT, FPS, SHORTS_H, SHORTS_W, VIDEO_H, VIDEO_W
+from ..types import RenderFormat, TimingEntry
 from .subtitle import write_ass
+from .transcribe import save_word_timings
 
 
 def _ffmpeg() -> str:
@@ -22,6 +23,33 @@ def _run(command: list[str]) -> None:
     if process.returncode != 0:
         stderr_tail = process.stderr.strip().splitlines()[-20:]
         raise RuntimeError("ffmpeg failed:\n" + "\n".join(stderr_tail))
+
+
+def _probe_duration(media_path: Path) -> float:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        return 0.0
+    process = subprocess.run(
+        [
+            ffprobe,
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
+            str(media_path),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if process.returncode != 0:
+        return 0.0
+    try:
+        return float(process.stdout.strip())
+    except ValueError:
+        return 0.0
 
 
 def _concat_audio(tts_dir: Path, timings: list[TimingEntry], out_wav: Path) -> None:
@@ -47,9 +75,71 @@ def _concat_audio(tts_dir: Path, timings: list[TimingEntry], out_wav: Path) -> N
     )
 
 
-def _build_visual_track(media_files: list[Path], total_duration: float, out_mp4: Path) -> None:
+def _normalize_audio(in_wav: Path, out_wav: Path) -> None:
+    _run(
+        [
+            _ffmpeg(),
+            "-y",
+            "-i",
+            str(in_wav),
+            "-af",
+            "loudnorm=I=-14:TP=-1.5:LRA=11",
+            str(out_wav),
+        ]
+    )
+
+
+def _mix_background_audio(voice_wav: Path, bgm_path: Path, out_wav: Path, volume_db: int, ducking_enabled: bool) -> None:
+    bgm_duration = _probe_duration(voice_wav)
+    filter_graph = (
+        f"[1:a]volume={volume_db}dB[bgm];"
+        "[bgm][0:a]sidechaincompress=threshold=0.03:ratio=8[bgmduck];"
+        "[0:a][bgmduck]amix=inputs=2:duration=first:dropout_transition=0[mix]"
+        if ducking_enabled
+        else f"[1:a]volume={volume_db}dB[bgm];[0:a][bgm]amix=inputs=2:duration=first:dropout_transition=0[mix]"
+    )
+    _run(
+        [
+            _ffmpeg(),
+            "-y",
+            "-i",
+            str(voice_wav),
+            "-stream_loop",
+            "-1",
+            "-t",
+            f"{bgm_duration:.3f}",
+            "-i",
+            str(bgm_path),
+            "-filter_complex",
+            filter_graph,
+            "-map",
+            "[mix]",
+            "-c:a",
+            "pcm_s16le",
+            str(out_wav),
+        ]
+    )
+
+
+def _zoompan_filter(index: int, per_item_duration: float, width: int, height: int) -> str:
+    frame_count = max(1, int(per_item_duration * FPS))
+    return (
+        f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=increase,"
+        f"crop={width}:{height},zoompan=z='min(zoom+0.0012,1.10)':d={frame_count}:"
+        f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)',fps={FPS},setsar=1,format=yuv420p[v{index}]"
+    )
+
+
+def _build_visual_track(
+    media_files: list[Path],
+    total_duration: float,
+    out_mp4: Path,
+    render_format: RenderFormat,
+    kenburns_enabled: bool,
+) -> None:
     item_count = len(media_files)
     per_item_duration = max(total_duration / item_count, 0.5)
+    width, height = (VIDEO_W, VIDEO_H) if render_format == "landscape" else (SHORTS_W, SHORTS_H)
 
     inputs: list[str] = []
     filters: list[str] = []
@@ -60,11 +150,14 @@ def _build_visual_track(media_files: list[Path], total_duration: float, out_mp4:
             inputs += ["-loop", "1", "-t", f"{per_item_duration:.3f}", "-i", str(media_path)]
         else:
             inputs += ["-t", f"{per_item_duration:.3f}", "-i", str(media_path)]
-        filters.append(
-            f"[{index}:v]scale={VIDEO_W}:{VIDEO_H}:force_original_aspect_ratio=decrease,"
-            f"pad={VIDEO_W}:{VIDEO_H}:(ow-iw)/2:(oh-ih)/2:black,"
-            f"setsar=1,fps={FPS},format=yuv420p[v{index}]"
-        )
+        if is_image and kenburns_enabled:
+            filters.append(_zoompan_filter(index, per_item_duration, width, height))
+        else:
+            filters.append(
+                f"[{index}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
+                f"setsar=1,fps={FPS},format=yuv420p[v{index}]"
+            )
         labels.append(f"[v{index}]")
 
     concat_filter = "".join(labels) + f"concat=n={item_count}:v=1:a=0[vout]"
@@ -129,6 +222,12 @@ def _mux(silent_video: Path, audio: Path, subtitle_path: Path, out_mp4: Path) ->
     )
 
 
+def _render_output_path(project_dir: Path, render_format: RenderFormat) -> Path:
+    if render_format == "shorts":
+        return project_dir / "output_shorts.mp4"
+    return project_dir / "output.mp4"
+
+
 def run_render_job(pid: str) -> None:
     project = db.get_project(pid)
     if project is None:
@@ -156,21 +255,53 @@ def run_render_job(pid: str) -> None:
 
         db.update_project(pid, render_progress=10)
 
-        audio_wav = project_dir / "audio.wav"
-        _concat_audio(tts_dir, timings, audio_wav)
+        raw_audio_wav = project_dir / "audio_raw.wav"
+        _concat_audio(tts_dir, timings, raw_audio_wav)
         db.update_project(pid, render_progress=30)
 
+        word_timings = save_word_timings(tts_dir / "timings_words.json", timings)
+        db.update_project(pid, render_progress=35)
+
+        normalized_audio_wav = project_dir / "audio.wav"
+        _normalize_audio(raw_audio_wav, normalized_audio_wav)
+        db.update_project(pid, render_progress=45)
+
+        final_audio_wav = normalized_audio_wav
+        if project["bgm_file"]:
+            bgm_path = project_dir / "bgm" / project["bgm_file"]
+            if bgm_path.exists():
+                mixed_audio_wav = project_dir / "audio_bgm.wav"
+                _mix_background_audio(
+                    normalized_audio_wav,
+                    bgm_path,
+                    mixed_audio_wav,
+                    project["bgm_volume_db"],
+                    project["bgm_ducking_enabled"],
+                )
+                final_audio_wav = mixed_audio_wav
+        db.update_project(pid, render_progress=55)
+
         subtitle_path = project_dir / "subtitles.ass"
-        write_ass(timings, subtitle_path, project["subtitle_style"])
-        db.update_project(pid, render_progress=40)
+        write_ass(timings, subtitle_path, project["subtitle_style"], word_timings)
+        db.update_project(pid, render_progress=65)
 
-        silent_video = project_dir / "_visual.mp4"
-        _build_visual_track(media_files, total_duration, silent_video)
-        db.update_project(pid, render_progress=80)
-
-        output_path = project_dir / "output.mp4"
-        _mux(silent_video, audio_wav, subtitle_path, output_path)
-        silent_video.unlink(missing_ok=True)
+        render_formats = project["render_formats"] or ["landscape"]
+        progress_step = max(1, int(30 / max(1, len(render_formats))))
+        current_progress = 65
+        for render_format in render_formats:
+            silent_video = project_dir / f"_visual_{render_format}.mp4"
+            _build_visual_track(
+                media_files,
+                total_duration,
+                silent_video,
+                render_format,
+                project["kenburns_enabled"],
+            )
+            output_path = _render_output_path(project_dir, render_format)
+            _mux(silent_video, final_audio_wav, subtitle_path, output_path)
+            silent_video.unlink(missing_ok=True)
+            current_progress = min(95, current_progress + progress_step)
+            db.update_project(pid, render_progress=current_progress)
 
         db.update_project(pid, render_state="done", render_progress=100)
     except Exception:

@@ -5,8 +5,9 @@ from typing_extensions import TypedDict
 TaskState = Literal["idle", "running", "done", "error"]
 MediaKind = Literal["image", "video"]
 PrivacyValue = Literal["private", "unlisted", "public"]
+RenderFormat = Literal["landscape", "shorts"]
 SubtitlePosition = Literal["top", "upper", "middle", "lower", "bottom"]
-SubtitleEffect = Literal["none", "fade", "pop"]
+SubtitleEffect = Literal["none", "fade", "pop", "karaoke"]
 VoicePresetArg = str | float
 VoiceRuntimeDType = Literal["float16", "float32"]
 
@@ -37,6 +38,12 @@ class ProjectRecord(TypedDict):
     thumbnail_file: str
     subtitle_style: SubtitleStyle
     voice_preset: str
+    kenburns_enabled: bool
+    bgm_file: str
+    bgm_volume_db: int
+    bgm_ducking_enabled: bool
+    render_formats: list[RenderFormat]
+    youtube_schedule_at: str
     tts_state: TaskState
     tts_progress: int
     render_state: TaskState
@@ -78,6 +85,12 @@ class ProjectStatus(TypedDict):
     media_upload_error: str
     thumbnail_file: str
     subtitle_style: SubtitleStyle
+    kenburns_enabled: bool
+    bgm_file: str
+    bgm_volume_db: int
+    bgm_ducking_enabled: bool
+    render_formats: list[RenderFormat]
+    youtube_schedule_at: str
     youtube_id: str | None
 
 
@@ -92,6 +105,13 @@ class TimingEntry(TypedDict):
     start: float
     end: float
     dur: float
+
+
+class WordTimingEntry(TypedDict):
+    cue_idx: int
+    word: str
+    start: float
+    end: float
 
 
 class AcceptedUploadFile(TypedDict):
@@ -121,9 +141,62 @@ class SubtitleStyleResponse(TypedDict):
     effective_style: SubtitleStyle
 
 
+class ProjectFeatureSettingsResponse(TypedDict):
+    project: ProjectRecord
+
+
+class ProjectCloneResponse(TypedDict):
+    project: ProjectRecord
+    source_project_id: str
+
+
+class BgmUploadResponse(TypedDict):
+    project: ProjectRecord
+    bgm_url: str
+
+
 class TtsRuntimeInfo(TypedDict):
     device: str
     dtype: VoiceRuntimeDType
+
+
+class PreflightCheck(TypedDict):
+    key: str
+    ok: bool
+    message: str
+
+
+class PreflightReport(TypedDict):
+    ok: bool
+    checks: list[PreflightCheck]
+
+
+class SystemHealth(TypedDict):
+    ffmpeg_available: bool
+    oauth_ready: bool
+    omnivoice_python_found: bool
+    disk_free_gb: float
+    storage_path: str
+
+
+class YouTubeStats(TypedDict):
+    view_count: int
+    like_count: int
+    comment_count: int
+    video_id: str
+
+
+class StockSearchItem(TypedDict):
+    provider: str
+    title: str
+    media_url: str
+    thumbnail_url: str
+    attribution_url: str
+
+
+class StockSearchResponse(TypedDict):
+    query: str
+    results: list[StockSearchItem]
 
 
 class VoiceSampleEntry(TypedDict):

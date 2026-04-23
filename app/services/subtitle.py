@@ -1,7 +1,7 @@
 from pathlib import Path
 import re
 
-from ..types import SubtitleEffect, SubtitlePosition, SubtitleStyle, TimingEntry
+from ..types import SubtitleEffect, SubtitlePosition, SubtitleStyle, TimingEntry, WordTimingEntry
 
 DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
     "font_family": "Malgun Gothic",
@@ -22,7 +22,7 @@ DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
 
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _POSITION_VALUES: set[SubtitlePosition] = {"top", "upper", "middle", "lower", "bottom"}
-_EFFECT_VALUES: set[SubtitleEffect] = {"none", "fade", "pop"}
+_EFFECT_VALUES: set[SubtitleEffect] = {"none", "fade", "pop", "karaoke"}
 
 
 def _fmt_ts(sec: float) -> str:
@@ -205,6 +205,22 @@ def _effect_tag(effect: SubtitleEffect) -> str:
     return ""
 
 
+def _karaoke_text(
+    timing: TimingEntry,
+    word_timings: list[WordTimingEntry],
+    max_line_chars: int,
+) -> str:
+    cue_words = [word for word in word_timings if word["cue_idx"] == timing["idx"]]
+    if not cue_words:
+        return _escape_ass_text(_smart_wrap(timing["text"], max_line_chars))
+
+    karaoke_parts: list[str] = []
+    for word in cue_words:
+        duration_cs = max(1, int(round((word["end"] - word["start"]) * 100)))
+        karaoke_parts.append(rf"{{\k{duration_cs}}}{_escape_ass_text(word['word'])}")
+    return " ".join(karaoke_parts)
+
+
 def _apply_min_display_time(
     timings: list[TimingEntry],
     min_display_sec: float,
@@ -249,7 +265,12 @@ def _fmt_ass_ts(sec: float) -> str:
     return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
 
 
-def write_ass(timings: list[TimingEntry], out_path: Path, style: SubtitleStyle) -> Path:
+def write_ass(
+    timings: list[TimingEntry],
+    out_path: Path,
+    style: SubtitleStyle,
+    word_timings: list[WordTimingEntry] | None = None,
+) -> Path:
     normalized = normalize_subtitle_style(style)
     adjusted_timings = _apply_min_display_time(timings, normalized["min_display_sec"])
     lines = [
@@ -288,7 +309,11 @@ def write_ass(timings: list[TimingEntry], out_path: Path, style: SubtitleStyle) 
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     for timing in adjusted_timings:
-        text = _escape_ass_text(_smart_wrap(timing["text"], normalized["max_line_chars"]))
+        text = (
+            _karaoke_text(timing, word_timings or [], normalized["max_line_chars"])
+            if normalized["effect"] == "karaoke"
+            else _escape_ass_text(_smart_wrap(timing["text"], normalized["max_line_chars"]))
+        )
         lines.append(
             "Dialogue: 0,"
             f"{_fmt_ass_ts(timing['start'])},"

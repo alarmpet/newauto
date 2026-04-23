@@ -1,4 +1,5 @@
 from pathlib import Path
+import os
 
 from .types import VoicePresetArg
 
@@ -12,12 +13,17 @@ VOICE_SAMPLES_DIR = STORAGE_DIR / "voice_samples"
 
 CLIENT_SECRET_PATH = OAUTH_DIR / "client_secret.json"
 TOKEN_PATH = OAUTH_DIR / "token.json"
+STOCK_CACHE_DIR = STORAGE_DIR / "stock_cache"
 
 VIDEO_W, VIDEO_H, FPS = 1920, 1080, 30
+SHORTS_W, SHORTS_H = 1080, 1920
 SAMPLE_RATE = 24000
 
 ALLOWED_IMAGE_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 ALLOWED_VIDEO_EXT = {".mp4", ".mov", ".webm"}
+ALLOWED_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".aac"}
+PEXELS_API_KEY = os.getenv("PEXELS_API_KEY", "")
+PIXABAY_API_KEY = os.getenv("PIXABAY_API_KEY", "")
 
 VOICE_SAMPLE_TEXT = (
     "안녕하세요. 지금 들으시는 음성은 OmniVoice 남성 프리셋 비교용 샘플입니다. "
@@ -78,3 +84,4 @@ VOICE_PRESET_LABELS: dict[str, str] = {
 
 for d in (STORAGE_DIR, PROJECTS_DIR, OAUTH_DIR, VOICE_SAMPLES_DIR):
     d.mkdir(parents=True, exist_ok=True)
+STOCK_CACHE_DIR.mkdir(parents=True, exist_ok=True)

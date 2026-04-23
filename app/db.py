@@ -9,7 +9,7 @@ from typing import cast
 
 from .config import DB_PATH, PROJECTS_DIR
 from .services.subtitle import normalize_subtitle_style
-from .types import ProjectCard, ProjectRecord, TaskState
+from .types import ProjectCard, ProjectRecord, RenderFormat, TaskState
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS projects (
@@ -21,6 +21,12 @@ CREATE TABLE IF NOT EXISTS projects (
     thumbnail_file TEXT NOT NULL DEFAULT '',
     subtitle_style TEXT NOT NULL DEFAULT '{}',
     voice_preset TEXT NOT NULL DEFAULT 'auto',
+    kenburns_enabled INTEGER NOT NULL DEFAULT 0,
+    bgm_file TEXT NOT NULL DEFAULT '',
+    bgm_volume_db INTEGER NOT NULL DEFAULT -20,
+    bgm_ducking_enabled INTEGER NOT NULL DEFAULT 1,
+    render_formats TEXT NOT NULL DEFAULT '["landscape"]',
+    youtube_schedule_at TEXT NOT NULL DEFAULT '',
     tts_state    TEXT NOT NULL DEFAULT 'idle',
     tts_progress INTEGER NOT NULL DEFAULT 0,
     render_state TEXT NOT NULL DEFAULT 'idle',
@@ -46,6 +52,12 @@ MIGRATION_COLUMNS: dict[str, str] = {
     "media_upload_error": "TEXT NOT NULL DEFAULT ''",
     "thumbnail_file": "TEXT NOT NULL DEFAULT ''",
     "subtitle_style": "TEXT NOT NULL DEFAULT '{}'",
+    "kenburns_enabled": "INTEGER NOT NULL DEFAULT 0",
+    "bgm_file": "TEXT NOT NULL DEFAULT ''",
+    "bgm_volume_db": "INTEGER NOT NULL DEFAULT -20",
+    "bgm_ducking_enabled": "INTEGER NOT NULL DEFAULT 1",
+    "render_formats": "TEXT NOT NULL DEFAULT '[\"landscape\"]'",
+    "youtube_schedule_at": "TEXT NOT NULL DEFAULT ''",
 }
 
 
@@ -85,6 +97,7 @@ def _now() -> str:
 def _row_to_project(row: sqlite3.Row) -> ProjectRecord:
     sentences = cast(list[str], json.loads(str(row["sentences"] or "[]")))
     media_order = cast(list[str], json.loads(str(row["media_order"] or "[]")))
+    render_formats = cast(list[str], json.loads(str(row["render_formats"] or '["landscape"]')))
     subtitle_style_payload = json.loads(str(row["subtitle_style"] or "{}"))
     subtitle_style = normalize_subtitle_style(
         subtitle_style_payload if isinstance(subtitle_style_payload, dict) else {}
@@ -98,6 +111,12 @@ def _row_to_project(row: sqlite3.Row) -> ProjectRecord:
         "thumbnail_file": str(row["thumbnail_file"] or ""),
         "subtitle_style": subtitle_style,
         "voice_preset": str(row["voice_preset"]),
+        "kenburns_enabled": bool(int(row["kenburns_enabled"])),
+        "bgm_file": str(row["bgm_file"] or ""),
+        "bgm_volume_db": int(row["bgm_volume_db"]),
+        "bgm_ducking_enabled": bool(int(row["bgm_ducking_enabled"])),
+        "render_formats": cast(list[RenderFormat], [fmt for fmt in render_formats if fmt in {"landscape", "shorts"}] or ["landscape"]),
+        "youtube_schedule_at": str(row["youtube_schedule_at"] or ""),
         "tts_state": cast(TaskState, row["tts_state"]),
         "tts_progress": int(row["tts_progress"]),
         "render_state": cast(TaskState, row["render_state"]),
@@ -160,9 +179,12 @@ def get_project(pid: str) -> ProjectRecord | None:
 def update_project(pid: str, **fields: object) -> ProjectRecord | None:
     if not fields:
         return get_project(pid)
-    for key in ("sentences", "media_order", "subtitle_style"):
+    for key in ("sentences", "media_order", "subtitle_style", "render_formats"):
         if key in fields and not isinstance(fields[key], str):
             fields[key] = json.dumps(fields[key], ensure_ascii=False)
+    for key in ("kenburns_enabled", "bgm_ducking_enabled"):
+        if key in fields:
+            fields[key] = 1 if bool(fields[key]) else 0
     fields["updated_at"] = _now()
     columns = ", ".join(f"{key}=?" for key in fields)
     with tx() as connection:

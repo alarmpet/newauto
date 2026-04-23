@@ -365,3 +365,53 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
   - long-line wrapping into two lines
 - Verified `scripts/typecheck.ps1`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
+## 2026-04-23 Feature Recommendation Implementation Update
+
+### Architecture changes
+
+- Expanded project storage and response types to support:
+  - `kenburns_enabled`
+  - `bgm_file`
+  - `bgm_volume_db`
+  - `bgm_ducking_enabled`
+  - `render_formats`
+  - `youtube_schedule_at`
+- Added schema migration entries in `app/db.py` so existing local databases pick up the new feature fields automatically.
+- Added new backend services:
+  - `app/services/preflight.py`
+  - `app/services/system_health.py`
+  - `app/services/transcribe.py`
+  - `app/services/stock.py`
+- Added new routers:
+  - `app/routers/system.py`
+  - `app/routers/stock.py`
+
+### Workflow changes
+
+- Added render pre-flight inspection through `GET /api/projects/{pid}/preflight`.
+- Added system diagnostics through `GET /api/system/health`.
+- Added loudnorm normalization before final mux.
+- Added optional Ken Burns motion for image-based visual tracks.
+- Added BGM upload, storage, and render-time mixing with optional ducking.
+- Added selectable landscape / shorts render outputs.
+- Added project cloning for reusable settings and optional copied assets.
+- Added YouTube upload scheduling input support and post-upload statistics lookup.
+- Added `timings_words.json` generation and karaoke-style ASS subtitle output.
+- Added stock media search aggregation for Pexels and Pixabay.
+
+### Verification
+
+- Added `tests/test_feature_workflow.py` to cover:
+  - pre-flight reporting
+  - feature setting persistence
+  - BGM upload
+  - project cloning
+  - system health route
+  - shorts output route
+  - karaoke render path
+  - stock search service
+  - YouTube stats route
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.

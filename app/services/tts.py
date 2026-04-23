@@ -8,6 +8,7 @@ from .. import db
 from ..config import SAMPLE_RATE, VOICE_PRESETS
 from ..text import filter_tts_segments
 from ..types import TimingEntry, TtsRuntimeInfo, VoicePresetArg, VoiceRuntimeDType
+from .transcribe import save_word_timings
 
 
 class AudioBufferLike(Protocol):
@@ -84,9 +85,10 @@ def save_audio_file(audio: AudioBufferLike, out_path: Path) -> None:
 def _clear_tts_outputs(output_dir: Path) -> None:
     for audio_path in output_dir.glob("*.wav"):
         audio_path.unlink(missing_ok=True)
-    timings_path = output_dir / "timings.json"
-    if timings_path.exists():
-        timings_path.unlink()
+    for json_name in ("timings.json", "timings_words.json"):
+        timings_path = output_dir / json_name
+        if timings_path.exists():
+            timings_path.unlink()
 
 
 def run_tts_job(pid: str) -> None:
@@ -135,6 +137,7 @@ def run_tts_job(pid: str) -> None:
             json.dumps(timings, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
+        save_word_timings(output_dir / "timings_words.json", timings)
         db.update_project(pid, tts_state="done", tts_progress=100)
     except Exception:
         traceback.print_exc()

@@ -2,7 +2,7 @@ from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
 
 from .. import db
 from ..services import yt_upload
-from ..types import OAuthStatus, PrivacyValue, ProjectRecord
+from ..types import OAuthStatus, PrivacyValue, ProjectRecord, YouTubeStats
 
 router = APIRouter(prefix="/api/projects", tags=["youtube"])
 
@@ -38,6 +38,7 @@ def start_upload(
     description: str = Form(""),
     tags: str = Form(""),
     privacy: PrivacyValue = Form("private"),
+    schedule_at: str = Form(""),
 ) -> dict[str, bool]:
     project = _require(pid)
     if project["render_state"] != "done":
@@ -47,7 +48,24 @@ def start_upload(
     if not yt_upload.has_credentials():
         raise HTTPException(400, "YouTube OAuth not completed - click Authorize first")
 
-    db.update_project(pid, upload_state="running", upload_progress=0, youtube_id=None)
+    db.update_project(
+        pid,
+        upload_state="running",
+        upload_progress=0,
+        youtube_id=None,
+        youtube_schedule_at=schedule_at,
+    )
     tag_list = [tag.strip() for tag in tags.split(",") if tag.strip()]
-    bg.add_task(yt_upload.run_upload_job, pid, title, description, tag_list, privacy)
+    bg.add_task(yt_upload.run_upload_job, pid, title, description, tag_list, privacy, schedule_at)
     return {"ok": True}
+
+
+@router.get("/{pid}/stats")
+def youtube_stats(pid: str) -> YouTubeStats:
+    project = _require(pid)
+    if not project["youtube_id"]:
+        raise HTTPException(400, "project has not been uploaded to YouTube yet")
+    try:
+        return yt_upload.fetch_video_stats(project["youtube_id"])
+    except Exception as exc:
+        raise HTTPException(500, f"failed to fetch YouTube stats: {exc}") from exc

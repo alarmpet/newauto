@@ -4,7 +4,7 @@ from fastapi.staticfiles import StaticFiles
 
 from . import db
 from .config import STATIC_DIR
-from .routers import projects, render, youtube
+from .routers import projects, render, stock, system, youtube
 
 app = FastAPI(title="YT Auto (OmniVoice)")
 
@@ -16,6 +16,8 @@ def on_startup() -> None:
 
 app.include_router(projects.router)
 app.include_router(render.router)
+app.include_router(system.router)
+app.include_router(stock.router)
 app.include_router(youtube.router)
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

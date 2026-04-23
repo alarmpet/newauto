@@ -3,7 +3,7 @@ from typing import cast
 
 from .. import db
 from ..config import CLIENT_SECRET_PATH, TOKEN_PATH
-from ..types import OAuthStatus, PrivacyValue
+from ..types import OAuthStatus, PrivacyValue, YouTubeStats
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
 
@@ -54,6 +54,7 @@ def run_upload_job(
     description: str,
     tags: list[str],
     privacy: PrivacyValue,
+    schedule_at: str = "",
 ) -> None:
     try:
         from googleapiclient.discovery import build  # noqa: WPS433
@@ -68,10 +69,16 @@ def run_upload_job(
             raise RuntimeError("output.mp4 not found - render first")
 
         youtube = build("youtube", "v3", credentials=credentials)
-        body = {
-            "snippet": {"title": title, "description": description, "tags": tags},
-            "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False},
+        status_payload: dict[str, object] = {
+            "privacyStatus": privacy,
+            "selfDeclaredMadeForKids": False,
         }
+        body: dict[str, object] = {
+            "snippet": {"title": title, "description": description, "tags": tags},
+            "status": status_payload,
+        }
+        if schedule_at:
+            status_payload["publishAt"] = schedule_at
         media = MediaFileUpload(str(video_path), chunksize=1024 * 1024, resumable=True)
         request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
 
@@ -102,3 +109,23 @@ def run_upload_job(
     except Exception:
         traceback.print_exc()
         db.update_project(pid, upload_state="error")
+
+
+def fetch_video_stats(video_id: str) -> YouTubeStats:
+    from googleapiclient.discovery import build  # noqa: WPS433
+
+    credentials = _load_creds()
+    if not credentials or not cast(bool, getattr(credentials, "valid", False)):
+        raise RuntimeError("YouTube credentials invalid - re-authorize")
+    youtube = build("youtube", "v3", credentials=credentials)
+    response = youtube.videos().list(part="statistics", id=video_id).execute()
+    items = response.get("items") or []
+    if not items:
+        raise RuntimeError("video statistics not found")
+    statistics = items[0].get("statistics") or {}
+    return {
+        "video_id": video_id,
+        "view_count": int(statistics.get("viewCount", 0)),
+        "like_count": int(statistics.get("likeCount", 0)),
+        "comment_count": int(statistics.get("commentCount", 0)),
+    }

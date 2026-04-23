@@ -1,9 +1,10 @@
 from fastapi import APIRouter, BackgroundTasks, Form, HTTPException
 
 from .. import db
+from ..services import preflight as preflight_svc
 from ..services import render as render_svc
 from ..services import tts as tts_svc
-from ..types import ProjectRecord, ProjectStatus
+from ..types import PreflightReport, ProjectRecord, ProjectStatus
 
 router = APIRouter(prefix="/api/projects", tags=["render"])
 
@@ -45,6 +46,12 @@ def start_render(pid: str, bg: BackgroundTasks) -> dict[str, bool]:
     return {"ok": True}
 
 
+@router.get("/{pid}/preflight")
+def preflight(pid: str) -> PreflightReport:
+    project = _require(pid)
+    return preflight_svc.build_preflight_report(project)
+
+
 @router.get("/{pid}/status")
 def status(pid: str) -> ProjectStatus:
     project = _require(pid)
@@ -63,5 +70,11 @@ def status(pid: str) -> ProjectStatus:
         "media_upload_error": project["media_upload_error"],
         "thumbnail_file": project["thumbnail_file"],
         "subtitle_style": project["subtitle_style"],
+        "kenburns_enabled": project["kenburns_enabled"],
+        "bgm_file": project["bgm_file"],
+        "bgm_volume_db": project["bgm_volume_db"],
+        "bgm_ducking_enabled": project["bgm_ducking_enabled"],
+        "render_formats": project["render_formats"],
+        "youtube_schedule_at": project["youtube_schedule_at"],
         "youtube_id": project["youtube_id"],
     }

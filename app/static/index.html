@@ -60,6 +60,9 @@
           <div class="subtitle" id="wf-id"></div>
         </div>
 
+        <div class="row">
+          <button id="clone-project" class="btn" type="button">Clone Project</button>
+        </div>
         <div class="progress-wrap">
           <div class="progress-caption">전체 제작 단계 진행률</div>
           <div class="progress"><div id="progress-bar"></div></div>
@@ -107,6 +110,21 @@
             <div class="media-empty">아직 업로드된 썸네일이 없습니다.</div>
           </div>
           <div id="thumbnail-meta" class="media-preview-meta muted"></div>
+        </section>
+
+        <section class="card thumbnail-panel">
+          <div class="section-head row between">
+            <div>
+              <strong>Background Music</strong>
+              <div class="muted">Upload one BGM track and mix it during render.</div>
+            </div>
+            <div class="thumbnail-actions">
+              <button id="bgm-upload" class="btn" type="button">Upload BGM</button>
+              <button id="bgm-delete" class="btn danger" type="button">Delete</button>
+              <input type="file" id="bgm-input" accept="audio/*" hidden>
+            </div>
+          </div>
+          <div id="bgm-meta" class="media-preview-meta muted">No BGM uploaded.</div>
         </section>
 
         <div id="media-upload-panel" class="card upload-panel">
@@ -184,6 +202,45 @@
         <section class="card subtitle-style-panel">
           <div class="section-head row between">
             <div>
+              <strong>Render Readiness</strong>
+              <div class="muted">Run pre-flight checks and inspect local system status.</div>
+            </div>
+            <div class="row">
+              <button id="preflight-run" class="btn" type="button">Run Pre-flight</button>
+              <button id="system-health-run" class="btn" type="button">System Health</button>
+            </div>
+          </div>
+          <div id="preflight-results" class="card"></div>
+          <div id="system-health-results" class="card"></div>
+          <div class="subtitle-controls">
+            <label>Ken Burns
+              <select id="feature-kenburns">
+                <option value="off">Off</option>
+                <option value="on">On</option>
+              </select>
+            </label>
+            <label>BGM Volume (dB)
+              <input id="feature-bgm-volume" type="number" min="-40" max="6" step="1">
+            </label>
+            <label>BGM Ducking
+              <select id="feature-bgm-ducking">
+                <option value="on">On</option>
+                <option value="off">Off</option>
+              </select>
+            </label>
+            <label>Render Landscape
+              <input id="feature-render-landscape" type="checkbox" checked>
+            </label>
+            <label>Render Shorts
+              <input id="feature-render-shorts" type="checkbox">
+            </label>
+          </div>
+          <div class="row">
+            <button id="feature-save" class="btn" type="button">Save render settings</button>
+          </div>
+
+          <div class="section-head row between">
+            <div>
               <strong>Subtitle Style</strong>
               <div class="muted">렌더링 전에 자막 색상, 크기, 위치, 외곽선, 그림자, 배경, 효과를 설정합니다.</div>
             </div>
@@ -241,6 +298,7 @@
                 <option value="none">None</option>
                 <option value="fade">Fade</option>
                 <option value="pop">Pop</option>
+                <option value="karaoke">Karaoke</option>
               </select>
             </label>
           </div>
@@ -290,12 +348,16 @@
           <option value="public">Public</option>
         </select>
 
+        <label for="s5-schedule">Schedule At (ISO datetime)</label>
+        <input id="s5-schedule" placeholder="2026-04-25T09:00:00Z" />
+
         <div class="row">
           <button id="s5-run" class="btn primary" type="button">업로드 시작</button>
           <span id="s5-state" class="muted">idle · 0%</span>
         </div>
 
         <div id="s5-link"></div>
+        <div id="s5-stats-panel" class="card"></div>
       </section>
     </section>
   </main>

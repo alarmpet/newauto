@@ -5,7 +5,8 @@
  * @typedef {"image" | "video"} MediaKind
  * @typedef {"idle" | "uploading" | "processing" | "done" | "error"} MediaClientPhase
  * @typedef {"top" | "upper" | "middle" | "lower" | "bottom"} SubtitlePosition
- * @typedef {"none" | "fade" | "pop"} SubtitleEffect
+ * @typedef {"none" | "fade" | "pop" | "karaoke"} SubtitleEffect
+ * @typedef {"landscape" | "shorts"} RenderFormat
  */
 
 /**
@@ -37,6 +38,12 @@
  *   thumbnail_file: string,
  *   subtitle_style: SubtitleStyle,
  *   voice_preset: string,
+ *   kenburns_enabled: boolean,
+ *   bgm_file: string,
+ *   bgm_volume_db: number,
+ *   bgm_ducking_enabled: boolean,
+ *   render_formats: RenderFormat[],
+ *   youtube_schedule_at: string,
  *   tts_state: TaskState,
  *   tts_progress: number,
  *   render_state: TaskState,
@@ -105,6 +112,12 @@
  *   media_upload_error: string,
  *   thumbnail_file: string,
  *   subtitle_style: SubtitleStyle,
+ *   kenburns_enabled: boolean,
+ *   bgm_file: string,
+ *   bgm_volume_db: number,
+ *   bgm_ducking_enabled: boolean,
+ *   render_formats: RenderFormat[],
+ *   youtube_schedule_at: string,
  *   youtube_id: string | null,
  * }} ProjectStatus
  */
@@ -289,7 +302,7 @@ function subtitlePositionFromValue(value) {
  * @returns {SubtitleEffect}
  */
 function subtitleEffectFromValue(value) {
-  if (value === "fade" || value === "pop" || value === "none") {
+  if (value === "fade" || value === "pop" || value === "none" || value === "karaoke") {
     return value;
   }
   return "none";
@@ -415,6 +428,10 @@ const thumbnailDeleteButton = /** @type {HTMLButtonElement} */ (query("#thumbnai
 const thumbnailInput = /** @type {HTMLInputElement} */ (query("#thumbnail-input"));
 const thumbnailPreview = /** @type {HTMLElement} */ (query("#thumbnail-preview"));
 const thumbnailMeta = /** @type {HTMLElement} */ (query("#thumbnail-meta"));
+const bgmUploadButton = /** @type {HTMLButtonElement} */ (query("#bgm-upload"));
+const bgmDeleteButton = /** @type {HTMLButtonElement} */ (query("#bgm-delete"));
+const bgmInput = /** @type {HTMLInputElement} */ (query("#bgm-input"));
+const bgmMeta = /** @type {HTMLElement} */ (query("#bgm-meta"));
 const mediaWorkflowHint = /** @type {HTMLElement} */ (query("#media-workflow-hint"));
 const mediaUploadPanel = /** @type {HTMLElement} */ (query("#media-upload-panel"));
 const mediaUploadStatus = /** @type {HTMLElement} */ (query("#media-upload-status"));
@@ -432,6 +449,16 @@ const ttsState = /** @type {HTMLElement} */ (query("#s3-state"));
 const ttsList = /** @type {HTMLElement} */ (query("#s3-list"));
 const renderState = /** @type {HTMLElement} */ (query("#s4-state"));
 const renderVideo = /** @type {HTMLVideoElement} */ (query("#s4-video"));
+const preflightRunButton = /** @type {HTMLButtonElement} */ (query("#preflight-run"));
+const systemHealthRunButton = /** @type {HTMLButtonElement} */ (query("#system-health-run"));
+const preflightResults = /** @type {HTMLElement} */ (query("#preflight-results"));
+const systemHealthResults = /** @type {HTMLElement} */ (query("#system-health-results"));
+const featureKenburnsSelect = /** @type {HTMLSelectElement} */ (query("#feature-kenburns"));
+const featureBgmVolumeInput = /** @type {HTMLInputElement} */ (query("#feature-bgm-volume"));
+const featureBgmDuckingSelect = /** @type {HTMLSelectElement} */ (query("#feature-bgm-ducking"));
+const featureRenderLandscapeInput = /** @type {HTMLInputElement} */ (query("#feature-render-landscape"));
+const featureRenderShortsInput = /** @type {HTMLInputElement} */ (query("#feature-render-shorts"));
+const featureSaveButton = /** @type {HTMLButtonElement} */ (query("#feature-save"));
 const subtitleSaveButton = /** @type {HTMLButtonElement} */ (query("#subtitle-save"));
 const subtitleFontInput = /** @type {HTMLInputElement} */ (query("#subtitle-font"));
 const subtitleSizeInput = /** @type {HTMLInputElement} */ (query("#subtitle-size"));
@@ -455,9 +482,12 @@ const uploadTitleInput = /** @type {HTMLInputElement} */ (query("#s5-title"));
 const uploadDescInput = /** @type {HTMLTextAreaElement} */ (query("#s5-desc"));
 const uploadTagsInput = /** @type {HTMLInputElement} */ (query("#s5-tags"));
 const uploadPrivacySelect = /** @type {HTMLSelectElement} */ (query("#s5-privacy"));
+const uploadScheduleInput = /** @type {HTMLInputElement} */ (query("#s5-schedule"));
 const uploadState = /** @type {HTMLElement} */ (query("#s5-state"));
 const uploadLink = /** @type {HTMLElement} */ (query("#s5-link"));
+const uploadStatsPanel = /** @type {HTMLElement} */ (query("#s5-stats-panel"));
 const backButton = /** @type {HTMLButtonElement} */ (query("#back"));
+const cloneProjectButton = /** @type {HTMLButtonElement} */ (query("#clone-project"));
 const createButton = /** @type {HTMLButtonElement} */ (query("#btn-new"));
 const saveScriptButton = /** @type {HTMLButtonElement} */ (query("#s1-save"));
 const ttsRunButton = /** @type {HTMLButtonElement} */ (query("#s3-run"));
@@ -566,6 +596,8 @@ async function openProject(pid) {
   renderScriptStats();
   renderMedia();
   renderThumbnail();
+  renderBgmMeta();
+  renderFeatureControls();
   renderMediaUploadStatus();
   renderSubtitleStyleControls();
   renderTtsList();
@@ -780,6 +812,52 @@ function renderThumbnail() {
 }
 
 /**
+ * @returns {void}
+ */
+function renderBgmMeta() {
+  const project = requireCurrent();
+  bgmDeleteButton.disabled = !project.bgm_file;
+  bgmMeta.textContent = project.bgm_file
+    ? `BGM file: ${project.bgm_file}`
+    : "No BGM uploaded.";
+}
+
+/**
+ * @returns {void}
+ */
+function renderFeatureControls() {
+  const project = requireCurrent();
+  featureKenburnsSelect.value = project.kenburns_enabled ? "on" : "off";
+  featureBgmVolumeInput.value = String(project.bgm_volume_db);
+  featureBgmDuckingSelect.value = project.bgm_ducking_enabled ? "on" : "off";
+  featureRenderLandscapeInput.checked = project.render_formats.includes("landscape");
+  featureRenderShortsInput.checked = project.render_formats.includes("shorts");
+}
+
+/**
+ * @returns {{kenburns_enabled: boolean, bgm_volume_db: number, bgm_ducking_enabled: boolean, render_formats: RenderFormat[]}}
+ */
+function readFeatureInputs() {
+  /** @type {RenderFormat[]} */
+  const renderFormats = [];
+  if (featureRenderLandscapeInput.checked) {
+    renderFormats.push("landscape");
+  }
+  if (featureRenderShortsInput.checked) {
+    renderFormats.push("shorts");
+  }
+  if (renderFormats.length === 0) {
+    renderFormats.push("landscape");
+  }
+  return {
+    kenburns_enabled: featureKenburnsSelect.value === "on",
+    bgm_volume_db: numberInRange(featureBgmVolumeInput.value, -20, -40, 6),
+    bgm_ducking_enabled: featureBgmDuckingSelect.value === "on",
+    render_formats: renderFormats,
+  };
+}
+
+/**
  * @param {File | null} file
  * @returns {Promise<void>}
  */
@@ -814,6 +892,120 @@ async function deleteThumbnail() {
   );
   renderThumbnail();
   toast("?몃꽕?쇱쓣 ??젣?덉뒿?덈떎.");
+}
+
+/**
+ * @param {File | null} file
+ * @returns {Promise<void>}
+ */
+async function uploadBgm(file) {
+  if (!file) {
+    return;
+  }
+  const project = requireCurrent();
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await requestJson(`/api/projects/${project.id}/bgm`, {
+    method: "POST",
+    body: formData,
+  });
+  current = /** @type {Project} */ (response.project);
+  bgmInput.value = "";
+  renderBgmMeta();
+  renderFeatureControls();
+  toast("BGM uploaded.");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function deleteBgm() {
+  const project = requireCurrent();
+  current = /** @type {Project} */ (await requestJson(`/api/projects/${project.id}/bgm`, {
+    method: "DELETE",
+  }));
+  renderBgmMeta();
+  renderFeatureControls();
+  toast("BGM deleted.");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function saveFeatureSettings() {
+  const project = requireCurrent();
+  const payload = readFeatureInputs();
+  const response = await requestJson(`/api/projects/${project.id}/features`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  current = /** @type {Project} */ (response.project);
+  renderFeatureControls();
+  renderBgmMeta();
+  toast("Render settings saved.");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function runPreflight() {
+  const project = requireCurrent();
+  const report = await requestJson(`/api/projects/${project.id}/preflight`);
+  const payload = /** @type {{ ok: boolean, checks: { key: string, ok: boolean, message: string }[] }} */ (report);
+  preflightResults.innerHTML = payload.checks.map((check) => (
+    `<div><strong>${escapeHtml(check.key)}</strong>: ${escapeHtml(check.ok ? "ok" : "needs attention")} - ${escapeHtml(check.message)}</div>`
+  )).join("");
+  preflightResults.className = payload.ok ? "card ok" : "card warn";
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function runSystemHealth() {
+  const payload = /** @type {{ ffmpeg_available: boolean, oauth_ready: boolean, omnivoice_python_found: boolean, disk_free_gb: number, storage_path: string }} */ (
+    await requestJson("/api/system/health")
+  );
+  systemHealthResults.innerHTML = `
+    <div><strong>FFmpeg</strong>: ${payload.ffmpeg_available ? "ok" : "missing"}</div>
+    <div><strong>OAuth</strong>: ${payload.oauth_ready ? "ready" : "missing client_secret.json"}</div>
+    <div><strong>OmniVoice Python</strong>: ${payload.omnivoice_python_found ? "found" : "missing"}</div>
+    <div><strong>Disk Free</strong>: ${payload.disk_free_gb} GB</div>
+    <div><strong>Storage</strong>: ${escapeHtml(payload.storage_path)}</div>
+  `;
+  systemHealthResults.className = "card";
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function cloneProject() {
+  const project = requireCurrent();
+  const response = /** @type {{ project: Project }} */ (await requestJson(`/api/projects/${project.id}/clone?include_script=true`, {
+    method: "POST",
+  }));
+  await openProject(response.project.id);
+  toast("Project cloned.");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function fetchYoutubeStats() {
+  const project = requireCurrent();
+  if (!project.youtube_id) {
+    toast("Upload to YouTube first.");
+    return;
+  }
+  const stats = /** @type {{ view_count: number, like_count: number, comment_count: number, video_id: string }} */ (
+    await requestJson(`/api/projects/${project.id}/stats`)
+  );
+  uploadStatsPanel.innerHTML = `
+    <div><strong>Video</strong>: ${escapeHtml(stats.video_id)}</div>
+    <div><strong>Views</strong>: ${stats.view_count}</div>
+    <div><strong>Likes</strong>: ${stats.like_count}</div>
+    <div><strong>Comments</strong>: ${stats.comment_count}</div>
+  `;
 }
 
 /**
@@ -1180,7 +1372,8 @@ function renderTtsList() {
 function updateOutputVideo() {
   const project = requireCurrent();
   if (project.render_state === "done") {
-    renderVideo.src = `/api/projects/${project.id}/output?t=${Date.now()}`;
+    const format = project.render_formats.includes("landscape") ? "landscape" : "shorts";
+    renderVideo.src = `/api/projects/${project.id}/output?format=${format}&t=${Date.now()}`;
     renderVideo.hidden = false;
   } else {
     renderVideo.hidden = true;
@@ -1194,6 +1387,8 @@ function updateOutputVideo() {
 async function renderStep5() {
   const project = requireCurrent();
   uploadTitleInput.value = project.title || "";
+  uploadScheduleInput.value = project.youtube_schedule_at || "";
+  uploadStatsPanel.innerHTML = project.youtube_id ? uploadStatsPanel.innerHTML : "";
   const oauthStatus = /** @type {OAuthStatus} */ (await requestJson("/api/projects/_/oauth/status"));
 
   if (oauthStatus.authorized) {
@@ -1488,6 +1683,19 @@ thumbnailDeleteButton.addEventListener("click", () => {
   void deleteThumbnail().catch((error) => handleError(error, "?몃꽕?쇱쓣 ??젣?섏? 紐삵뻽?듬땲??"));
 });
 
+bgmUploadButton.addEventListener("click", () => {
+  bgmInput.click();
+});
+
+bgmInput.addEventListener("change", () => {
+  const file = bgmInput.files ? bgmInput.files[0] || null : null;
+  void uploadBgm(file).catch((error) => handleError(error, "BGM upload failed."));
+});
+
+bgmDeleteButton.addEventListener("click", () => {
+  void deleteBgm().catch((error) => handleError(error, "BGM delete failed."));
+});
+
 mediaGrid.addEventListener("click", (event) => {
   const target = /** @type {HTMLElement} */ (event.target);
   const action = target.dataset.action;
@@ -1546,6 +1754,22 @@ subtitleSaveButton.addEventListener("click", () => {
   void saveSubtitleStyle().catch((error) => handleError(error, "?먮쭑 ?ㅽ??쇱쓣 ??ν븯吏 紐삵뻽?듬땲??"));
 });
 
+featureSaveButton.addEventListener("click", () => {
+  void saveFeatureSettings().catch((error) => handleError(error, "Saving render settings failed."));
+});
+
+preflightRunButton.addEventListener("click", () => {
+  void runPreflight().catch((error) => handleError(error, "Pre-flight failed."));
+});
+
+systemHealthRunButton.addEventListener("click", () => {
+  void runSystemHealth().catch((error) => handleError(error, "System health check failed."));
+});
+
+cloneProjectButton.addEventListener("click", () => {
+  void cloneProject().catch((error) => handleError(error, "Project clone failed."));
+});
+
 ttsRunButton.addEventListener("click", async () => {
   const project = requireCurrent();
   try {
@@ -1582,6 +1806,7 @@ youtubeRunButton.addEventListener("click", async () => {
         description: uploadDescInput.value,
         tags: uploadTagsInput.value,
         privacy: uploadPrivacySelect.value,
+        schedule_at: uploadScheduleInput.value,
       }),
     });
     toast("YouTube ?낅줈?쒕? ?쒖옉?덉뒿?덈떎.");
@@ -1589,5 +1814,6 @@ youtubeRunButton.addEventListener("click", async () => {
     handleError(error, "YouTube ?낅줈?쒕? ?쒖옉?섏? 紐삵뻽?듬땲??");
   }
 });
+
 
 void loadProjects().catch((error) => handleError(error, "?꾨줈?앺듃 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??"));
