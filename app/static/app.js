@@ -65,6 +65,10 @@
  *   render_state: TaskState,
  *   render_progress: number,
  *   render_phase: string,
+ *   render_phase_pct: number,
+ *   render_progress_detail: string,
+ *   render_speed_x: number,
+ *   render_eta_sec: number,
  *   render_last_log: string,
  *   upload_state: TaskState,
  *   upload_progress: number,
@@ -122,6 +126,10 @@
  *   render_state: TaskState,
  *   render_progress: number,
  *   render_phase: string,
+ *   render_phase_pct: number,
+ *   render_progress_detail: string,
+ *   render_speed_x: number,
+ *   render_eta_sec: number,
  *   render_last_log: string,
  *   upload_state: TaskState,
  *   upload_progress: number,
@@ -454,19 +462,27 @@ function readableRenderIssue(renderLog) {
 
 /**
  * @param {string} phase
+ * @param {string} detail
  * @param {string} renderLog
  * @returns {string}
  */
-function formatRenderLog(phase, renderLog) {
-  if (!renderLog) {
+function formatRenderLog(phase, detail, renderLog) {
+  if (!phase && !detail && !renderLog) {
     return "렌더를 시작하면 현재 단계와 마지막 로그를 여기에서 확인할 수 있습니다.";
   }
   const summary = readableRenderIssue(renderLog);
   const lines = [`Current phase: ${readableRenderPhase(phase)}`];
+  if (detail) {
+    lines.push("", `세부 진행: ${detail}`);
+  } else if (phase) {
+    lines.push("", "세부 진행 정보를 수집하는 중입니다.");
+  }
   if (summary) {
     lines.push("", `문제 요약: ${summary}`);
   }
-  lines.push("", renderLog);
+  if (renderLog) {
+    lines.push("", renderLog);
+  }
   return lines.join("\n");
 }
 
@@ -809,7 +825,11 @@ async function openProject(pid) {
   renderBgmMeta();
   renderTtsProfileControls();
   renderFeatureControls();
-  renderLogPanel.textContent = formatRenderLog(current.render_phase, current.render_last_log);
+  renderLogPanel.textContent = formatRenderLog(
+    current.render_phase,
+    current.render_progress_detail,
+    current.render_last_log,
+  );
   renderMediaUploadStatus();
   renderSubtitleStyleControls();
   renderTtsList();
@@ -1817,7 +1837,11 @@ async function pollProjectStatus() {
     ? ` | ${readableRenderPhase(status.render_phase)}`
     : "";
   renderState.textContent = `${readableTaskState(status.render_state)} ${status.render_progress}%${renderPhaseText}`;
-  renderLogPanel.textContent = formatRenderLog(status.render_phase, status.render_last_log);
+  renderLogPanel.textContent = formatRenderLog(
+    status.render_phase,
+    status.render_progress_detail,
+    status.render_last_log,
+  );
   uploadState.textContent = `${readableTaskState(status.upload_state)} ${status.upload_progress}%`;
   renderMediaUploadStatus();
   updateProgressBar();

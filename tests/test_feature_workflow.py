@@ -128,12 +128,20 @@ class FeatureWorkflowTests(unittest.TestCase):
             render_state="running",
             render_progress=38,
             render_phase="normalize_audio",
+            render_phase_pct=45,
+            render_progress_detail="45% | 1.10x | frame 0 | elapsed 00:00:12",
+            render_speed_x=1.1,
+            render_eta_sec=4,
             render_last_log="ffmpeg started",
         )
         response = self.client.get(f"/api/projects/{project_id}/status")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["render_phase"], "normalize_audio")
+        self.assertEqual(payload["render_phase_pct"], 45)
+        self.assertEqual(payload["render_speed_x"], 1.1)
+        self.assertEqual(payload["render_eta_sec"], 4)
+        self.assertIn("45%", payload["render_progress_detail"])
         self.assertEqual(payload["render_last_log"], "ffmpeg started")
 
     def test_render_tail_lines_handles_none(self) -> None:

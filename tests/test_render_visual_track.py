@@ -1,3 +1,4 @@
+import io
 import subprocess
 import unittest
 from pathlib import Path
@@ -6,13 +7,65 @@ from unittest.mock import patch
 from app import db
 from app.services.preflight import build_preflight_report
 from app.services.render import (
+    ProgressEvent,
     _build_visual_track,
+    _format_progress_detail,
+    _parse_progress_time,
+    _phase_progress_callback,
     _run,
+    _run_with_progress,
     _zoompan_filter,
 )
 
 
 class RenderVisualTrackTests(unittest.TestCase):
+    def test_parse_progress_time_from_out_time(self) -> None:
+        self.assertEqual(_parse_progress_time("out_time=00:01:30.50"), 90.5)
+
+    def test_format_progress_detail_includes_eta(self) -> None:
+        detail = _format_progress_detail(
+            ProgressEvent(
+                phase_pct=43,
+                speed_x=1.31,
+                frame=4921,
+                fps=24.0,
+                elapsed_sec=204.0,
+                eta_sec=342,
+                output_size_bytes=0,
+            )
+        )
+        self.assertIn("43%", detail)
+        self.assertIn("1.31x", detail)
+        self.assertIn("frame 4921", detail)
+        self.assertIn("ETA 00:05:42", detail)
+
+    def test_phase_progress_callback_maps_global_progress(self) -> None:
+        captured: dict[str, object] = {}
+
+        def fake_update_project(pid: str, **fields: object) -> None:
+            captured["pid"] = pid
+            captured.update(fields)
+
+        with patch("app.services.render.db.update_project", side_effect=fake_update_project):
+            callback = _phase_progress_callback("pid123", "build_visual_landscape", 70, 12)
+            callback(
+                ProgressEvent(
+                    phase_pct=50,
+                    speed_x=1.2,
+                    frame=100,
+                    fps=24.0,
+                    elapsed_sec=50.0,
+                    eta_sec=20,
+                    output_size_bytes=1024,
+                )
+            )
+
+        self.assertEqual(captured["pid"], "pid123")
+        self.assertEqual(captured["render_progress"], 76)
+        self.assertEqual(captured["render_phase"], "build_visual_landscape")
+        self.assertEqual(captured["render_phase_pct"], 50)
+        self.assertIn("50%", str(captured["render_progress_detail"]))
+
     def test_zoompan_filter_includes_explicit_landscape_output_size(self) -> None:
         filter_graph = _zoompan_filter(0, 3.0, 1920, 1080)
         self.assertIn("s=1920x1080", filter_graph)
@@ -86,3 +139,37 @@ class RenderVisualTrackTests(unittest.TestCase):
         self.assertFalse(check_map["media_metadata"]["ok"])
         self.assertIn("broken.mp4", check_map["media_metadata"]["message"])
         db.delete_project(project_id)
+
+    def test_run_with_progress_emits_events_from_out_time(self) -> None:
+        class FakePopen:
+            def __init__(self) -> None:
+                self.stdout = io.BytesIO(
+                    b"frame=25\nfps=24.0\nout_time=00:00:02.00\nspeed=1.50x\nprogress=continue\n"
+                    b"frame=50\nfps=24.0\nout_time=00:00:04.00\nspeed=2.00x\nprogress=end\n"
+                )
+                self.stderr = io.BytesIO(b"")
+                self.returncode = 0
+
+            def poll(self) -> int | None:
+                stdout_done = self.stdout.tell() >= len(self.stdout.getvalue())
+                stderr_done = self.stderr.tell() >= len(self.stderr.getvalue())
+                if stdout_done and stderr_done:
+                    return self.returncode
+                return None
+
+            def wait(self) -> int:
+                self.stdout.seek(len(self.stdout.getvalue()))
+                self.stderr.seek(len(self.stderr.getvalue()))
+                return self.returncode
+
+        events: list[ProgressEvent] = []
+        with patch("app.services.render.subprocess.Popen", return_value=FakePopen()):
+            _run_with_progress(
+                ["ffmpeg", "-i", "in.mp4", "out.mp4"],
+                expected_duration_sec=4.0,
+                on_progress=events.append,
+            )
+
+        self.assertGreaterEqual(len(events), 1)
+        self.assertEqual(events[-1].phase_pct, 100)
+        self.assertEqual(events[-1].frame, 50)

@@ -63,6 +63,10 @@ class ProjectRecord(TypedDict):
     render_state: TaskState
     render_progress: int
     render_phase: str
+    render_phase_pct: int
+    render_progress_detail: str
+    render_speed_x: float
+    render_eta_sec: int
     render_last_log: str
     upload_state: TaskState
     upload_progress: int
@@ -93,6 +97,10 @@ class ProjectStatus(TypedDict):
     render_state: TaskState
     render_progress: int
     render_phase: str
+    render_phase_pct: int
+    render_progress_detail: str
+    render_speed_x: float
+    render_eta_sec: int
     render_last_log: str
     upload_state: TaskState
     upload_progress: int

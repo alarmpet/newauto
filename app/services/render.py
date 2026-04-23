@@ -1,14 +1,41 @@
 import json
 import shutil
 import subprocess
+import threading
 import traceback
+from collections import deque
+from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
+from queue import Empty, Queue
+from time import monotonic
 
 from .. import db
 from ..config import ALLOWED_IMAGE_EXT, FPS, SHORTS_H, SHORTS_W, VIDEO_H, VIDEO_W
 from ..types import RenderFormat, TimingEntry
 from .subtitle import write_ass
 from .transcribe import save_word_timings
+
+PROGRESS_EMIT_INTERVAL_SEC = 0.5
+
+
+@dataclass
+class ProgressEvent:
+    phase_pct: int
+    speed_x: float
+    frame: int
+    fps: float
+    elapsed_sec: float
+    eta_sec: int
+    output_size_bytes: int
+
+
+def _format_clock(total_seconds: float) -> str:
+    clamped = max(0, int(total_seconds))
+    hours = clamped // 3600
+    minutes = (clamped % 3600) // 60
+    seconds = clamped % 60
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
 
 
 def _decode_process_text(raw: bytes | str | None) -> str:
@@ -29,7 +56,16 @@ def _tail_lines(text: str | None, limit: int = 12) -> str:
 
 
 def _set_render_stage(pid: str, progress: int, phase: str, log: str = "") -> None:
-    db.update_project(pid, render_progress=progress, render_phase=phase, render_last_log=log)
+    db.update_project(
+        pid,
+        render_progress=progress,
+        render_phase=phase,
+        render_phase_pct=0,
+        render_progress_detail="",
+        render_speed_x=0.0,
+        render_eta_sec=0,
+        render_last_log=log,
+    )
 
 
 def _ffmpeg() -> str:
@@ -45,6 +81,217 @@ def _run(command: list[str]) -> str:
     stderr_tail = _tail_lines(stderr_text, limit=20)
     if process.returncode != 0:
         detail = stderr_tail or "ffmpeg failed with no stderr output"
+        raise RuntimeError("ffmpeg failed:\n" + detail)
+    return _tail_lines(stderr_text)
+
+
+def _drain_stream(stream: object, queue: Queue[str], stderr_buffer: deque[str] | None = None) -> None:
+    if not hasattr(stream, "readline"):
+        return
+    readline = getattr(stream, "readline")
+    while True:
+        raw = readline()
+        if raw in (b"", ""):
+            break
+        text = _decode_process_text(raw).strip()
+        if not text:
+            continue
+        queue.put(text)
+        if stderr_buffer is not None:
+            stderr_buffer.append(text)
+
+
+def _parse_progress_time(line: str) -> float:
+    if not line.startswith("out_time="):
+        return 0.0
+    value = line.split("=", maxsplit=1)[1]
+    parts = value.split(":")
+    if len(parts) != 3:
+        return 0.0
+    try:
+        hours = int(parts[0])
+        minutes = int(parts[1])
+        seconds = float(parts[2])
+    except ValueError:
+        return 0.0
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def _parse_progress_float(line: str, prefix: str, suffix: str = "") -> float:
+    if not line.startswith(prefix):
+        return 0.0
+    raw_value = line.split("=", maxsplit=1)[1]
+    if suffix and raw_value.endswith(suffix):
+        raw_value = raw_value[: -len(suffix)]
+    try:
+        return float(raw_value)
+    except ValueError:
+        return 0.0
+
+
+def _parse_progress_int(line: str, prefix: str) -> int:
+    if not line.startswith(prefix):
+        return 0
+    try:
+        return int(line.split("=", maxsplit=1)[1])
+    except ValueError:
+        return 0
+
+
+def _format_progress_detail(event: ProgressEvent, *, show_eta: bool = True) -> str:
+    detail = (
+        f"{event.phase_pct}% | {event.speed_x:.2f}x | frame {event.frame} | "
+        f"elapsed {_format_clock(event.elapsed_sec)}"
+    )
+    if show_eta and event.eta_sec > 0:
+        return f"{detail} | ETA {_format_clock(event.eta_sec)}"
+    if event.output_size_bytes > 0:
+        size_mb = event.output_size_bytes / (1024 * 1024)
+        return f"{detail} | output {size_mb:.1f} MB"
+    return detail
+
+
+def _phase_progress_callback(
+    pid: str,
+    phase: str,
+    base_progress: int,
+    span_progress: int,
+    *,
+    show_eta: bool = True,
+) -> Callable[[ProgressEvent], None]:
+    def on_progress(event: ProgressEvent) -> None:
+        global_progress = min(99, base_progress + int(span_progress * event.phase_pct / 100))
+        db.update_project(
+            pid,
+            render_progress=global_progress,
+            render_phase=phase,
+            render_phase_pct=event.phase_pct,
+            render_progress_detail=_format_progress_detail(event, show_eta=show_eta),
+            render_speed_x=event.speed_x,
+            render_eta_sec=event.eta_sec,
+        )
+
+    return on_progress
+
+
+def _run_with_progress(
+    command: list[str],
+    *,
+    expected_duration_sec: float,
+    on_progress: Callable[[ProgressEvent], None],
+    output_path: Path | None = None,
+    show_eta: bool = True,
+) -> str:
+    progress_command = [
+        *command[:-1],
+        "-progress",
+        "pipe:1",
+        "-nostats",
+        "-stats_period",
+        "0.5",
+        command[-1],
+    ]
+    process = subprocess.Popen(
+        progress_command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=False,
+        bufsize=0,
+    )
+    stdout_queue: Queue[str] = Queue()
+    stderr_queue: Queue[str] = Queue()
+    stderr_buffer: deque[str] = deque(maxlen=200)
+
+    assert process.stdout is not None
+    assert process.stderr is not None
+    stdout_thread = threading.Thread(
+        target=_drain_stream,
+        args=(process.stdout, stdout_queue),
+        daemon=True,
+    )
+    stderr_thread = threading.Thread(
+        target=_drain_stream,
+        args=(process.stderr, stderr_queue, stderr_buffer),
+        daemon=True,
+    )
+    stdout_thread.start()
+    stderr_thread.start()
+
+    frame = 0
+    fps = 0.0
+    speed_x = 0.0
+    elapsed_sec = 0.0
+    last_emit = 0.0
+    start_time = monotonic()
+    progress_ended = False
+
+    def emit_progress(force: bool = False) -> None:
+        nonlocal last_emit
+        now = monotonic()
+        if not force and now - last_emit < PROGRESS_EMIT_INTERVAL_SEC:
+            return
+        last_emit = now
+        safe_expected = max(expected_duration_sec, 0.1)
+        phase_pct = min(100, max(0, int((elapsed_sec / safe_expected) * 100)))
+        eta_sec = 0
+        if show_eta and speed_x > 0.05 and elapsed_sec < safe_expected:
+            eta_sec = max(0, int((safe_expected - elapsed_sec) / speed_x))
+        output_size_bytes = 0
+        if output_path is not None and output_path.exists():
+            output_size_bytes = output_path.stat().st_size
+        on_progress(
+            ProgressEvent(
+                phase_pct=phase_pct,
+                speed_x=speed_x,
+                frame=frame,
+                fps=fps,
+                elapsed_sec=elapsed_sec if elapsed_sec > 0 else now - start_time,
+                eta_sec=eta_sec,
+                output_size_bytes=output_size_bytes,
+            )
+        )
+
+    try:
+        while True:
+            drained = False
+            while True:
+                try:
+                    line = stdout_queue.get_nowait()
+                except Empty:
+                    break
+                drained = True
+                if line.startswith("out_time="):
+                    elapsed_sec = _parse_progress_time(line)
+                elif line.startswith("frame="):
+                    frame = _parse_progress_int(line, "frame=")
+                elif line.startswith("fps="):
+                    fps = _parse_progress_float(line, "fps=")
+                elif line.startswith("speed="):
+                    speed_x = _parse_progress_float(line, "speed=", suffix="x")
+                elif line == "progress=end":
+                    progress_ended = True
+                emit_progress()
+            while True:
+                try:
+                    stderr_queue.get_nowait()
+                    drained = True
+                except Empty:
+                    break
+            if process.poll() is not None and progress_ended:
+                break
+            if process.poll() is not None and not drained:
+                break
+            emit_progress()
+            threading.Event().wait(0.1)
+    finally:
+        process.wait()
+        stdout_thread.join(timeout=1.0)
+        stderr_thread.join(timeout=1.0)
+
+    emit_progress(force=True)
+    stderr_text = "\n".join(stderr_buffer)
+    if process.returncode != 0:
+        detail = _tail_lines(stderr_text, limit=20) or "ffmpeg failed with no stderr output"
         raise RuntimeError("ffmpeg failed:\n" + detail)
     return _tail_lines(stderr_text)
 
@@ -139,17 +386,30 @@ def _concat_audio(tts_dir: Path, timings: list[TimingEntry], out_wav: Path) -> N
     )
 
 
-def _normalize_audio(in_wav: Path, out_wav: Path) -> None:
-    _run(
-        [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            str(in_wav),
-            "-af",
-            "loudnorm=I=-14:TP=-1.5:LRA=11",
-            str(out_wav),
-        ]
+def _normalize_audio(
+    in_wav: Path,
+    out_wav: Path,
+    *,
+    on_progress: Callable[[ProgressEvent], None] | None = None,
+) -> None:
+    command = [
+        _ffmpeg(),
+        "-y",
+        "-i",
+        str(in_wav),
+        "-af",
+        "loudnorm=I=-14:TP=-1.5:LRA=11",
+        str(out_wav),
+    ]
+    if on_progress is None:
+        _run(command)
+        return
+    _run_with_progress(
+        command,
+        expected_duration_sec=max(_probe_duration(in_wav), 0.1),
+        on_progress=on_progress,
+        output_path=out_wav,
+        show_eta=False,
     )
 
 
@@ -201,6 +461,8 @@ def _build_visual_track(
     out_mp4: Path,
     render_format: RenderFormat,
     kenburns_enabled: bool,
+    *,
+    on_progress: Callable[[ProgressEvent], None] | None = None,
 ) -> None:
     item_count = len(media_files)
     per_item_duration = max(total_duration / item_count, 0.5)
@@ -227,27 +489,34 @@ def _build_visual_track(
 
     concat_filter = "".join(labels) + f"concat=n={item_count}:v=1:a=0[vout]"
     filter_graph = ";".join(filters + [concat_filter])
-    _run(
-        [
-            _ffmpeg(),
-            "-y",
-            *inputs,
-            "-filter_complex",
-            filter_graph,
-            "-map",
-            "[vout]",
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-r",
-            str(FPS),
-            "-preset",
-            "veryfast",
-            "-crf",
-            "20",
-            str(out_mp4),
-        ]
+    command = [
+        _ffmpeg(),
+        "-y",
+        *inputs,
+        "-filter_complex",
+        filter_graph,
+        "-map",
+        "[vout]",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        str(FPS),
+        "-preset",
+        "veryfast",
+        "-crf",
+        "20",
+        str(out_mp4),
+    ]
+    if on_progress is None:
+        _run(command)
+        return
+    _run_with_progress(
+        command,
+        expected_duration_sec=max(total_duration, 0.1),
+        on_progress=on_progress,
+        output_path=out_mp4,
     )
 
 
@@ -255,35 +524,49 @@ def _escape_filter_path(path: Path) -> str:
     return path.resolve().as_posix().replace(":", "\\:").replace("'", r"\'")
 
 
-def _mux(silent_video: Path, audio: Path, subtitle_path: Path, out_mp4: Path) -> None:
+def _mux(
+    silent_video: Path,
+    audio: Path,
+    subtitle_path: Path,
+    out_mp4: Path,
+    *,
+    on_progress: Callable[[ProgressEvent], None] | None = None,
+) -> None:
     video_filter = f"ass='{_escape_filter_path(subtitle_path)}'"
-    _run(
-        [
-            _ffmpeg(),
-            "-y",
-            "-i",
-            str(silent_video),
-            "-i",
-            str(audio),
-            "-vf",
-            video_filter,
-            "-map",
-            "0:v:0",
-            "-map",
-            "1:a:0",
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            "-r",
-            str(FPS),
-            "-c:a",
-            "aac",
-            "-b:a",
-            "192k",
-            "-shortest",
-            str(out_mp4),
-        ]
+    command = [
+        _ffmpeg(),
+        "-y",
+        "-i",
+        str(silent_video),
+        "-i",
+        str(audio),
+        "-vf",
+        video_filter,
+        "-map",
+        "0:v:0",
+        "-map",
+        "1:a:0",
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-r",
+        str(FPS),
+        "-c:a",
+        "aac",
+        "-b:a",
+        "192k",
+        "-shortest",
+        str(out_mp4),
+    ]
+    if on_progress is None:
+        _run(command)
+        return
+    _run_with_progress(
+        command,
+        expected_duration_sec=max(_probe_duration(audio), 0.1),
+        on_progress=on_progress,
+        output_path=out_mp4,
     )
 
 
@@ -360,7 +643,17 @@ def run_render_job(pid: str) -> None:
         _set_render_stage(pid, 40, "normalize_audio")
         normalize_log = ""
         try:
-            _normalize_audio(raw_audio_wav, normalized_audio_wav)
+            _normalize_audio(
+                raw_audio_wav,
+                normalized_audio_wav,
+                on_progress=_phase_progress_callback(
+                    pid,
+                    "normalize_audio",
+                    40,
+                    8,
+                    show_eta=False,
+                ),
+            )
         except Exception as exc:
             _set_render_stage(pid, 40, "normalize_audio", str(exc))
             raise
@@ -393,22 +686,58 @@ def run_render_job(pid: str) -> None:
         current_progress = 68
         for render_format in render_formats:
             silent_video = project_dir / f"_visual_{render_format}.mp4"
-            _set_render_stage(pid, current_progress + 2, f"build_visual_{render_format}")
+            visual_phase = f"build_visual_{render_format}"
+            mux_phase = f"mux_{render_format}"
+            _set_render_stage(pid, current_progress + 2, visual_phase)
             _build_visual_track(
                 media_files,
                 total_duration,
                 silent_video,
                 render_format,
                 project["kenburns_enabled"],
+                on_progress=_phase_progress_callback(
+                    pid,
+                    visual_phase,
+                    current_progress + 2,
+                    12,
+                ),
             )
             output_path = _render_output_path(project_dir, render_format)
-            _set_render_stage(pid, current_progress + 8, f"mux_{render_format}")
-            _mux(silent_video, final_audio_wav, subtitle_path, output_path)
+            _set_render_stage(pid, current_progress + 14, mux_phase)
+            _mux(
+                silent_video,
+                final_audio_wav,
+                subtitle_path,
+                output_path,
+                on_progress=_phase_progress_callback(
+                    pid,
+                    mux_phase,
+                    current_progress + 14,
+                    8,
+                ),
+            )
             silent_video.unlink(missing_ok=True)
             current_progress = min(95, current_progress + progress_step)
             _set_render_stage(pid, current_progress, f"done_{render_format}")
 
-        db.update_project(pid, render_state="done", render_progress=100, render_phase="done", render_last_log="")
+        db.update_project(
+            pid,
+            render_state="done",
+            render_progress=100,
+            render_phase="done",
+            render_phase_pct=100,
+            render_progress_detail="완료",
+            render_speed_x=0.0,
+            render_eta_sec=0,
+            render_last_log="",
+        )
     except Exception as exc:
         traceback.print_exc()
-        db.update_project(pid, render_state="error", render_last_log=_format_render_error(exc))
+        db.update_project(
+            pid,
+            render_state="error",
+            render_progress_detail="",
+            render_speed_x=0.0,
+            render_eta_sec=0,
+            render_last_log=_format_render_error(exc),
+        )

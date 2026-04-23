@@ -155,6 +155,10 @@ def start_render(pid: str, bg: BackgroundTasks) -> dict[str, bool]:
         render_state="running",
         render_progress=0,
         render_phase="queued",
+        render_phase_pct=0,
+        render_progress_detail="",
+        render_speed_x=0.0,
+        render_eta_sec=0,
         render_last_log="",
     )
     bg.add_task(render_svc.run_render_job, pid)
@@ -177,6 +181,10 @@ def status(pid: str) -> ProjectStatus:
         "render_state": project["render_state"],
         "render_progress": project["render_progress"],
         "render_phase": project["render_phase"],
+        "render_phase_pct": project["render_phase_pct"],
+        "render_progress_detail": project["render_progress_detail"],
+        "render_speed_x": project["render_speed_x"],
+        "render_eta_sec": project["render_eta_sec"],
         "render_last_log": project["render_last_log"],
         "upload_state": project["upload_state"],
         "upload_progress": project["upload_progress"],

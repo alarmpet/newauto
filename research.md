@@ -466,6 +466,26 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
 
+## 2026-04-24 Render Progress Visibility Update
+
+### Architecture changes
+
+- Added render progress state fields to project persistence for phase-local progress, progress detail text, last observed FFmpeg speed, and ETA.
+- Added `_run_with_progress()` in `app/services/render.py` using `subprocess.Popen` plus FFmpeg `-progress pipe:1` parsing with concurrent stdout/stderr draining.
+- Reused the new progress runner for `normalize_audio`, visual track build, and mux steps so long-running FFmpeg stages can stream status instead of only reporting completion.
+
+### Workflow changes
+
+- Step 4 can now show per-phase progress details such as percent, speed, frame count, elapsed time, and ETA while render is running.
+- When ETA is not reliable, the UI falls back to a size-based or heartbeat-style detail string instead of looking frozen.
+- Running renders no longer show the idle placeholder while progress detail is being collected.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
 ## 2026-04-24 Step 4 Inline Help Update
 
 ### Workflow changes
