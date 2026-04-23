@@ -446,6 +446,29 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
 
+## 2026-04-24 Additional Male Voice Presets Update
+
+### Architecture changes
+
+- Extended the canonical TTS preset catalog with three new middle-aged male presets:
+  - `male-40s-50s-lowmid`
+  - `male-announcer-40s-50s`
+  - `male-pastor-40s-50s`
+- Because Step 3 already hydrates from `/api/tts/presets`, the new presets automatically flow into the runtime dropdown and sample-preview path.
+- Updated `scripts/generate_voice_samples.py` to continue following the canonical preset catalog, so regenerated sample sets include the new presets without extra wiring.
+
+### Workflow changes
+
+- Users can now choose the new 40s~50s male styles in Step 3 and immediately test them with the existing `샘플 듣기` flow.
+- The new presets use supported OmniVoice voice-design token combinations based on `male`, `middle-aged`, `low pitch`, and `moderate pitch`.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+- Verified the preset catalog exposes the new labels and instruct tokens.
+
 ## 2026-04-23 OmniVoice Preview Error Fix
 
 ### Architecture changes
