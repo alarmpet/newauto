@@ -12,6 +12,7 @@ app = FastAPI(title="YT Auto (OmniVoice)")
 @app.on_event("startup")
 def on_startup() -> None:
     db.init_db()
+    db.recover_interrupted_tasks()
 
 
 app.include_router(projects.router)

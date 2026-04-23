@@ -221,3 +221,37 @@ class FeatureWorkflowTests(unittest.TestCase):
         self.assertTrue(check_map["script"])
         self.assertTrue(check_map["tts_state"])
         self.assertTrue(check_map["media_metadata"])
+
+    def test_recover_interrupted_tasks_clears_running_render_state(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            render_state="running",
+            render_progress=70,
+            render_phase="build_visual_landscape",
+            render_phase_pct=25,
+            render_progress_detail="25% | 1.10x | frame 1200 | elapsed 00:01:00",
+            render_speed_x=1.1,
+            render_eta_sec=120,
+            render_last_log="",
+            tts_state="running",
+            upload_state="running",
+            media_upload_state="running",
+            media_upload_error="",
+        )
+
+        summary = db.recover_interrupted_tasks()
+        self.assertGreaterEqual(summary["render"], 1)
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["render_state"], "error")
+        self.assertEqual(project["render_phase"], "")
+        self.assertEqual(project["render_phase_pct"], 0)
+        self.assertEqual(project["render_progress_detail"], "")
+        self.assertEqual(project["render_speed_x"], 0.0)
+        self.assertEqual(project["render_eta_sec"], 0)
+        self.assertIn("interrupted", project["render_last_log"])
+        self.assertEqual(project["tts_state"], "error")
+        self.assertEqual(project["upload_state"], "error")
+        self.assertEqual(project["media_upload_state"], "error")

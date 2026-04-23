@@ -486,6 +486,24 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
 
+## 2026-04-24 Interrupted Task Recovery Update
+
+### Architecture changes
+
+- Added `db.recover_interrupted_tasks()` to convert stale `running` task states into recoverable error states when the server starts again.
+- Wired startup to call interrupted-task recovery immediately after `init_db()`, so background jobs that cannot survive a restart no longer remain stuck as `running`.
+
+### Workflow changes
+
+- After a server restart, interrupted render, TTS, upload, and media upload jobs are automatically marked as interrupted instead of blocking new actions with stale `running` state.
+- Render-specific transient fields such as phase, per-phase progress, speed, and ETA are reset during recovery so the UI starts from a clean state on the next attempt.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
 ## 2026-04-24 Step 4 Inline Help Update
 
 ### Workflow changes

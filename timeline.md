@@ -16,3 +16,4 @@
 - `[2026-04-24-02-11] Step 4 도움말 UI 추가: Render Readiness, 렌더 옵션, 자막 스타일 항목별 인라인 설명 툴팁 적용`
 - `[2026-04-24-02-33] 렌더 visual track 안정화: UTF-8 stderr 디코딩, zoompan 출력 해상도 고정, media_metadata pre-flight, FFmpeg 오류 요약 UI, 회귀 테스트 추가`
 - `[2026-04-24-03-35] 렌더 진행률 가시화: FFmpeg progress 파싱, phase 세부 진행률/ETA 저장, Step 4 실시간 진행 표시, 회귀 테스트 추가`
+- `[2026-04-24-03-48] 재시작 후 작업 복구 추가: stale running 상태를 startup 시 error로 정리하고 render/TTS/upload 재시작 가능하도록 자동 복구`

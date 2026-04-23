@@ -95,6 +95,51 @@ def init_db() -> None:
                 connection.execute(f"ALTER TABLE projects ADD COLUMN {column} {ddl}")
 
 
+def recover_interrupted_tasks() -> dict[str, int]:
+    with tx() as connection:
+        tts_count = connection.execute(
+            "UPDATE projects SET tts_state='error', tts_progress=0, updated_at=? WHERE tts_state='running'",
+            (_now(),),
+        ).rowcount
+        render_count = connection.execute(
+            """
+            UPDATE projects
+            SET
+                render_state='error',
+                render_phase='',
+                render_phase_pct=0,
+                render_progress_detail='',
+                render_speed_x=0,
+                render_eta_sec=0,
+                render_last_log=?,
+                updated_at=?
+            WHERE render_state='running'
+            """,
+            ("Previous render was interrupted when the server restarted. Start render again.", _now()),
+        ).rowcount
+        upload_count = connection.execute(
+            "UPDATE projects SET upload_state='error', upload_progress=0, updated_at=? WHERE upload_state='running'",
+            (_now(),),
+        ).rowcount
+        media_upload_count = connection.execute(
+            """
+            UPDATE projects
+            SET
+                media_upload_state='error',
+                media_upload_error=?,
+                updated_at=?
+            WHERE media_upload_state='running'
+            """,
+            ("Previous media upload was interrupted when the server restarted. Upload the files again.", _now()),
+        ).rowcount
+    return {
+        "tts": tts_count,
+        "render": render_count,
+        "upload": upload_count,
+        "media_upload": media_upload_count,
+    }
+
+
 @contextmanager
 def tx() -> Iterator[sqlite3.Connection]:
     connection = _connect()
