@@ -1,58 +1,55 @@
-# 자막 표시 개선 계획서
+﻿# ?먮쭑 ?쒖떆 媛쒖꽑 怨꾪쉷??
+## 紐⑹쟻
 
-## 목적
+?꾩옱 ?먮쭑 湲곕뒫? ?꾨줈?앺듃蹂??ㅽ?????? ASS ?뚮뜑留? ?됱긽/?ш린/?꾩튂 ?ㅼ젙源뚯? 援ы쁽?섏뼱 ?덈떎. ?ㅼ쓬 媛쒖꽑 紐⑺몴???ㅼ젣 ?곸긽?먯꽌 ?먮쭑?????먯뿰?ㅻ읇寃?蹂댁씠?꾨줉 ?쒗븳 臾몄옣 = ??cue??援ъ“瑜??좎??섎㈃?? ?덈Т 湲?臾몄옣? 理쒕? 2以꾨줈 蹂닿린 醫뗪쾶 ?먮룞 遺꾪븷?섍퀬, ?먮쭑 ?꾩튂瑜?湲곗〈 3?④퀎?먯꽌 5?④퀎濡??뺤옣?섎뒗 寃껋씠??
 
-현재 자막 기능은 프로젝트별 스타일 저장, ASS 렌더링, 색상/크기/위치 설정까지 구현되어 있다. 다음 개선 목표는 실제 영상에서 자막이 더 자연스럽게 보이도록 “한 문장 = 한 cue” 구조를 유지하면서, 너무 긴 문장은 최대 2줄로 보기 좋게 자동 분할하고, 자막 위치를 기존 3단계에서 5단계로 확장하는 것이다.
+異붽?濡??꾩옱 肄붾뱶踰좎씠?ㅻ? ?먭???寃곌낵, ?먮쭑 ??낵 ?쒖떆 ?쒓컙???ㅼ젣 媛?낆꽦??吏곸젒 ?곹뼢??二쇰?濡?`margin_h`, `min_display_sec`, ?꾨━??踰꾪듉???④퍡 怨꾪쉷???ы븿?쒕떎.
 
-추가로 현재 코드베이스를 점검한 결과, 자막 폭과 표시 시간이 실제 가독성에 직접 영향을 주므로 `margin_h`, `min_display_sec`, 프리셋 버튼도 함께 계획에 포함한다.
+## ?꾩옱 肄붾뱶踰좎씠???먭? 寃곌낵
 
-## 현재 코드베이스 점검 결과
+### ?꾩옱 援ы쁽 ?곹깭
 
-### 현재 구현 상태
+- ?먮쭑 ?ㅽ?????낆? [app/types.py](app/types.py)??`SubtitleStyle` 濡??뺤쓽?섏뼱 ?덈떎.
+- ?꾩옱 `SubtitlePosition` ? `top | middle | bottom` 3?④퀎留??덉슜?쒕떎.
+- ?먮쭑 湲곕낯媛믨낵 ASS ?앹꽦? [app/services/subtitle.py](app/services/subtitle.py)???덈떎.
+- ?뚮뜑留곸? [app/services/render.py](app/services/render.py)?먯꽌 `subtitles.ass` 瑜??앹꽦????FFmpeg `ass=` ?꾪꽣濡??낇엺??
+- UI ?ㅼ젙 ?⑤꼸? [app/static/index.html](app/static/index.html), ?곹깭/???濡쒖쭅? [app/static/app.js](app/static/app.js)???덈떎.
+- ?먮쭑 ?ㅽ??????API??[app/routers/projects.py](app/routers/projects.py)??`PUT /api/projects/{pid}/subtitle-style` ???대떦?쒕떎.
+- `scripts/typecheck.ps1` 媛 ?꾨윴??`tsc` ? 諛깆뿏??`mypy`瑜??④퍡 ?ㅽ뻾?쒕떎.
 
-- 자막 스타일 타입은 [app/types.py](app/types.py)에 `SubtitleStyle` 로 정의되어 있다.
-- 현재 `SubtitlePosition` 은 `top | middle | bottom` 3단계만 허용한다.
-- 자막 기본값과 ASS 생성은 [app/services/subtitle.py](app/services/subtitle.py)에 있다.
-- 렌더링은 [app/services/render.py](app/services/render.py)에서 `subtitles.ass` 를 생성한 뒤 FFmpeg `ass=` 필터로 입힌다.
-- UI 설정 패널은 [app/static/index.html](app/static/index.html), 상태/저장 로직은 [app/static/app.js](app/static/app.js)에 있다.
-- 자막 스타일 저장 API는 [app/routers/projects.py](app/routers/projects.py)의 `PUT /api/projects/{pid}/subtitle-style` 이 담당한다.
-- `scripts/typecheck.ps1` 가 프런트 `tsc` 와 백엔드 `mypy`를 함께 실행한다.
+### 諛쒓껄??臾몄젣??
+- [app/services/subtitle.py](app/services/subtitle.py)??`_wrap_long()` ? 湲?臾몄옣??理쒕? 2以꾨줈 ?섎늻吏留? 遺꾪븷 ?꾨낫媛 ?쒖そ?쇰줈 移섏슦移?寃쎌슦瑜?異⑸텇??留됱? 紐삵븳??
+- ?꾩옱 以꾨컮轅덉? 援щ몢???곗꽑留?媛뺥빐???쒓뎅???댁젅 寃쎄퀎? 怨듬갚 寃쎄퀎瑜??쒕?濡??쒖슜?섏? 紐삵븳??
+- ??以꾨줈??`max_line_chars` ?덉뿉 ?ㅼ뼱媛吏 ?딅뒗 湲?臾몄옣??????뺤콉??紐낇솗?섏? ?딅떎.
+- ASS `MarginL`, `MarginR` ??`120` ?쇰줈 怨좎젙?섏뼱 ?덉뼱 醫뚯슦 ?덉쟾 ?곸뿭???꾨줈?앺듃蹂꾨줈 議곗젙?????녿떎.
+- 吏㏃? 臾몄옣 cue媛 ?덈Т 鍮⑤━ 吏?섍컝 ??理쒖냼 ?쒖떆 ?쒓컙??蹂댁옣?섎뒗 濡쒖쭅???녿떎.
+- position ??`top/middle/bottom` 3?④퀎???곷떒 濡쒓퀬, ?섎떒 ?뚰꽣留덊겕, ?쇱툩 UI ?붿냼瑜??쇳븯湲??대졄??
+- UI 誘몃━蹂닿린???꾩옱 3?④퀎 ?꾩튂留??쒕??덉씠?섑븯誘濡?5?④퀎 ?뺤옣 ??媛숈씠 媛깆떊?댁빞 ?쒕떎.
 
-### 발견한 문제점
+## 媛쒖꽑 踰붿쐞
 
-- [app/services/subtitle.py](app/services/subtitle.py)의 `_wrap_long()` 은 긴 문장을 최대 2줄로 나누지만, 분할 후보가 한쪽으로 치우친 경우를 충분히 막지 못한다.
-- 현재 줄바꿈은 구두점 우선만 강해서 한국어 어절 경계와 공백 경계를 제대로 활용하지 못한다.
-- 두 줄로도 `max_line_chars` 안에 들어가지 않는 긴 문장에 대한 정책이 명확하지 않다.
-- ASS `MarginL`, `MarginR` 이 `120` 으로 고정되어 있어 좌우 안전 영역을 프로젝트별로 조정할 수 없다.
-- 짧은 문장 cue가 너무 빨리 지나갈 때 최소 표시 시간을 보장하는 로직이 없다.
-- position 이 `top/middle/bottom` 3단계라 상단 로고, 하단 워터마크, 쇼츠 UI 요소를 피하기 어렵다.
-- UI 미리보기는 현재 3단계 위치만 시뮬레이션하므로 5단계 확장 시 같이 갱신해야 한다.
+?대쾲 怨꾪쉷? ?꾨옒 湲곕뒫???ы븿?쒕떎.
 
-## 개선 범위
+- ?ㅻ쭏??以꾨컮轅? 湲?臾몄옣??理쒕? 2以꾨줈 ?먮룞 遺꾪븷
+- ?먮쭑 ?꾩튂 5?④퀎: `top`, `upper`, `middle`, `lower`, `bottom`
+- 媛濡??щ갚 ?ㅼ젙: `margin_h`
+- 理쒖냼 ?쒖떆 ?쒓컙 ?ㅼ젙: `min_display_sec`
+- UI ?꾨━??4醫? 湲곕낯, ??湲?? 誘몃땲硫, 媛뺤“
+- 湲곗〈 ?꾨줈?앺듃? DB ?명솚 ?좎?
+- ??낆껜?ъ? ?⑥쐞 ?뚯뒪??蹂닿컯
 
-이번 계획은 아래 기능을 포함한다.
+## ?ㅺ퀎 ?먯튃
 
-- 스마트 줄바꿈: 긴 문장을 최대 2줄로 자동 분할
-- 자막 위치 5단계: `top`, `upper`, `middle`, `lower`, `bottom`
-- 가로 여백 설정: `margin_h`
-- 최소 표시 시간 설정: `min_display_sec`
-- UI 프리셋 4종: 기본, 큰 글씨, 미니멀, 강조
-- 기존 프로젝트와 DB 호환 유지
-- 타입체크와 단위 테스트 보강
+- ??臾몄옣? ?섎굹??subtitle cue 濡??좎??쒕떎.
+- ??cue ?덉뿉?쒕쭔 理쒕? 2以꾨줈 ?섎늿??
+- 3以??댁긽 ?먮룞 遺꾪븷? ?섏? ?딅뒗??
+- ?덈Т 湲?臾몄옣? ??以?以??쇰?媛 `max_line_chars` 瑜??섎뜑?쇰룄 2以??뺤콉???곗꽑?쒕떎.
+- 援щ몢?먮낫???쒓퇏???≫엺 以?湲몄씠?앸? ?곗꽑?쒕떎.
+- ?쒓뎅???곸뼱 紐⑤몢 怨듬갚怨?援щ몢??寃쎄퀎瑜??곗꽑 ?ъ슜?쒕떎.
+- `any` ? `unknown` ??낆? ?ъ슜?섏? ?딅뒗??
 
-## 설계 원칙
-
-- 한 문장은 하나의 subtitle cue 로 유지한다.
-- 한 cue 안에서만 최대 2줄로 나눈다.
-- 3줄 이상 자동 분할은 하지 않는다.
-- 너무 긴 문장은 두 줄 중 일부가 `max_line_chars` 를 넘더라도 2줄 정책을 우선한다.
-- 구두점보다 “균형 잡힌 줄 길이”를 우선한다.
-- 한국어/영어 모두 공백과 구두점 경계를 우선 사용한다.
-- `any` 와 `unknown` 타입은 사용하지 않는다.
-
-## 데이터 모델 변경
-
-### 타입 확장
+## ?곗씠??紐⑤뜽 蹂寃?
+### ????뺤옣
 
 [app/types.py](app/types.py)
 
@@ -60,14 +57,14 @@
 SubtitlePosition = Literal["top", "upper", "middle", "lower", "bottom"]
 ```
 
-`SubtitleStyle` 에 필드 추가:
+`SubtitleStyle` ???꾨뱶 異붽?:
 
 ```python
 margin_h: int
 min_display_sec: float
 ```
 
-기존 필드:
+湲곗〈 ?꾨뱶:
 
 ```python
 margin_v: int
@@ -75,95 +72,92 @@ max_line_chars: int
 position: SubtitlePosition
 ```
 
-### 기본값
-
-[app/services/subtitle.py](app/services/subtitle.py)의 `DEFAULT_SUBTITLE_STYLE` 에 추가:
+### 湲곕낯媛?
+[app/services/subtitle.py](app/services/subtitle.py)??`DEFAULT_SUBTITLE_STYLE` ??異붽?:
 
 ```python
 "margin_h": 120,
 "min_display_sec": 1.0,
 ```
 
-권장 범위:
+沅뚯옣 踰붿쐞:
 
 - `margin_h`: `0~400`
 - `min_display_sec`: `0.5~3.0`
 
-### 기존 프로젝트 호환성
+### 湲곗〈 ?꾨줈?앺듃 ?명솚??
+湲곗〈 DB??`subtitle_style` JSON?먮뒗 ???꾨뱶媛 ?놁쓣 ???덈떎. `normalize_subtitle_style()` ??湲곕낯媛믪쑝濡?merge ?섎?濡?DB migration ?놁씠 ?먯뿰?ㅻ읇寃??명솚?쒕떎.
 
-기존 DB의 `subtitle_style` JSON에는 새 필드가 없을 수 있다. `normalize_subtitle_style()` 이 기본값으로 merge 하므로 DB migration 없이 자연스럽게 호환된다.
+## ?ㅻ쭏??以꾨컮轅??ㅺ퀎
 
-## 스마트 줄바꿈 설계
+### 湲곗〈 臾몄젣
 
-### 기존 문제
+?꾩옱 `_wrap_long(text, max_len)` ? ?ㅼ쓬 ?쒓퀎媛 ?덈떎.
 
-현재 `_wrap_long(text, max_len)` 은 다음 한계가 있다.
+- 援щ몢?먯씠 臾몄옣 珥덈컲???덉쑝硫?泥?以꾩씠 ?덈Т 吏㏃븘吏????덈떎.
+- ?섏㎏ 以?湲몄씠媛 吏?섏튂寃?湲몄뼱?몃룄 寃利앺븯吏 ?딅뒗??
+- 怨듬갚/?댁젅 寃쎄퀎瑜?異⑸텇???곗꽑?섏? ?딅뒗??
 
-- 구두점이 문장 초반에 있으면 첫 줄이 너무 짧아질 수 있다.
-- 둘째 줄 길이가 지나치게 길어져도 검증하지 않는다.
-- 공백/어절 경계를 충분히 우선하지 않는다.
+### ???⑥닔
 
-### 새 함수
-
-`_wrap_long()` 을 바로 삭제하지 말고 내부 구현을 `_smart_wrap()` 로 위임하거나, 호출처를 모두 `_smart_wrap()` 로 교체한다.
+`_wrap_long()` ??諛붾줈 ??젣?섏? 留먭퀬 ?대? 援ы쁽??`_smart_wrap()` 濡??꾩엫?섍굅?? ?몄텧泥섎? 紐⑤몢 `_smart_wrap()` 濡?援먯껜?쒕떎.
 
 ```python
 def _smart_wrap(text: str, max_line_chars: int) -> str:
     ...
 ```
 
-### 분할 알고리즘
+### 遺꾪븷 ?뚭퀬由ъ쬁
 
-1. 앞뒤 공백 제거
-2. 길이가 `max_line_chars` 이하이면 그대로 반환
-3. 두 줄이 모두 `max_line_chars` 이하가 될 수 있는 후보 범위 계산
-4. 후보 범위 안에서 중앙에 가장 가까운 분할 지점을 찾음
-5. 우선순위는 문장 종결 구두점, 약한 구두점, 공백, 강제 분할 순서
-6. 후보 범위가 성립하지 않을 만큼 긴 문장은 중앙 50% 주변에서 가장 자연스러운 지점을 찾음
-7. 결과는 항상 1줄 또는 2줄만 반환
+1. ?욌뮘 怨듬갚 ?쒓굅
+2. 湲몄씠媛 `max_line_chars` ?댄븯?대㈃ 洹몃?濡?諛섑솚
+3. ??以꾩씠 紐⑤몢 `max_line_chars` ?댄븯媛 ?????덈뒗 ?꾨낫 踰붿쐞 怨꾩궛
+4. ?꾨낫 踰붿쐞 ?덉뿉??以묒븰??媛??媛源뚯슫 遺꾪븷 吏?먯쓣 李얠쓬
+5. ?곗꽑?쒖쐞??臾몄옣 醫낃껐 援щ몢?? ?쏀븳 援щ몢?? 怨듬갚, 媛뺤젣 遺꾪븷 ?쒖꽌
+6. ?꾨낫 踰붿쐞媛 ?깅┰?섏? ?딆쓣 留뚰겮 湲?臾몄옣? 以묒븰 50% 二쇰??먯꽌 媛???먯뿰?ㅻ윭??吏?먯쓣 李얠쓬
+7. 寃곌낵????긽 1以??먮뒗 2以꾨쭔 諛섑솚
 
-우선순위:
+?곗꽑?쒖쐞:
 
-1. `.?!。？！`
-2. `,;:，、`
-3. 공백
-4. 강제 중앙 분할
+1. `.?!?귨폕竊?
+2. `,;:竊뚣?
+3. 怨듬갚
+4. 媛뺤젣 以묒븰 遺꾪븷
 
-한국어 특성상 공백이 있으면 어절 경계를 우선하고, 공백이 없는 긴 문자열은 중앙 분할을 허용한다.
+?쒓뎅???뱀꽦??怨듬갚???덉쑝硫??댁젅 寃쎄퀎瑜??곗꽑?섍퀬, 怨듬갚???녿뒗 湲?臾몄옄?댁? 以묒븰 遺꾪븷???덉슜?쒕떎.
 
-### 테스트 케이스
+### ?뚯뒪??耳?댁뒪
 
-- 짧은 문장은 줄바꿈하지 않는다.
-- 한국어 긴 문장은 공백 근처에서 2줄로 나뉜다.
-- 문장 중간 근처의 마침표 또는 쉼표를 우선한다.
-- 문장 초반 구두점은 무시하거나 낮은 점수로 처리해 5/95 같은 분할을 피한다.
-- 공백 없는 긴 문자열은 중앙 근처에서 강제 분할한다.
-- 두 줄로도 `max_line_chars` 안에 못 들어가는 문장은 2줄 오버플로를 허용한다.
-- `write_srt()` 와 `write_ass()` 모두 같은 줄바꿈 결과를 사용한다.
+- 吏㏃? 臾몄옣? 以꾨컮轅덊븯吏 ?딅뒗??
+- ?쒓뎅??湲?臾몄옣? 怨듬갚 洹쇱쿂?먯꽌 2以꾨줈 ?섎돏??
+- 臾몄옣 以묎컙 洹쇱쿂??留덉묠???먮뒗 ?쇳몴瑜??곗꽑?쒕떎.
+- 臾몄옣 珥덈컲 援щ몢?먯? 臾댁떆?섍굅????? ?먯닔濡?泥섎━??5/95 媛숈? 遺꾪븷???쇳븳??
+- 怨듬갚 ?녿뒗 湲?臾몄옄?댁? 以묒븰 洹쇱쿂?먯꽌 媛뺤젣 遺꾪븷?쒕떎.
+- ??以꾨줈??`max_line_chars` ?덉뿉 紐??ㅼ뼱媛??臾몄옣? 2以??ㅻ쾭?뚮줈瑜??덉슜?쒕떎.
+- `write_srt()` ? `write_ass()` 紐⑤몢 媛숈? 以꾨컮轅?寃곌낵瑜??ъ슜?쒕떎.
 
-## 자막 위치 5단계 설계
+## ?먮쭑 ?꾩튂 5?④퀎 ?ㅺ퀎
 
-### 새 position 값
+### ??position 媛?
+- `top`: ?곷떒
+- `upper`: ?곸쨷
+- `middle`: 以묒븰
+- `lower`: ?섏쨷
+- `bottom`: ?섎떒
 
-- `top`: 상단
-- `upper`: 상중
-- `middle`: 중앙
-- `lower`: 하중
-- `bottom`: 하단
+### ASS 留ㅽ븨
 
-### ASS 매핑
-
-ASS alignment 와 `MarginV` 조합으로 구현한다.
+ASS alignment ? `MarginV` 議고빀?쇰줈 援ы쁽?쒕떎.
 
 | position | ASS Alignment | MarginV |
 |---|---:|---:|
-| `top` | 8 | 사용자 `margin_v` |
+| `top` | 8 | ?ъ슜??`margin_v` |
 | `upper` | 8 | `int(1080 * 0.25)` |
 | `middle` | 5 | 0 |
 | `lower` | 2 | `int(1080 * 0.25)` |
-| `bottom` | 2 | 사용자 `margin_v` |
+| `bottom` | 2 | ?ъ슜??`margin_v` |
 
-추가 함수:
+異붽? ?⑥닔:
 
 ```python
 def _ass_alignment(position: SubtitlePosition) -> int:
@@ -173,46 +167,46 @@ def _ass_margin_v(position: SubtitlePosition, user_margin_v: int) -> int:
     ...
 ```
 
-주의:
+二쇱쓽:
 
-- `upper`, `middle`, `lower` 에서는 `margin_v` 의미가 약하므로 UI에서 안내 문구를 표시한다.
-- `top`, `bottom` 에서는 기존처럼 `margin_v` 를 사용한다.
+- `upper`, `middle`, `lower` ?먯꽌??`margin_v` ?섎?媛 ?쏀븯誘濡?UI?먯꽌 ?덈궡 臾멸뎄瑜??쒖떆?쒕떎.
+- `top`, `bottom` ?먯꽌??湲곗〈泥섎읆 `margin_v` 瑜??ъ슜?쒕떎.
 
-## 가로 여백 `margin_h`
+## 媛濡??щ갚 `margin_h`
 
-현재 ASS Style 라인의 `MarginL`, `MarginR` 은 `120` 으로 고정되어 있다. 이를 `SubtitleStyle.margin_h` 로 제어한다.
+?꾩옱 ASS Style ?쇱씤??`MarginL`, `MarginR` ? `120` ?쇰줈 怨좎젙?섏뼱 ?덈떎. ?대? `SubtitleStyle.margin_h` 濡??쒖뼱?쒕떎.
 
-변경 위치:
+蹂寃??꾩튂:
 
 - [app/types.py](app/types.py): `SubtitleStyle.margin_h`
-- [app/services/subtitle.py](app/services/subtitle.py): 기본값, normalize, `write_ass()` Style 라인
+- [app/services/subtitle.py](app/services/subtitle.py): 湲곕낯媛? normalize, `write_ass()` Style ?쇱씤
 - [app/routers/projects.py](app/routers/projects.py): `SubtitleStylePayload.margin_h`
-- [app/static/index.html](app/static/index.html): slider 또는 number input
-- [app/static/app.js](app/static/app.js): 타입 주석, form read/write, preview 반영
+- [app/static/index.html](app/static/index.html): slider ?먮뒗 number input
+- [app/static/app.js](app/static/app.js): ???二쇱꽍, form read/write, preview 諛섏쁺
 
-ASS 출력:
+ASS 異쒕젰:
 
 ```python
 f"{normalized['margin_h']},{normalized['margin_h']},"
 ```
 
-## 최소 표시 시간 `min_display_sec`
+## 理쒖냼 ?쒖떆 ?쒓컙 `min_display_sec`
 
-짧은 cue가 너무 빨리 사라지는 문제를 줄이기 위해 `min_display_sec` 을 추가한다.
+吏㏃? cue媛 ?덈Т 鍮⑤━ ?щ씪吏??臾몄젣瑜?以꾩씠湲??꾪빐 `min_display_sec` ??異붽??쒕떎.
 
-정책:
+?뺤콉:
 
-- cue 길이가 `min_display_sec` 보다 짧으면 end 시간을 늘린다.
-- 다음 cue 시작 시간을 침범하지 않는다.
-- 다음 cue와 최소 `0.05s` 간격을 유지한다.
-- 이미 충분히 긴 cue는 변경하지 않는다.
+- cue 湲몄씠媛 `min_display_sec` 蹂대떎 吏㏃쑝硫?end ?쒓컙???섎┛??
+- ?ㅼ쓬 cue ?쒖옉 ?쒓컙??移⑤쾾?섏? ?딅뒗??
+- ?ㅼ쓬 cue? 理쒖냼 `0.05s` 媛꾧꺽???좎??쒕떎.
+- ?대? 異⑸텇??湲?cue??蹂寃쏀븯吏 ?딅뒗??
 
-적용 대상:
+?곸슜 ???
 
 - `write_ass()`
-- 가능하면 `write_srt()` 도 동일 보정 적용
+- 媛?ν븯硫?`write_srt()` ???숈씪 蹂댁젙 ?곸슜
 
-예시:
+?덉떆:
 
 ```python
 desired_end = max(end, start + min_display_sec)
@@ -220,11 +214,11 @@ if next_start is not None:
     desired_end = min(desired_end, max(end, next_start - 0.05))
 ```
 
-## UI 개선
+## UI 媛쒖꽑
 
-### 위치 선택
+### ?꾩튂 ?좏깮
 
-[app/static/index.html](app/static/index.html)의 position select 를 5개로 확장한다.
+[app/static/index.html](app/static/index.html)??position select 瑜?5媛쒕줈 ?뺤옣?쒕떎.
 
 ```html
 <option value="top">Top</option>
@@ -234,36 +228,33 @@ if next_start is not None:
 <option value="bottom">Bottom</option>
 ```
 
-### 새 입력 필드
+### ???낅젰 ?꾨뱶
 
-- `margin_h`: 가로 여백
-- `min_display_sec`: 최소 표시 시간
+- `margin_h`: 媛濡??щ갚
+- `min_display_sec`: 理쒖냼 ?쒖떆 ?쒓컙
 
-### position 안내
+### position ?덈궡
 
-`position` 이 `upper`, `middle`, `lower` 일 때:
+`position` ??`upper`, `middle`, `lower` ????
 
-- `margin_v` 입력을 비활성화하거나
-- “이 위치에서는 세로 여백이 고정 위치 계산에 의해 제한됩니다.” 안내 표시
+- `margin_v` ?낅젰??鍮꾪솢?깊솕?섍굅??- ?쒖씠 ?꾩튂?먯꽌???몃줈 ?щ갚??怨좎젙 ?꾩튂 怨꾩궛???섑빐 ?쒗븳?⑸땲?????덈궡 ?쒖떆
 
-1차 구현은 비활성화보다 안내 표시를 추천한다. 비활성화하면 기존 저장값과 UI 상태가 헷갈릴 수 있다.
+1李?援ы쁽? 鍮꾪솢?깊솕蹂대떎 ?덈궡 ?쒖떆瑜?異붿쿇?쒕떎. 鍮꾪솢?깊솕?섎㈃ 湲곗〈 ??κ컪怨?UI ?곹깭媛 ?룰컝由????덈떎.
 
-### 프리셋 4종
+### ?꾨━??4醫?
+UI only 湲곕뒫?쇰줈 援ы쁽?쒕떎. ?꾨━??踰꾪듉? ?낅젰媛믩쭔 諛붽씀怨? ??μ? 湲곗〈 `Save subtitle style` 踰꾪듉?쇰줈 ?쒕떎.
 
-UI only 기능으로 구현한다. 프리셋 버튼은 입력값만 바꾸고, 저장은 기존 `Save subtitle style` 버튼으로 한다.
-
-| 프리셋 | 적용값 |
+| ?꾨━??| ?곸슜媛?|
 |---|---|
-| 기본 | `DEFAULT_SUBTITLE_STYLE` |
-| 큰 글씨 | `font_size=64`, `outline_width=3`, `shadow=2` |
-| 미니멀 | `shadow=0`, `outline_width=1`, `primary_color="#DDDDDD"`, `effect="none"` |
-| 강조 | `primary_color="#FFE066"`, `outline_width=4`, `effect="pop"` |
+| 湲곕낯 | `DEFAULT_SUBTITLE_STYLE` |
+| ??湲??| `font_size=64`, `outline_width=3`, `shadow=2` |
+| 誘몃땲硫 | `shadow=0`, `outline_width=1`, `primary_color="#DDDDDD"`, `effect="none"` |
+| 媛뺤“ | `primary_color="#FFE066"`, `outline_width=4`, `effect="pop"` |
 
-## API 변경
-
+## API 蹂寃?
 ### `PUT /api/projects/{pid}/subtitle-style`
 
-[app/routers/projects.py](app/routers/projects.py)의 `SubtitleStylePayload` 에 필드 추가:
+[app/routers/projects.py](app/routers/projects.py)??`SubtitleStylePayload` ???꾨뱶 異붽?:
 
 ```python
 margin_h: int | None = Field(default=None, ge=0, le=400)
@@ -271,111 +262,106 @@ min_display_sec: float | None = Field(default=None, ge=0.5, le=3.0)
 position: SubtitlePosition | None = None
 ```
 
-`to_patch()` 대상 필드에도 `margin_h`, `min_display_sec` 를 포함한다.
+`to_patch()` ????꾨뱶?먮룄 `margin_h`, `min_display_sec` 瑜??ы븿?쒕떎.
 
-## 테스트 계획
+## ?뚯뒪??怨꾪쉷
 
-### 백엔드 테스트
+### 諛깆뿏???뚯뒪??
+湲곗〈 [tests/test_subtitle_rendering.py](tests/test_subtitle_rendering.py)瑜??뺤옣?섍굅??`tests/test_subtitle_display.py` 瑜?異붽??쒕떎.
 
-기존 [tests/test_subtitle_rendering.py](tests/test_subtitle_rendering.py)를 확장하거나 `tests/test_subtitle_display.py` 를 추가한다.
+?뚯뒪????ぉ:
 
-테스트 항목:
+- `_smart_wrap()` ??吏㏃? 臾몄옣??洹몃?濡?諛섑솚
+- `_smart_wrap()` ??湲?臾몄옣??理쒕? 2以꾨줈 諛섑솚
+- 珥덈컲 援щ몢???뚮Ц????以꾩씠 吏?섏튂寃?吏㏃븘吏吏 ?딆쓬
+- 怨듬갚 ?녿뒗 湲?臾몄옄?대룄 2以꾨줈 遺꾪븷
+- `SubtitlePosition` 5媛쒓? 紐⑤몢 normalize ?듦낵
+- `upper/lower/middle` ??ASS alignment/margin 寃곌낵 ?뺤씤
+- `margin_h` 媛 ASS Style MarginL/MarginR ??諛섏쁺
+- `min_display_sec` ??吏㏃? cue end ?쒓컙???섎┝
+- `min_display_sec` ???ㅼ쓬 cue ?쒖옉 ?쒓컙??移⑤쾾?섏? ?딆쓬
+- 湲곗〈 subtitle style JSON?????꾨뱶媛 ?놁뼱??湲곕낯媛?merge
 
-- `_smart_wrap()` 이 짧은 문장을 그대로 반환
-- `_smart_wrap()` 이 긴 문장을 최대 2줄로 반환
-- 초반 구두점 때문에 한 줄이 지나치게 짧아지지 않음
-- 공백 없는 긴 문자열도 2줄로 분할
-- `SubtitlePosition` 5개가 모두 normalize 통과
-- `upper/lower/middle` 의 ASS alignment/margin 결과 확인
-- `margin_h` 가 ASS Style MarginL/MarginR 에 반영
-- `min_display_sec` 이 짧은 cue end 시간을 늘림
-- `min_display_sec` 이 다음 cue 시작 시간을 침범하지 않음
-- 기존 subtitle style JSON에 새 필드가 없어도 기본값 merge
-
-### 프런트엔드 타입체크
-
-`app/static/app.js`의 JSDoc 타입을 확장한 뒤 아래를 통과해야 한다.
+### ?꾨윴?몄뿏????낆껜??
+`app/static/app.js`??JSDoc ??낆쓣 ?뺤옣?????꾨옒瑜??듦낵?댁빞 ?쒕떎.
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 ```
 
-### 전체 테스트
-
+### ?꾩껜 ?뚯뒪??
 ```powershell
 .\omnivoice_env\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
-## 구현 순서
+## 援ы쁽 ?쒖꽌
 
-### Phase 1. [대기] 타입과 기본값 확장
+### Phase 1. [완료] 타입 확장과 기본값 정리
 
-- `SubtitlePosition` 을 5단계로 확장
-- `SubtitleStyle` 에 `margin_h`, `min_display_sec` 추가
-- `DEFAULT_SUBTITLE_STYLE` 과 `normalize_subtitle_style()` 확장
-- `SubtitleStylePayload` 검증 필드 확장
-- typecheck 실행
+- `SubtitlePosition` ??5?④퀎濡??뺤옣
+- `SubtitleStyle` ??`margin_h`, `min_display_sec` 異붽?
+- `DEFAULT_SUBTITLE_STYLE` 怨?`normalize_subtitle_style()` ?뺤옣
+- `SubtitleStylePayload` 寃利??꾨뱶 ?뺤옣
+- typecheck ?ㅽ뻾
 
-### Phase 2. [대기] 스마트 줄바꿈 구현
+### Phase 2. [완료] 스마트 줄바꿈 구현
 
-- `_smart_wrap()` 추가
-- `_wrap_long()` 호출처를 새 로직으로 교체 또는 내부 위임
-- SRT/ASS가 같은 줄바꿈 정책을 사용하게 정리
-- 단위 테스트 추가
-- typecheck 및 unittest 실행
+- `_smart_wrap()` 異붽?
+- `_wrap_long()` ?몄텧泥섎? ??濡쒖쭅?쇰줈 援먯껜 ?먮뒗 ?대? ?꾩엫
+- SRT/ASS媛 媛숈? 以꾨컮轅??뺤콉???ъ슜?섍쾶 ?뺣━
+- ?⑥쐞 ?뚯뒪??異붽?
+- typecheck 諛?unittest ?ㅽ뻾
 
-### Phase 3. [대기] 5단계 position 렌더링 구현
+### Phase 3. [완료] 5단계 position 렌더 반영
 
-- `_POSITION_VALUES` 확장
-- `_ass_alignment()` 갱신
-- `_ass_margin_v()` 추가
-- `write_ass()` 에 적용
-- position별 ASS 출력 테스트 추가
-- typecheck 및 unittest 실행
+- `_POSITION_VALUES` ?뺤옣
+- `_ass_alignment()` 媛깆떊
+- `_ass_margin_v()` 異붽?
+- `write_ass()` ???곸슜
+- position蹂?ASS 異쒕젰 ?뚯뒪??異붽?
+- typecheck 諛?unittest ?ㅽ뻾
 
-### Phase 4. [대기] `margin_h`, `min_display_sec` 렌더 반영
+### Phase 4. [완료] margin_h와 min_display_sec 반영
 
-- ASS MarginL/MarginR 을 `margin_h` 로 변경
-- cue end time 보정 함수 추가
-- `write_ass()` 와 `write_srt()` 에 적용
-- 테스트 추가
-- typecheck 및 unittest 실행
+- ASS MarginL/MarginR ??`margin_h` 濡?蹂寃?- cue end time 蹂댁젙 ?⑥닔 異붽?
+- `write_ass()` ? `write_srt()` ???곸슜
+- ?뚯뒪??異붽?
+- typecheck 諛?unittest ?ㅽ뻾
 
-### Phase 5. [대기] UI 확장
+### Phase 5. [완료] UI 확장
 
-- position select 를 5단계로 확장
-- `margin_h`, `min_display_sec` 입력 추가
-- 프리셋 버튼 4개 추가
-- app.js 타입/상태/저장/미리보기 로직 확장
-- margin_v 안내 문구 추가
-- typecheck 실행
+- position select 瑜?5?④퀎濡??뺤옣
+- `margin_h`, `min_display_sec` ?낅젰 異붽?
+- ?꾨━??踰꾪듉 4媛?異붽?
+- app.js ????곹깭/???誘몃━蹂닿린 濡쒖쭅 ?뺤옣
+- margin_v ?덈궡 臾멸뎄 異붽?
+- typecheck ?ㅽ뻾
 
-### Phase 6. [대기] 문서와 검증 마무리
+### Phase 6. [완료] 문서와 검증 마무리
+- 怨꾪쉷?쒖뿉???꾨즺??Phase瑜?`[?꾨즺]`濡??쒖떆
+- ?꾪궎?띿쿂/?뚰겕?뚮줈??蹂寃???`research.md` ?낅뜲?댄듃
+- `timeline.md` ??而ㅻ컠 ?쒓컙怨??묒뾽 ?붿빟 異붽?
+- Git 而ㅻ컠 諛??몄떆
 
-- 계획서에서 완료된 Phase를 `[완료]`로 표시
-- 아키텍처/워크플로우 변경 시 `research.md` 업데이트
-- `timeline.md` 에 커밋 시간과 작업 요약 추가
-- Git 커밋 및 푸시
+## 由ъ뒪?ъ? ???
+- 湲?臾몄옣??臾댁“嫄?2以꾨줈 ?쒗븳?섎㈃ ?쇰? 臾몄옣? ??以꾩씠 `max_line_chars` 瑜??섏쓣 ???덈떎.
+- ??? 2以??뺤콉???곗꽑?섎릺 `margin_h`, `max_line_chars` 議곗젙?쇰줈 ?ъ슜?먭? 蹂댁젙 媛?ν븯寃??쒕떎.
+- `upper/lower` ?꾩튂媛 紐⑤뱺 ?곸긽 ?덉씠?꾩썐??留욎????딆쓣 ???덈떎.
+- ??? 1李⑤뒗 25% 怨좎젙, 異뷀썑 position蹂?offset 鍮꾩쑉??蹂꾨룄 ?꾨뱶濡??뺤옣 媛?ν븯寃??ㅺ퀎?쒕떎.
+- `min_display_sec` ???곗냽??吏㏃? cue?먯꽌??泥닿컧 ?④낵媛 ?묒쓣 ???덈떎.
+- ??? ?ㅼ쓬 cue 移⑤쾾 諛⑹?瑜??곗꽑?섍퀬, ?꾩슂?섎㈃ TTS timing ?④퀎?먯꽌 蹂묓빀 ?듭뀡??蹂꾨룄 怨꾪쉷?쇰줈 遺꾨━?쒕떎.
+- UI ?꾨━?뗭씠 ???踰꾪듉 ?놁씠 利됱떆 ??λ릺硫??ㅼ닔 媛?μ꽦???덈떎.
+- ??? ?꾨━?뗭? ?낅젰媛믩쭔 蹂寃쏀븯怨???μ? 紐낆떆 踰꾪듉?쇰줈 ?좎??쒕떎.
 
-## 리스크와 대응
+## ?꾨즺 湲곗?
 
-- 긴 문장을 무조건 2줄로 제한하면 일부 문장은 한 줄이 `max_line_chars` 를 넘을 수 있다.
-- 대응: 2줄 정책을 우선하되 `margin_h`, `max_line_chars` 조정으로 사용자가 보정 가능하게 한다.
-- `upper/lower` 위치가 모든 영상 레이아웃에 맞지는 않을 수 있다.
-- 대응: 1차는 25% 고정, 추후 position별 offset 비율을 별도 필드로 확장 가능하게 설계한다.
-- `min_display_sec` 이 연속된 짧은 cue에서는 체감 효과가 작을 수 있다.
-- 대응: 다음 cue 침범 방지를 우선하고, 필요하면 TTS timing 단계에서 병합 옵션을 별도 계획으로 분리한다.
-- UI 프리셋이 저장 버튼 없이 즉시 저장되면 실수 가능성이 있다.
-- 대응: 프리셋은 입력값만 변경하고 저장은 명시 버튼으로 유지한다.
+- 湲??먮쭑??理쒕? 2以꾨줈 ?먯뿰?ㅻ읇寃?遺꾪븷?쒕떎.
+- 珥덈컲 援щ몢???뚮Ц????湲???먮뒗 留ㅼ슦 吏㏃? 以꾩씠 ?앷린吏 ?딅뒗??
+- position 5?④퀎媛 ??? API, UI, ASS ?뚮뜑留곸뿉 紐⑤몢 諛섏쁺?쒕떎.
+- `margin_h` 媛 ASS MarginL/MarginR ??諛섏쁺?쒕떎.
+- `min_display_sec` ??吏㏃? cue ?쒖떆 ?쒓컙??蹂댁젙?섎릺 ?ㅼ쓬 cue瑜?移⑤쾾?섏? ?딅뒗??
+- ?꾨━??4醫낆씠 UI?먯꽌 ?낅젰媛믨낵 誘몃━蹂닿린瑜?利됱떆 媛깆떊?쒕떎.
+- 湲곗〈 ?꾨줈?앺듃?????꾨뱶 ?놁씠???뺤긽 ?묐룞?쒕떎.
+- `scripts/typecheck.ps1` ?듦낵
+- `python -m unittest discover -s tests -v` ?듦낵
 
-## 완료 기준
-
-- 긴 자막이 최대 2줄로 자연스럽게 분할된다.
-- 초반 구두점 때문에 한 글자 또는 매우 짧은 줄이 생기지 않는다.
-- position 5단계가 타입, API, UI, ASS 렌더링에 모두 반영된다.
-- `margin_h` 가 ASS MarginL/MarginR 에 반영된다.
-- `min_display_sec` 이 짧은 cue 표시 시간을 보정하되 다음 cue를 침범하지 않는다.
-- 프리셋 4종이 UI에서 입력값과 미리보기를 즉시 갱신한다.
-- 기존 프로젝트는 새 필드 없이도 정상 작동한다.
-- `scripts/typecheck.ps1` 통과
-- `python -m unittest discover -s tests -v` 통과

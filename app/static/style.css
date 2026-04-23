@@ -553,6 +553,27 @@ video {
   padding: 4px;
 }
 
+.subtitle-preset-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.subtitle-preset-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.subtitle-preset {
+  padding: 7px 12px;
+}
+
+.subtitle-position-hint {
+  margin-top: -6px;
+}
+
 .subtitle-preview-stage {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -569,7 +590,7 @@ video {
 .subtitle-preview-caption {
   position: absolute;
   left: 50%;
-  max-width: 86%;
+  width: min(86%, calc(100% - 64px));
   padding: 6px 12px;
   border-radius: 10px;
   text-align: center;

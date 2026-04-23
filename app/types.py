@@ -5,7 +5,7 @@ from typing_extensions import TypedDict
 TaskState = Literal["idle", "running", "done", "error"]
 MediaKind = Literal["image", "video"]
 PrivacyValue = Literal["private", "unlisted", "public"]
-SubtitlePosition = Literal["top", "middle", "bottom"]
+SubtitlePosition = Literal["top", "upper", "middle", "lower", "bottom"]
 SubtitleEffect = Literal["none", "fade", "pop"]
 VoicePresetArg = str | float
 VoiceRuntimeDType = Literal["float16", "float32"]
@@ -21,8 +21,10 @@ class SubtitleStyle(TypedDict):
     outline_width: int
     shadow: int
     position: SubtitlePosition
+    margin_h: int
     margin_v: int
     max_line_chars: int
+    min_display_sec: float
     effect: SubtitleEffect
 
 

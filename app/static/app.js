@@ -1,10 +1,10 @@
-// @ts-check
+﻿// @ts-check
 
 /**
  * @typedef {"idle" | "running" | "done" | "error"} TaskState
  * @typedef {"image" | "video"} MediaKind
  * @typedef {"idle" | "uploading" | "processing" | "done" | "error"} MediaClientPhase
- * @typedef {"top" | "middle" | "bottom"} SubtitlePosition
+ * @typedef {"top" | "upper" | "middle" | "lower" | "bottom"} SubtitlePosition
  * @typedef {"none" | "fade" | "pop"} SubtitleEffect
  */
 
@@ -19,8 +19,10 @@
  *   outline_width: number,
  *   shadow: number,
  *   position: SubtitlePosition,
+ *   margin_h: number,
  *   margin_v: number,
  *   max_line_chars: number,
+ *   min_display_sec: number,
  *   effect: SubtitleEffect,
  * }} SubtitleStyle
  */
@@ -276,7 +278,7 @@ function mediaKindFromName(name) {
  * @returns {SubtitlePosition}
  */
 function subtitlePositionFromValue(value) {
-  if (value === "top" || value === "middle" || value === "bottom") {
+  if (value === "top" || value === "upper" || value === "middle" || value === "lower" || value === "bottom") {
     return value;
   }
   return "bottom";
@@ -328,9 +330,9 @@ function readableTaskState(state) {
     case "running":
       return "진행 중";
     case "done":
-      return "완료";
+      return "?꾨즺";
     case "error":
-      return "오류";
+      return "?ㅻ쪟";
     default:
       return "대기";
   }
@@ -348,7 +350,7 @@ let draggingMediaName = null;
 let mediaClientState = {
   phase: "idle",
   transferProgress: 0,
-  message: "업로드를 시작하면 파일별 진행 상황이 여기에 표시됩니다.",
+  message: "?낅줈?쒕? ?쒖옉?섎㈃ ?뚯씪蹂?吏꾪뻾 ?곹솴???ш린???쒖떆?⑸땲??",
   lastAccepted: [],
   lastSkipped: [],
 };
@@ -364,9 +366,32 @@ const DEFAULT_SUBTITLE_STYLE = {
   outline_width: 2,
   shadow: 1,
   position: "bottom",
+  margin_h: 120,
   margin_v: 80,
   max_line_chars: 40,
+  min_display_sec: 1,
   effect: "none",
+};
+
+/** @type {Record<string, Partial<SubtitleStyle>>} */
+const SUBTITLE_PRESETS = {
+  default: { ...DEFAULT_SUBTITLE_STYLE },
+  bold: {
+    font_size: 64,
+    outline_width: 3,
+    shadow: 2,
+  },
+  minimal: {
+    primary_color: "#DDDDDD",
+    outline_width: 1,
+    shadow: 0,
+    effect: "none",
+  },
+  highlight: {
+    primary_color: "#FFE066",
+    outline_width: 4,
+    effect: "pop",
+  },
 };
 
 const navProjects = /** @type {HTMLButtonElement} */ (query("#nav-projects"));
@@ -415,12 +440,16 @@ const subtitleOutlineColorInput = /** @type {HTMLInputElement} */ (query("#subti
 const subtitleOutlineWidthInput = /** @type {HTMLInputElement} */ (query("#subtitle-outline-width"));
 const subtitleShadowInput = /** @type {HTMLInputElement} */ (query("#subtitle-shadow"));
 const subtitlePositionSelect = /** @type {HTMLSelectElement} */ (query("#subtitle-position"));
+const subtitleMarginHInput = /** @type {HTMLInputElement} */ (query("#subtitle-margin-h"));
 const subtitleMarginVInput = /** @type {HTMLInputElement} */ (query("#subtitle-margin-v"));
 const subtitleBackgroundColorInput = /** @type {HTMLInputElement} */ (query("#subtitle-background-color"));
 const subtitleBackgroundOpacityInput = /** @type {HTMLInputElement} */ (query("#subtitle-background-opacity"));
 const subtitleMaxLineCharsInput = /** @type {HTMLInputElement} */ (query("#subtitle-max-line-chars"));
+const subtitleMinDisplaySecInput = /** @type {HTMLInputElement} */ (query("#subtitle-min-display-sec"));
 const subtitleEffectSelect = /** @type {HTMLSelectElement} */ (query("#subtitle-effect"));
+const subtitlePositionHint = /** @type {HTMLElement} */ (query("#subtitle-position-hint"));
 const subtitlePreviewCaption = /** @type {HTMLElement} */ (query("#subtitle-preview-caption"));
+const subtitlePresetButtons = /** @type {HTMLButtonElement[]} */ (queryAll(".subtitle-preset"));
 const oauthPanel = /** @type {HTMLElement} */ (query("#oauth-panel"));
 const uploadTitleInput = /** @type {HTMLInputElement} */ (query("#s5-title"));
 const uploadDescInput = /** @type {HTMLTextAreaElement} */ (query("#s5-desc"));
@@ -518,7 +547,7 @@ async function openProject(pid) {
   mediaClientState = {
     phase: current.media_upload_state === "running" ? "processing" : "idle",
     transferProgress: current.media_upload_state === "done" ? 100 : 0,
-    message: current.media_upload_error || "업로드를 시작하면 파일별 진행 상황이 여기에 표시됩니다.",
+    message: current.media_upload_error || "?낅줈?쒕? ?쒖옉?섎㈃ ?뚯씪蹂?吏꾪뻾 ?곹솴???ш린???쒖떆?⑸땲??",
     lastAccepted: [],
     lastSkipped: [],
   };
@@ -580,7 +609,7 @@ function renderMediaUploadStatus() {
       ].filter(Boolean).length * 20
     : 0;
 
-  mediaWorkflowHint.textContent = `전체 제작 단계 진행률은 ${workflowPercent}%이며, 아래 막대는 실제 미디어 업로드 상태만 보여줍니다.`;
+  mediaWorkflowHint.textContent = `Workflow progress is ${workflowPercent}%, and the panel below shows only media upload status.`;
 
   mediaTransferBar.style.width = `${mediaClientState.transferProgress}%`;
   mediaTransferLabel.textContent = `${mediaClientState.transferProgress}%`;
@@ -595,33 +624,33 @@ function renderMediaUploadStatus() {
 
   let statusText = "대기 중";
   if (mediaClientState.phase === "uploading") {
-    statusText = `브라우저 전송 중 ${mediaClientState.transferProgress}%`;
+    statusText = `釉뚮씪?곗? ?꾩넚 以?${mediaClientState.transferProgress}%`;
   } else if (mediaClientState.phase === "processing") {
-    statusText = project && project.media_upload_state === "running"
-      ? `서버 저장 중 ${project.media_upload_progress}%`
-      : "전송 완료, 서버 응답 대기 중";
+      statusText = project && project.media_upload_state === "running"
+        ? `?쒕쾭 ???以?${project.media_upload_progress}%`
+        : "전송 완료, 서버 응답 대기 중";
   } else if (mediaClientState.phase === "done") {
-    statusText = "업로드 완료";
+    statusText = "?낅줈???꾨즺";
   } else if (mediaClientState.phase === "error") {
-    statusText = "업로드 오류";
+    statusText = "?낅줈???ㅻ쪟";
   } else if (project && project.media_upload_state === "running") {
-    statusText = `서버 저장 중 ${project.media_upload_progress}%`;
+    statusText = `?쒕쾭 ???以?${project.media_upload_progress}%`;
   } else if (project && project.media_upload_state === "done" && project.media_upload_total > 0) {
-    statusText = "최근 업로드 완료";
+    statusText = "理쒓렐 ?낅줈???꾨즺";
   }
   mediaUploadStatus.textContent = statusText;
 
   const summaryParts = [mediaClientState.message].filter(Boolean);
   if (mediaClientState.lastAccepted.length > 0) {
-    summaryParts.push(`저장된 파일: ${mediaClientState.lastAccepted.map((item) => item.saved_name).join(", ")}`);
+    summaryParts.push(`??λ맂 ?뚯씪: ${mediaClientState.lastAccepted.map((item) => item.saved_name).join(", ")}`);
   }
   if (mediaClientState.lastSkipped.length > 0) {
-    summaryParts.push(`건너뛴 파일: ${mediaClientState.lastSkipped.map((item) => `${item.name} (${item.reason})`).join(", ")}`);
+    summaryParts.push(`嫄대꼫???뚯씪: ${mediaClientState.lastSkipped.map((item) => `${item.name} (${item.reason})`).join(", ")}`);
   }
   if (project && project.media_upload_error) {
-    summaryParts.push(`최근 오류: ${project.media_upload_error}`);
+    summaryParts.push(`理쒓렐 ?ㅻ쪟: ${project.media_upload_error}`);
   }
-  mediaUploadSummary.textContent = summaryParts.join(" · ") || "업로드를 시작하면 파일별 진행 상황이 여기에 표시됩니다.";
+  mediaUploadSummary.textContent = summaryParts.join(" 쨌 ") || "?낅줈?쒕? ?쒖옉?섎㈃ ?뚯씪蹂?吏꾪뻾 ?곹솴???ш린???쒖떆?⑸땲??";
 
   mediaUploadPanel.classList.toggle("ok", mediaClientState.phase === "done");
   mediaUploadPanel.classList.toggle("warn", mediaClientState.phase === "uploading" || mediaClientState.phase === "processing");
@@ -636,8 +665,8 @@ function renderMedia() {
   if (project.media_order.length === 0) {
     mediaGrid.innerHTML = "";
     mediaCount.textContent = "0 items";
-    mediaPreviewStage.innerHTML = '<div class="media-empty">아직 업로드된 미디어가 없습니다.</div>';
-    mediaPreviewMeta.textContent = "이미지와 영상을 업로드하면 이곳에서 확인하고 순서를 조정할 수 있습니다.";
+    mediaPreviewStage.innerHTML = '<div class="media-empty">?꾩쭅 ?낅줈?쒕맂 誘몃뵒?닿? ?놁뒿?덈떎.</div>';
+    mediaPreviewMeta.textContent = "?대?吏? ?곸긽???낅줈?쒗븯硫??닿납?먯꽌 ?뺤씤?섍퀬 ?쒖꽌瑜?議곗젙?????덉뒿?덈떎.";
     return;
   }
 
@@ -724,9 +753,9 @@ function renderMedia() {
     ? `<video src="${escapeHtml(buildMediaUrl(selectedUrl))}" controls muted></video>`
     : `<img src="${escapeHtml(buildMediaUrl(selectedUrl))}" alt="${escapeHtml(selectedName)}">`;
   mediaPreviewMeta.innerHTML = `
-    <div><strong>파일</strong>: ${escapeHtml(selectedName)}</div>
-    <div><strong>형식</strong>: ${selectedKind}</div>
-    <div><strong>순서</strong>: ${project.media_order.indexOf(selectedName) + 1} / ${project.media_order.length}</div>
+    <div><strong>?뚯씪</strong>: ${escapeHtml(selectedName)}</div>
+    <div><strong>?뺤떇</strong>: ${selectedKind}</div>
+    <div><strong>?쒖꽌</strong>: ${project.media_order.indexOf(selectedName) + 1} / ${project.media_order.length}</div>
   `;
 }
 
@@ -737,16 +766,16 @@ function renderThumbnail() {
   const project = requireCurrent();
   thumbnailDeleteButton.disabled = !project.thumbnail_file;
   if (!project.thumbnail_file) {
-    thumbnailPreview.innerHTML = '<div class="media-empty">아직 업로드된 썸네일이 없습니다.</div>';
-    thumbnailMeta.textContent = "YouTube 업로드용 썸네일을 별도로 관리할 수 있습니다.";
+    thumbnailPreview.innerHTML = '<div class="media-empty">?꾩쭅 ?낅줈?쒕맂 ?몃꽕?쇱씠 ?놁뒿?덈떎.</div>';
+    thumbnailMeta.textContent = "YouTube ?낅줈?쒖슜 ?몃꽕?쇱쓣 蹂꾨룄濡?愿由ы븷 ???덉뒿?덈떎.";
     return;
   }
 
   const thumbnailUrl = `/api/projects/${project.id}/thumbnail`;
   thumbnailPreview.innerHTML = `<img src="${escapeHtml(buildMediaUrl(thumbnailUrl))}" alt="YouTube thumbnail">`;
   thumbnailMeta.innerHTML = `
-    <div><strong>파일</strong>: ${escapeHtml(project.thumbnail_file)}</div>
-    <div><strong>용도</strong>: YouTube 업로드 시 자동 썸네일 설정</div>
+    <div><strong>?뚯씪</strong>: ${escapeHtml(project.thumbnail_file)}</div>
+    <div><strong>?⑸룄</strong>: YouTube ?낅줈?????먮룞 ?몃꽕???ㅼ젙</div>
   `;
 }
 
@@ -770,7 +799,7 @@ async function uploadThumbnail(file) {
   current = response.project;
   thumbnailInput.value = "";
   renderThumbnail();
-  toast("썸네일을 업로드했습니다.");
+  toast("?몃꽕?쇱쓣 ?낅줈?쒗뻽?듬땲??");
 }
 
 /**
@@ -784,7 +813,7 @@ async function deleteThumbnail() {
     })
   );
   renderThumbnail();
-  toast("썸네일을 삭제했습니다.");
+  toast("?몃꽕?쇱쓣 ??젣?덉뒿?덈떎.");
 }
 
 /**
@@ -811,6 +840,7 @@ function readSubtitleStyleInputs() {
     ),
     shadow: numberInRange(subtitleShadowInput.value, DEFAULT_SUBTITLE_STYLE.shadow, 0, 8),
     position: subtitlePositionFromValue(subtitlePositionSelect.value),
+    margin_h: numberInRange(subtitleMarginHInput.value, DEFAULT_SUBTITLE_STYLE.margin_h, 0, 400),
     margin_v: numberInRange(subtitleMarginVInput.value, DEFAULT_SUBTITLE_STYLE.margin_v, 0, 240),
     max_line_chars: numberInRange(
       subtitleMaxLineCharsInput.value,
@@ -818,15 +848,29 @@ function readSubtitleStyleInputs() {
       16,
       80,
     ),
+    min_display_sec: numberInRange(
+      subtitleMinDisplaySecInput.value,
+      DEFAULT_SUBTITLE_STYLE.min_display_sec,
+      0.5,
+      3,
+    ),
     effect: subtitleEffectFromValue(subtitleEffectSelect.value),
   };
 }
 
 /**
+ * @param {SubtitlePosition} position
+ * @returns {boolean}
+ */
+function usesFixedVerticalAnchor(position) {
+  return position === "upper" || position === "middle" || position === "lower";
+}
+
+/**
+ * @param {SubtitleStyle} style
  * @returns {void}
  */
-function renderSubtitleStyleControls() {
-  const style = effectiveSubtitleStyle(requireCurrent());
+function writeSubtitleStyleInputs(style) {
   subtitleFontInput.value = style.font_family;
   subtitleSizeInput.value = String(style.font_size);
   subtitlePrimaryColorInput.value = style.primary_color;
@@ -836,9 +880,19 @@ function renderSubtitleStyleControls() {
   subtitleOutlineWidthInput.value = String(style.outline_width);
   subtitleShadowInput.value = String(style.shadow);
   subtitlePositionSelect.value = style.position;
+  subtitleMarginHInput.value = String(style.margin_h);
   subtitleMarginVInput.value = String(style.margin_v);
   subtitleMaxLineCharsInput.value = String(style.max_line_chars);
+  subtitleMinDisplaySecInput.value = String(style.min_display_sec);
   subtitleEffectSelect.value = style.effect;
+}
+
+/**
+ * @returns {void}
+ */
+function renderSubtitleStyleControls() {
+  const style = effectiveSubtitleStyle(requireCurrent());
+  writeSubtitleStyleInputs(style);
   renderSubtitlePreview();
 }
 
@@ -847,6 +901,10 @@ function renderSubtitleStyleControls() {
  */
 function renderSubtitlePreview() {
   const style = readSubtitleStyleInputs();
+  const previewWidth = Math.max(42, 100 - Math.round((style.margin_h / 400) * 36));
+  subtitlePositionHint.textContent = usesFixedVerticalAnchor(style.position)
+    ? "Upper, middle, lower positions use fixed screen anchors. Vertical margin mainly affects top and bottom."
+    : "Top and bottom use the vertical margin value directly, so you can fine-tune the edge spacing.";
   subtitlePreviewCaption.textContent = style.effect === "pop"
     ? "자막 스타일 미리보기!"
     : "자막 스타일 미리보기";
@@ -856,6 +914,7 @@ function renderSubtitlePreview() {
   subtitlePreviewCaption.style.textShadow = `0 0 ${style.outline_width + 1}px ${style.outline_color}, ${style.shadow}px ${style.shadow}px ${style.shadow + 2}px rgba(0,0,0,.72)`;
   subtitlePreviewCaption.style.backgroundColor = `rgba(0, 0, 0, ${style.background_opacity})`;
   subtitlePreviewCaption.style.fontWeight = style.effect === "pop" ? "800" : "700";
+  subtitlePreviewCaption.style.width = `${previewWidth}%`;
   subtitlePreviewCaption.style.transform = style.effect === "pop"
     ? "translateX(-50%) scale(1.05)"
     : "translateX(-50%)";
@@ -865,6 +924,13 @@ function renderSubtitlePreview() {
     subtitlePreviewCaption.style.top = `${Math.max(8, Math.round(style.margin_v * 0.25))}px`;
     return;
   }
+  if (style.position === "upper") {
+    subtitlePreviewCaption.style.top = "25%";
+    subtitlePreviewCaption.style.transform = style.effect === "pop"
+      ? "translate(-50%, -50%) scale(1.05)"
+      : "translate(-50%, -50%)";
+    return;
+  }
   if (style.position === "middle") {
     subtitlePreviewCaption.style.top = "50%";
     subtitlePreviewCaption.style.transform = style.effect === "pop"
@@ -872,7 +938,31 @@ function renderSubtitlePreview() {
       : "translate(-50%, -50%)";
     return;
   }
+  if (style.position === "lower") {
+    subtitlePreviewCaption.style.top = "75%";
+    subtitlePreviewCaption.style.transform = style.effect === "pop"
+      ? "translate(-50%, -50%) scale(1.05)"
+      : "translate(-50%, -50%)";
+    return;
+  }
   subtitlePreviewCaption.style.bottom = `${Math.max(8, Math.round(style.margin_v * 0.25))}px`;
+}
+
+/**
+ * @param {string} presetName
+ * @returns {void}
+ */
+function applySubtitlePreset(presetName) {
+  const preset = SUBTITLE_PRESETS[presetName];
+  if (!preset) {
+    return;
+  }
+  const style = {
+    ...readSubtitleStyleInputs(),
+    ...preset,
+  };
+  writeSubtitleStyleInputs(style);
+  renderSubtitlePreview();
 }
 
 /**
@@ -890,7 +980,7 @@ async function saveSubtitleStyle() {
   );
   current = response.project;
   renderSubtitleStyleControls();
-  toast("자막 스타일을 저장했습니다.");
+  toast("?먮쭑 ?ㅽ??쇱쓣 ??ν뻽?듬땲??");
 }
 
 /**
@@ -943,7 +1033,7 @@ async function persistMediaOrder(order) {
   renderMedia();
   updateProgressBar();
   updateStepMarks();
-  toast("미디어 순서를 저장했습니다.");
+  toast("誘몃뵒???쒖꽌瑜???ν뻽?듬땲??");
 }
 
 /**
@@ -985,7 +1075,7 @@ function uploadFiles(files) {
   mediaClientState = {
     phase: "uploading",
     transferProgress: 0,
-    message: "브라우저에서 서버로 파일을 전송하고 있습니다.",
+    message: "釉뚮씪?곗??먯꽌 ?쒕쾭濡??뚯씪???꾩넚?섍퀬 ?덉뒿?덈떎.",
     lastAccepted: [],
     lastSkipped: [],
   };
@@ -1001,7 +1091,7 @@ function uploadFiles(files) {
     mediaClientState.transferProgress = Math.min(100, Math.round((event.loaded / event.total) * 100));
     if (mediaClientState.transferProgress >= 100) {
       mediaClientState.phase = "processing";
-      mediaClientState.message = "전송이 끝났습니다. 서버가 파일을 저장하는 중입니다.";
+      mediaClientState.message = "?꾩넚???앸궗?듬땲?? ?쒕쾭媛 ?뚯씪????ν븯??以묒엯?덈떎.";
     }
     renderMediaUploadStatus();
   });
@@ -1017,7 +1107,7 @@ function uploadFiles(files) {
       mediaClientState = {
         phase: "done",
         transferProgress: 100,
-        message: `업로드 완료: ${response.accepted_files.length}개 저장, ${response.skipped_files.length}개 건너뜀`,
+        message: `?낅줈???꾨즺: ${response.accepted_files.length}媛???? ${response.skipped_files.length}媛?嫄대꼫?`,
         lastAccepted: response.accepted_files,
         lastSkipped: response.skipped_files,
       };
@@ -1025,11 +1115,11 @@ function uploadFiles(files) {
       renderMediaUploadStatus();
       updateProgressBar();
       updateStepMarks();
-      toast("미디어 업로드가 완료되었습니다.");
+      toast("誘몃뵒???낅줈?쒓? ?꾨즺?섏뿀?듬땲??");
       return;
     }
 
-    let message = "업로드에 실패했습니다.";
+    let message = "?낅줈?쒖뿉 ?ㅽ뙣?덉뒿?덈떎.";
     const response = xhr.response;
     if (response && typeof response.detail === "string") {
       message = response.detail;
@@ -1050,7 +1140,7 @@ function uploadFiles(files) {
     mediaClientState = {
       phase: "error",
       transferProgress: mediaClientState.transferProgress,
-      message: "네트워크 오류로 업로드에 실패했습니다.",
+      message: "?ㅽ듃?뚰겕 ?ㅻ쪟濡??낅줈?쒖뿉 ?ㅽ뙣?덉뒿?덈떎.",
       lastAccepted: [],
       lastSkipped: [],
     };
@@ -1108,21 +1198,21 @@ async function renderStep5() {
 
   if (oauthStatus.authorized) {
     oauthPanel.className = "card ok";
-    oauthPanel.innerHTML = "YouTube OAuth가 연결되어 있습니다.";
+    oauthPanel.innerHTML = "YouTube OAuth媛 ?곌껐?섏뼱 ?덉뒿?덈떎.";
   } else if (!oauthStatus.client_secret_present) {
     oauthPanel.className = "card warn";
-    oauthPanel.innerHTML = "storage/oauth/client_secret.json 파일을 배치한 뒤 다시 시도하세요.";
+    oauthPanel.innerHTML = "storage/oauth/client_secret.json ?뚯씪??諛곗튂?????ㅼ떆 ?쒕룄?섏꽭??";
   } else {
     oauthPanel.className = "card warn";
-    oauthPanel.innerHTML = 'YouTube 업로드 전 최초 1회 인증이 필요합니다. <button id="btn-auth" class="btn" type="button">Authorize</button>';
+    oauthPanel.innerHTML = 'YouTube ?낅줈????理쒖큹 1???몄쬆???꾩슂?⑸땲?? <button id="btn-auth" class="btn" type="button">Authorize</button>';
     const authButton = /** @type {HTMLButtonElement} */ (query("#btn-auth", oauthPanel));
     authButton.addEventListener("click", async () => {
-      oauthPanel.innerHTML = "브라우저 창에서 Google 로그인과 권한 허용을 완료한 뒤 돌아와 주세요.";
+      oauthPanel.innerHTML = "釉뚮씪?곗? 李쎌뿉??Google 濡쒓렇?멸낵 沅뚰븳 ?덉슜???꾨즺?????뚯븘? 二쇱꽭??";
       try {
         await requestJson("/api/projects/_/oauth/authorize", { method: "POST", body: new FormData() });
-        toast("OAuth 인증이 완료되었습니다.");
+        toast("OAuth ?몄쬆???꾨즺?섏뿀?듬땲??");
       } catch (error) {
-        handleError(error, "OAuth 인증에 실패했습니다.");
+        handleError(error, "OAuth ?몄쬆???ㅽ뙣?덉뒿?덈떎.");
       }
       await renderStep5();
     });
@@ -1187,9 +1277,9 @@ async function pollProjectStatus() {
     ...status,
   };
 
-  ttsState.textContent = `${readableTaskState(status.tts_state)} · ${status.tts_progress}%`;
-  renderState.textContent = `${readableTaskState(status.render_state)} · ${status.render_progress}%`;
-  uploadState.textContent = `${readableTaskState(status.upload_state)} · ${status.upload_progress}%`;
+  ttsState.textContent = `${readableTaskState(status.tts_state)} 쨌 ${status.tts_progress}%`;
+  renderState.textContent = `${readableTaskState(status.render_state)} 쨌 ${status.render_progress}%`;
+  uploadState.textContent = `${readableTaskState(status.upload_state)} 쨌 ${status.upload_progress}%`;
   renderMediaUploadStatus();
   updateProgressBar();
   updateStepMarks();
@@ -1277,7 +1367,7 @@ function toast(message) {
 navProjects.addEventListener("click", () => {
   stopPoll();
   show("projects");
-  void loadProjects().catch((error) => handleError(error, "프로젝트 목록을 불러오지 못했습니다."));
+  void loadProjects().catch((error) => handleError(error, "?꾨줈?앺듃 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??"));
 });
 
 createButton.addEventListener("click", async () => {
@@ -1289,7 +1379,7 @@ createButton.addEventListener("click", async () => {
     newTitleInput.value = "";
     await openProject(project.id);
   } catch (error) {
-    handleError(error, "프로젝트를 만들지 못했습니다.");
+    handleError(error, "?꾨줈?앺듃瑜?留뚮뱾吏 紐삵뻽?듬땲??");
   }
 });
 
@@ -1300,21 +1390,21 @@ projectsList.addEventListener("click", async (event) => {
     return;
   }
   event.stopPropagation();
-  if (!window.confirm("이 프로젝트를 삭제할까요?")) {
+  if (!window.confirm("???꾨줈?앺듃瑜???젣?좉퉴??")) {
     return;
   }
   try {
     await requestJson(`/api/projects/${projectId}`, { method: "DELETE" });
     await loadProjects();
   } catch (error) {
-    handleError(error, "프로젝트를 삭제하지 못했습니다.");
+    handleError(error, "?꾨줈?앺듃瑜???젣?섏? 紐삵뻽?듬땲??");
   }
 });
 
 backButton.addEventListener("click", () => {
   stopPoll();
   show("projects");
-  void loadProjects().catch((error) => handleError(error, "프로젝트 목록을 불러오지 못했습니다."));
+  void loadProjects().catch((error) => handleError(error, "?꾨줈?앺듃 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??"));
 });
 
 stepButtons.forEach((button) => {
@@ -1342,9 +1432,9 @@ saveScriptButton.addEventListener("click", async () => {
     renderScriptStats();
     updateProgressBar();
     updateStepMarks();
-    toast("스크립트를 저장했습니다.");
+    toast("?ㅽ겕由쏀듃瑜???ν뻽?듬땲??");
   } catch (error) {
-    handleError(error, "스크립트를 저장하지 못했습니다.");
+    handleError(error, "?ㅽ겕由쏀듃瑜???ν븯吏 紐삵뻽?듬땲??");
   }
 });
 
@@ -1391,11 +1481,11 @@ thumbnailUploadButton.addEventListener("click", () => {
 
 thumbnailInput.addEventListener("change", () => {
   const file = thumbnailInput.files ? thumbnailInput.files[0] || null : null;
-  void uploadThumbnail(file).catch((error) => handleError(error, "썸네일을 업로드하지 못했습니다."));
+  void uploadThumbnail(file).catch((error) => handleError(error, "?몃꽕?쇱쓣 ?낅줈?쒗븯吏 紐삵뻽?듬땲??"));
 });
 
 thumbnailDeleteButton.addEventListener("click", () => {
-  void deleteThumbnail().catch((error) => handleError(error, "썸네일을 삭제하지 못했습니다."));
+  void deleteThumbnail().catch((error) => handleError(error, "?몃꽕?쇱쓣 ??젣?섏? 紐삵뻽?듬땲??"));
 });
 
 mediaGrid.addEventListener("click", (event) => {
@@ -1422,7 +1512,7 @@ mediaGrid.addEventListener("click", (event) => {
     return;
   }
   if (action === "delete") {
-    void deleteMedia(name).catch((error) => handleError(error, "미디어를 삭제하지 못했습니다."));
+    void deleteMedia(name).catch((error) => handleError(error, "誘몃뵒?대? ??젣?섏? 紐삵뻽?듬땲??"));
   }
 });
 
@@ -1434,18 +1524,26 @@ mediaGrid.addEventListener("click", (event) => {
   subtitleOutlineWidthInput,
   subtitleShadowInput,
   subtitlePositionSelect,
+  subtitleMarginHInput,
   subtitleMarginVInput,
   subtitleBackgroundColorInput,
   subtitleBackgroundOpacityInput,
   subtitleMaxLineCharsInput,
+  subtitleMinDisplaySecInput,
   subtitleEffectSelect,
 ].forEach((control) => {
   control.addEventListener("input", renderSubtitlePreview);
   control.addEventListener("change", renderSubtitlePreview);
 });
 
+subtitlePresetButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    applySubtitlePreset(button.dataset.preset || "");
+  });
+});
+
 subtitleSaveButton.addEventListener("click", () => {
-  void saveSubtitleStyle().catch((error) => handleError(error, "자막 스타일을 저장하지 못했습니다."));
+  void saveSubtitleStyle().catch((error) => handleError(error, "?먮쭑 ?ㅽ??쇱쓣 ??ν븯吏 紐삵뻽?듬땲??"));
 });
 
 ttsRunButton.addEventListener("click", async () => {
@@ -1455,9 +1553,9 @@ ttsRunButton.addEventListener("click", async () => {
       method: "POST",
       body: formDataFromObject({ voice_preset: voiceSelect.value }),
     });
-    toast("TTS 생성을 시작했습니다.");
+    toast("TTS ?앹꽦???쒖옉?덉뒿?덈떎.");
   } catch (error) {
-    handleError(error, "TTS 생성을 시작하지 못했습니다.");
+    handleError(error, "TTS ?앹꽦???쒖옉?섏? 紐삵뻽?듬땲??");
   }
 });
 
@@ -1468,9 +1566,9 @@ renderRunButton.addEventListener("click", async () => {
       method: "POST",
       body: new FormData(),
     });
-    toast("렌더링을 시작했습니다.");
+    toast("?뚮뜑留곸쓣 ?쒖옉?덉뒿?덈떎.");
   } catch (error) {
-    handleError(error, "렌더링을 시작하지 못했습니다.");
+    handleError(error, "?뚮뜑留곸쓣 ?쒖옉?섏? 紐삵뻽?듬땲??");
   }
 });
 
@@ -1486,10 +1584,10 @@ youtubeRunButton.addEventListener("click", async () => {
         privacy: uploadPrivacySelect.value,
       }),
     });
-    toast("YouTube 업로드를 시작했습니다.");
+    toast("YouTube ?낅줈?쒕? ?쒖옉?덉뒿?덈떎.");
   } catch (error) {
-    handleError(error, "YouTube 업로드를 시작하지 못했습니다.");
+    handleError(error, "YouTube ?낅줈?쒕? ?쒖옉?섏? 紐삵뻽?듬땲??");
   }
 });
 
-void loadProjects().catch((error) => handleError(error, "프로젝트 목록을 불러오지 못했습니다."));
+void loadProjects().catch((error) => handleError(error, "?꾨줈?앺듃 紐⑸줉??遺덈윭?ㅼ? 紐삵뻽?듬땲??"));

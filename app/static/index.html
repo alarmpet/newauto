@@ -211,13 +211,21 @@
             </label>
             <label>Position
               <select id="subtitle-position">
-                <option value="bottom">Bottom</option>
-                <option value="middle">Middle</option>
                 <option value="top">Top</option>
+                <option value="upper">Upper</option>
+                <option value="middle">Middle</option>
+                <option value="lower">Lower</option>
+                <option value="bottom">Bottom</option>
               </select>
+            </label>
+            <label>Horizontal Margin
+              <input id="subtitle-margin-h" type="number" min="0" max="400" step="4">
             </label>
             <label>Vertical Margin
               <input id="subtitle-margin-v" type="number" min="0" max="240" step="4">
+            </label>
+            <label>Minimum Display
+              <input id="subtitle-min-display-sec" type="number" min="0.5" max="3" step="0.1">
             </label>
             <label>Background
               <input id="subtitle-background-color" type="color">
@@ -235,6 +243,20 @@
                 <option value="pop">Pop</option>
               </select>
             </label>
+          </div>
+
+          <div class="subtitle-preset-row">
+            <span class="muted">Quick presets</span>
+            <div class="subtitle-preset-buttons">
+              <button class="btn subtitle-preset" type="button" data-preset="default">Default</button>
+              <button class="btn subtitle-preset" type="button" data-preset="bold">Bold</button>
+              <button class="btn subtitle-preset" type="button" data-preset="minimal">Minimal</button>
+              <button class="btn subtitle-preset" type="button" data-preset="highlight">Highlight</button>
+            </div>
+          </div>
+
+          <div id="subtitle-position-hint" class="muted subtitle-position-hint">
+            Upper, middle, lower positions use fixed screen anchors. Vertical margin mainly affects top and bottom.
           </div>
 
           <div class="subtitle-preview-stage">

@@ -51,8 +51,10 @@ class SubtitleStylePayload(BaseModel):
     outline_width: int | None = Field(default=None, ge=0, le=8)
     shadow: int | None = Field(default=None, ge=0, le=8)
     position: SubtitlePosition | None = None
+    margin_h: int | None = Field(default=None, ge=0, le=400)
     margin_v: int | None = Field(default=None, ge=0, le=240)
     max_line_chars: int | None = Field(default=None, ge=16, le=80)
+    min_display_sec: float | None = Field(default=None, ge=0.5, le=3.0)
     effect: SubtitleEffect | None = None
 
     def to_patch(self) -> dict[str, object]:
@@ -67,8 +69,10 @@ class SubtitleStylePayload(BaseModel):
             "outline_width",
             "shadow",
             "position",
+            "margin_h",
             "margin_v",
             "max_line_chars",
+            "min_display_sec",
             "effect",
         ):
             value = getattr(self, key)

@@ -320,3 +320,48 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Added tests for subtitle style merge/validation and ASS subtitle output.
 - Added a mocked YouTube upload test that verifies thumbnail upload is triggered.
 - Verified frontend and backend type checks with `scripts/typecheck.ps1`.
+
+## 2026-04-23 Subtitle Display Enhancement Update
+
+### Architecture changes
+
+- Expanded subtitle style typing to support five subtitle anchors:
+  - `top`
+  - `upper`
+  - `middle`
+  - `lower`
+  - `bottom`
+- Added two new subtitle style fields:
+  - `margin_h`
+  - `min_display_sec`
+- Updated subtitle normalization so legacy stored projects still load safely without a database migration.
+- Reworked subtitle rendering helpers so both SRT and ASS output share:
+  - smarter two-line wrapping
+  - minimum display-time extension for short cues
+
+### Render and workflow changes
+
+- Replaced the old simple midpoint wrapping with a smarter split strategy that prefers:
+  - sentence-ending punctuation
+  - secondary punctuation
+  - whitespace
+  - midpoint fallback
+- Kept subtitle output to a maximum of two lines per cue.
+- Added fixed-screen anchor handling for `upper`, `middle`, and `lower` positions while preserving `margin_v` control for `top` and `bottom`.
+- Switched ASS horizontal safe area from hardcoded values to project subtitle style `margin_h`.
+- Added frontend controls for:
+  - five-position subtitle placement
+  - horizontal margin
+  - minimum display seconds
+  - four subtitle presets
+- Expanded the render preview so the browser reflects the new position anchors and horizontal subtitle width changes.
+
+### Verification
+
+- Extended subtitle rendering tests to cover:
+  - five-position ASS output
+  - horizontal margin propagation
+  - minimum display-time extension
+  - long-line wrapping into two lines
+- Verified `scripts/typecheck.ps1`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
