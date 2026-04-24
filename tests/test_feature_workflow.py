@@ -1,4 +1,5 @@
 import io
+import os
 import subprocess
 import unittest
 from pathlib import Path
@@ -9,6 +10,9 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app import db
+
+os.environ.setdefault("NEWAUTO_DISABLE_BACKGROUND_WORKERS", "1")
+
 from app.main import app
 from app.services.preflight import build_preflight_report
 from app.services.render import _run, _tail_lines
@@ -143,6 +147,24 @@ class FeatureWorkflowTests(unittest.TestCase):
         self.assertEqual(payload["render_eta_sec"], 4)
         self.assertIn("45%", payload["render_progress_detail"])
         self.assertEqual(payload["render_last_log"], "ffmpeg started")
+
+    def test_start_render_route_queues_render_job(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            sentences=["hello"],
+            tts_state="done",
+            media_order=["one.jpg"],
+            media_upload_state="done",
+        )
+        response = self.client.post(f"/api/projects/{project_id}/render", data={})
+        self.assertEqual(response.status_code, 200)
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["render_state"], "queued")
+        self.assertEqual(project["render_phase"], "queued")
+        self.assertEqual(project["render_progress"], 0)
 
     def test_render_tail_lines_handles_none(self) -> None:
         self.assertEqual(_tail_lines(None), "")

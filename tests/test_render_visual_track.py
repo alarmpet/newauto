@@ -70,11 +70,14 @@ class RenderVisualTrackTests(unittest.TestCase):
         filter_graph = _zoompan_filter(0, 3.0, 1920, 1080)
         self.assertIn("s=1920x1080", filter_graph)
         self.assertNotIn("1280x720", filter_graph)
+        self.assertIn("trim=duration=3.000", filter_graph)
+        self.assertIn("setpts=PTS-STARTPTS", filter_graph)
 
     def test_zoompan_filter_includes_explicit_shorts_output_size(self) -> None:
         filter_graph = _zoompan_filter(0, 3.0, 1080, 1920)
         self.assertIn("s=1080x1920", filter_graph)
         self.assertNotIn("720x1280", filter_graph)
+        self.assertIn("trim=duration=3.000", filter_graph)
 
     def test_build_visual_track_uses_uniform_landscape_size_for_mixed_media(self) -> None:
         commands: list[list[str]] = []
@@ -100,6 +103,31 @@ class RenderVisualTrackTests(unittest.TestCase):
         self.assertIn("s=1920x1080", filter_graph)
         self.assertIn("pad=1920:1080", filter_graph)
         self.assertIn("concat=n=3:v=1:a=0[vout]", filter_graph)
+
+    def test_build_visual_track_omits_image_t_flag_when_kenburns_is_enabled(self) -> None:
+        commands: list[list[str]] = []
+
+        def fake_run(command: list[str]) -> str:
+            commands.append(command)
+            return ""
+
+        with patch("app.services.render._run", side_effect=fake_run), patch(
+            "app.services.render._ffmpeg",
+            return_value="ffmpeg",
+        ):
+            _build_visual_track(
+                [Path("alpha.png"), Path("beta.jpg")],
+                6.0,
+                Path("out.mp4"),
+                "landscape",
+                True,
+            )
+
+        self.assertEqual(len(commands), 1)
+        command = commands[0]
+        image_input_segment = command[2:8]
+        self.assertEqual(image_input_segment[:4], ["-loop", "1", "-framerate", "1"])
+        self.assertNotIn("-t", image_input_segment)
 
     def test_run_preserves_utf8_korean_stderr(self) -> None:
         completed = subprocess.CompletedProcess(
@@ -173,3 +201,43 @@ class RenderVisualTrackTests(unittest.TestCase):
         self.assertGreaterEqual(len(events), 1)
         self.assertEqual(events[-1].phase_pct, 100)
         self.assertEqual(events[-1].frame, 50)
+
+    def test_run_with_progress_stops_runaway_duration(self) -> None:
+        class FakePopen:
+            def __init__(self) -> None:
+                self.stdout = io.BytesIO(
+                    b"frame=100\nfps=24.0\nout_time=00:00:20.00\nspeed=1.00x\nprogress=continue\n"
+                )
+                self.stderr = io.BytesIO(b"")
+                self.returncode = 255
+                self.terminated = False
+                self.killed = False
+
+            def poll(self) -> int | None:
+                if self.terminated or self.killed:
+                    return self.returncode
+                stdout_done = self.stdout.tell() >= len(self.stdout.getvalue())
+                if stdout_done:
+                    return None
+                return None
+
+            def wait(self, timeout: float | None = None) -> int:
+                self.stdout.seek(len(self.stdout.getvalue()))
+                self.stderr.seek(len(self.stderr.getvalue()))
+                return self.returncode
+
+            def terminate(self) -> None:
+                self.terminated = True
+
+            def kill(self) -> None:
+                self.killed = True
+
+        popen = FakePopen()
+        with patch("app.services.render.subprocess.Popen", return_value=popen):
+            with self.assertRaisesRegex(RuntimeError, "generated video duration exceeded"):
+                _run_with_progress(
+                    ["ffmpeg", "-i", "in.mp4", "out.mp4"],
+                    expected_duration_sec=10.0,
+                    on_progress=lambda event: None,
+                )
+        self.assertTrue(popen.terminated or popen.killed)

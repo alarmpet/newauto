@@ -224,6 +224,7 @@ def _run_with_progress(
     last_emit = 0.0
     start_time = monotonic()
     progress_ended = False
+    runaway_error = ""
 
     def emit_progress(force: bool = False) -> None:
         nonlocal last_emit
@@ -271,12 +272,21 @@ def _run_with_progress(
                 elif line == "progress=end":
                     progress_ended = True
                 emit_progress()
+                if expected_duration_sec > 1.0 and elapsed_sec > expected_duration_sec * 1.5:
+                    runaway_error = (
+                        "Render stopped because the generated video duration exceeded the expected "
+                        f"timeline by too much ({elapsed_sec:.1f}s vs {expected_duration_sec:.1f}s)."
+                    )
+                    process.terminate()
+                    break
             while True:
                 try:
                     stderr_queue.get_nowait()
                     drained = True
                 except Empty:
                     break
+            if runaway_error:
+                break
             if process.poll() is not None and progress_ended:
                 break
             if process.poll() is not None and not drained:
@@ -284,12 +294,26 @@ def _run_with_progress(
             emit_progress()
             threading.Event().wait(0.1)
     finally:
-        process.wait()
+        try:
+            process.wait(timeout=5.0)
+        except TypeError:
+            process.wait()
+        except subprocess.TimeoutExpired:
+            process.kill()
+            try:
+                process.wait(timeout=5.0)
+            except TypeError:
+                process.wait()
         stdout_thread.join(timeout=1.0)
         stderr_thread.join(timeout=1.0)
 
     emit_progress(force=True)
     stderr_text = "\n".join(stderr_buffer)
+    if runaway_error:
+        detail = _tail_lines(stderr_text, limit=20)
+        if detail:
+            raise RuntimeError(f"{runaway_error}\n\n{detail}")
+        raise RuntimeError(runaway_error)
     if process.returncode != 0:
         detail = _tail_lines(stderr_text, limit=20) or "ffmpeg failed with no stderr output"
         raise RuntimeError("ffmpeg failed:\n" + detail)
@@ -447,11 +471,14 @@ def _mix_background_audio(voice_wav: Path, bgm_path: Path, out_wav: Path, volume
 
 def _zoompan_filter(index: int, per_item_duration: float, width: int, height: int) -> str:
     frame_count = max(1, int(per_item_duration * FPS))
+    overscan_width = max(width, int(width * 1.2))
+    overscan_height = max(height, int(height * 1.2))
     return (
-        f"[{index}:v]scale={width * 2}:{height * 2}:force_original_aspect_ratio=increase,"
-        f"crop={width * 2}:{height * 2},zoompan=z='min(zoom+0.0012,1.10)':d={frame_count}:"
+        f"[{index}:v]scale={overscan_width}:{overscan_height}:force_original_aspect_ratio=increase,"
+        f"crop={overscan_width}:{overscan_height},zoompan=z='min(zoom+0.0012,1.10)':d={frame_count}:"
         f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={width}x{height},"
-        f"fps={FPS},setsar=1,format=yuv420p[v{index}]"
+        f"fps={FPS},trim=duration={per_item_duration:.3f},setpts=PTS-STARTPTS,"
+        f"setsar=1,format=yuv420p[v{index}]"
     )
 
 
@@ -473,7 +500,9 @@ def _build_visual_track(
     labels: list[str] = []
     for index, media_path in enumerate(media_files):
         is_image = media_path.suffix.lower() in ALLOWED_IMAGE_EXT
-        if is_image:
+        if is_image and kenburns_enabled:
+            inputs += ["-loop", "1", "-framerate", "1", "-i", str(media_path)]
+        elif is_image:
             inputs += ["-loop", "1", "-t", f"{per_item_duration:.3f}", "-i", str(media_path)]
         else:
             inputs += ["-t", f"{per_item_duration:.3f}", "-i", str(media_path)]
@@ -733,9 +762,19 @@ def run_render_job(pid: str) -> None:
         )
     except Exception as exc:
         traceback.print_exc()
+        if "project_dir" in locals():
+            for partial_path in (
+                project_dir / "_visual_landscape.mp4",
+                project_dir / "_visual_shorts.mp4",
+                project_dir / "audio_raw.wav",
+            ):
+                partial_path.unlink(missing_ok=True)
         db.update_project(
             pid,
             render_state="error",
+            render_progress=0,
+            render_phase="",
+            render_phase_pct=0,
             render_progress_detail="",
             render_speed_x=0.0,
             render_eta_sec=0,

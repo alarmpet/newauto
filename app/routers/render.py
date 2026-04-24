@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field
 from .. import db
 from ..config import VOICE_SAMPLE_TEXT
 from ..services import preflight as preflight_svc
-from ..services import render as render_svc
 from ..services import tts as tts_svc
 from ..tts_profiles import build_tts_preset_catalog, canonical_voice_preset, normalize_tts_profile
 from ..types import (
@@ -139,7 +138,7 @@ def get_tts_preview(pid: str) -> FileResponse:
 
 
 @router.post("/{pid}/render")
-def start_render(pid: str, bg: BackgroundTasks) -> dict[str, bool]:
+def start_render(pid: str) -> dict[str, bool]:
     project = _require(pid)
     if project["tts_state"] != "done":
         raise HTTPException(400, "run TTS first")
@@ -147,21 +146,23 @@ def start_render(pid: str, bg: BackgroundTasks) -> dict[str, bool]:
         raise HTTPException(400, "upload at least one media file")
     if project["media_upload_state"] == "running":
         raise HTTPException(409, "wait for media upload to finish")
-    if project["render_state"] == "running":
+    if project["render_state"] in {"queued", "running"}:
         raise HTTPException(409, "render already running")
 
     db.update_project(
         pid,
-        render_state="running",
+        render_state="queued",
         render_progress=0,
         render_phase="queued",
         render_phase_pct=0,
         render_progress_detail="",
         render_speed_x=0.0,
         render_eta_sec=0,
+        render_job_id="",
+        render_started_at="",
+        render_heartbeat_at="",
         render_last_log="",
     )
-    bg.add_task(render_svc.run_render_job, pid)
     return {"ok": True}
 
 
@@ -185,6 +186,9 @@ def status(pid: str) -> ProjectStatus:
         "render_progress_detail": project["render_progress_detail"],
         "render_speed_x": project["render_speed_x"],
         "render_eta_sec": project["render_eta_sec"],
+        "render_job_id": project["render_job_id"],
+        "render_started_at": project["render_started_at"],
+        "render_heartbeat_at": project["render_heartbeat_at"],
         "render_last_log": project["render_last_log"],
         "upload_state": project["upload_state"],
         "upload_progress": project["upload_progress"],

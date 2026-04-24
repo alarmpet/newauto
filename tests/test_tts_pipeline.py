@@ -1,4 +1,5 @@
 import json
+import os
 import unittest
 from typing import ClassVar
 from unittest.mock import patch
@@ -6,6 +7,9 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app import db
+
+os.environ.setdefault("NEWAUTO_DISABLE_BACKGROUND_WORKERS", "1")
+
 from app.main import app
 from app.services import tts
 from app.text import split_sentences

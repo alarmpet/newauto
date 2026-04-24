@@ -1,10 +1,14 @@
 import io
+import os
 import unittest
 from typing import ClassVar
 
 from fastapi.testclient import TestClient
 
 from app import db
+
+os.environ.setdefault("NEWAUTO_DISABLE_BACKGROUND_WORKERS", "1")
+
 from app.main import app
 from app.services.subtitle import DEFAULT_SUBTITLE_STYLE
 

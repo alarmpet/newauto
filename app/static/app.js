@@ -1,7 +1,7 @@
 ﻿// @ts-check
 
 /**
- * @typedef {"idle" | "running" | "done" | "error"} TaskState
+ * @typedef {"idle" | "queued" | "running" | "done" | "error"} TaskState
  * @typedef {"image" | "video"} MediaKind
  * @typedef {"idle" | "uploading" | "processing" | "done" | "error"} MediaClientPhase
  * @typedef {"top" | "upper" | "middle" | "lower" | "bottom"} SubtitlePosition
@@ -69,6 +69,9 @@
  *   render_progress_detail: string,
  *   render_speed_x: number,
  *   render_eta_sec: number,
+ *   render_job_id: string,
+ *   render_started_at: string,
+ *   render_heartbeat_at: string,
  *   render_last_log: string,
  *   upload_state: TaskState,
  *   upload_progress: number,
@@ -130,6 +133,9 @@
  *   render_progress_detail: string,
  *   render_speed_x: number,
  *   render_eta_sec: number,
+ *   render_job_id: string,
+ *   render_started_at: string,
+ *   render_heartbeat_at: string,
  *   render_last_log: string,
  *   upload_state: TaskState,
  *   upload_progress: number,
@@ -398,6 +404,8 @@ function effectiveTtsProfile(project) {
  */
 function readableTaskState(state) {
   switch (state) {
+    case "queued":
+      return "대기 중";
     case "running":
       return "진행 중";
     case "done":
@@ -461,21 +469,28 @@ function readableRenderIssue(renderLog) {
 }
 
 /**
+ * @param {TaskState} state
  * @param {string} phase
  * @param {string} detail
  * @param {string} renderLog
+ * @param {string} heartbeatAt
  * @returns {string}
  */
-function formatRenderLog(phase, detail, renderLog) {
+function formatRenderLog(state, phase, detail, renderLog, heartbeatAt) {
   if (!phase && !detail && !renderLog) {
     return "렌더를 시작하면 현재 단계와 마지막 로그를 여기에서 확인할 수 있습니다.";
   }
   const summary = readableRenderIssue(renderLog);
   const lines = [`Current phase: ${readableRenderPhase(phase)}`];
-  if (detail) {
+  if (state === "queued") {
+    lines.push("", "세부 진행: 렌더 워커 대기열에 등록되었습니다.");
+  } else if (detail) {
     lines.push("", `세부 진행: ${detail}`);
   } else if (phase) {
     lines.push("", "세부 진행 정보를 수집하는 중입니다.");
+  }
+  if (heartbeatAt) {
+    lines.push("", `최근 heartbeat: ${heartbeatAt}`);
   }
   if (summary) {
     lines.push("", `문제 요약: ${summary}`);
@@ -826,9 +841,11 @@ async function openProject(pid) {
   renderTtsProfileControls();
   renderFeatureControls();
   renderLogPanel.textContent = formatRenderLog(
+    current.render_state,
     current.render_phase,
     current.render_progress_detail,
     current.render_last_log,
+    current.render_heartbeat_at,
   );
   renderMediaUploadStatus();
   renderSubtitleStyleControls();
@@ -1833,14 +1850,16 @@ async function pollProjectStatus() {
   };
 
   ttsState.textContent = `${readableTaskState(status.tts_state)} ${status.tts_progress}%`;
-  const renderPhaseText = status.render_state === "running" && status.render_phase
+  const renderPhaseText = (status.render_state === "running" || status.render_state === "queued") && status.render_phase
     ? ` | ${readableRenderPhase(status.render_phase)}`
     : "";
   renderState.textContent = `${readableTaskState(status.render_state)} ${status.render_progress}%${renderPhaseText}`;
   renderLogPanel.textContent = formatRenderLog(
+    status.render_state,
     status.render_phase,
     status.render_progress_detail,
     status.render_last_log,
+    status.render_heartbeat_at,
   );
   uploadState.textContent = `${readableTaskState(status.upload_state)} ${status.upload_progress}%`;
   renderMediaUploadStatus();
@@ -2201,6 +2220,22 @@ renderRunButton.addEventListener("click", async () => {
       method: "POST",
       body: new FormData(),
     });
+    current = {
+      ...project,
+      render_state: "queued",
+      render_progress: 0,
+      render_phase: "queued",
+      render_phase_pct: 0,
+      render_progress_detail: "",
+      render_speed_x: 0,
+      render_eta_sec: 0,
+      render_job_id: "",
+      render_started_at: "",
+      render_heartbeat_at: "",
+      render_last_log: "",
+    };
+    renderState.textContent = "대기 중 0% | 대기 중";
+    renderLogPanel.textContent = formatRenderLog("queued", "queued", "", "", "");
     toast("렌더를 시작했습니다.");
   } catch (error) {
     handleError(error, "렌더를 시작하지 못했습니다.");

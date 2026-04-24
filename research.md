@@ -663,3 +663,39 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `scripts/typecheck.ps1`.
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
+## 2026-04-24 Render Performance And Worker Separation Update
+
+### Architecture changes
+
+- Extended render persistence with:
+  - `render_job_id`
+  - `render_started_at`
+  - `render_heartbeat_at`
+- Switched SQLite connections to WAL mode with a busy timeout so the web app, render worker, and watchdog can share the same database more safely.
+- Added a detached render worker entry point under `app/workers/` plus a single-instance lock file guard.
+- Added watchdog-based stale render recovery in startup flow so abandoned `running` renders are converted back into recoverable errors.
+- Added a test-only background-worker disable switch through `NEWAUTO_DISABLE_BACKGROUND_WORKERS=1` to keep API tests deterministic.
+
+### Render pipeline changes
+
+- Fixed the Ken Burns duration explosion by changing the image path to:
+  - looped image input with `-framerate 1`
+  - `zoompan`
+  - `trim=duration=...`
+  - `setpts=PTS-STARTPTS`
+- Added a runaway-duration guard in `_run_with_progress()` so renders stop early when FFmpeg output time grows far beyond the expected timeline.
+- Reduced the Ken Burns overscan scale from the previous heavy `2x` path to a lighter `1.2x` path for better wall-clock performance.
+- Added partial render cleanup on failure for temporary video/audio artifacts.
+
+### Workflow changes
+
+- `/api/projects/{pid}/render` now queues render work instead of executing it inside the request-serving web process.
+- Step 4 now understands the `queued` render state and shows worker heartbeat information in the render log panel.
+- Render recovery now clears stale job metadata as well as progress fields.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.

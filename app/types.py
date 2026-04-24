@@ -2,7 +2,7 @@ from typing import Literal
 
 from typing_extensions import TypedDict
 
-TaskState = Literal["idle", "running", "done", "error"]
+TaskState = Literal["idle", "queued", "running", "done", "error"]
 MediaKind = Literal["image", "video"]
 PrivacyValue = Literal["private", "unlisted", "public"]
 RenderFormat = Literal["landscape", "shorts"]
@@ -67,6 +67,9 @@ class ProjectRecord(TypedDict):
     render_progress_detail: str
     render_speed_x: float
     render_eta_sec: int
+    render_job_id: str
+    render_started_at: str
+    render_heartbeat_at: str
     render_last_log: str
     upload_state: TaskState
     upload_progress: int
@@ -101,6 +104,9 @@ class ProjectStatus(TypedDict):
     render_progress_detail: str
     render_speed_x: float
     render_eta_sec: int
+    render_job_id: str
+    render_started_at: str
+    render_heartbeat_at: str
     render_last_log: str
     upload_state: TaskState
     upload_progress: int

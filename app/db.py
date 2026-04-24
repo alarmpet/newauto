@@ -1,9 +1,10 @@
 import json
+import os
 import sqlite3
 import uuid
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import cast
 
@@ -38,6 +39,9 @@ CREATE TABLE IF NOT EXISTS projects (
     render_progress_detail TEXT NOT NULL DEFAULT '',
     render_speed_x REAL NOT NULL DEFAULT 0,
     render_eta_sec INTEGER NOT NULL DEFAULT 0,
+    render_job_id TEXT NOT NULL DEFAULT '',
+    render_started_at TEXT NOT NULL DEFAULT '',
+    render_heartbeat_at TEXT NOT NULL DEFAULT '',
     render_last_log TEXT NOT NULL DEFAULT '',
     upload_state TEXT NOT NULL DEFAULT 'idle',
     upload_progress INTEGER NOT NULL DEFAULT 0,
@@ -72,6 +76,9 @@ MIGRATION_COLUMNS: dict[str, str] = {
     "render_progress_detail": "TEXT NOT NULL DEFAULT ''",
     "render_speed_x": "REAL NOT NULL DEFAULT 0",
     "render_eta_sec": "INTEGER NOT NULL DEFAULT 0",
+    "render_job_id": "TEXT NOT NULL DEFAULT ''",
+    "render_started_at": "TEXT NOT NULL DEFAULT ''",
+    "render_heartbeat_at": "TEXT NOT NULL DEFAULT ''",
     "render_last_log": "TEXT NOT NULL DEFAULT ''",
 }
 
@@ -80,6 +87,9 @@ def _connect() -> sqlite3.Connection:
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("PRAGMA synchronous=NORMAL")
+    connection.execute("PRAGMA busy_timeout=5000")
     return connection
 
 
@@ -106,11 +116,15 @@ def recover_interrupted_tasks() -> dict[str, int]:
             UPDATE projects
             SET
                 render_state='error',
+                render_progress=0,
                 render_phase='',
                 render_phase_pct=0,
                 render_progress_detail='',
                 render_speed_x=0,
                 render_eta_sec=0,
+                render_job_id='',
+                render_started_at='',
+                render_heartbeat_at='',
                 render_last_log=?,
                 updated_at=?
             WHERE render_state='running'
@@ -150,8 +164,24 @@ def tx() -> Iterator[sqlite3.Connection]:
         connection.close()
 
 
-def _now() -> str:
+def now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _now() -> str:
+    return now_iso()
+
+
+def _parse_iso_datetime(value: str) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
 
 
 def _row_to_project(row: sqlite3.Row) -> ProjectRecord:
@@ -193,6 +223,9 @@ def _row_to_project(row: sqlite3.Row) -> ProjectRecord:
         "render_progress_detail": str(row["render_progress_detail"] or ""),
         "render_speed_x": float(row["render_speed_x"] or 0.0),
         "render_eta_sec": int(row["render_eta_sec"] or 0),
+        "render_job_id": str(row["render_job_id"] or ""),
+        "render_started_at": str(row["render_started_at"] or ""),
+        "render_heartbeat_at": str(row["render_heartbeat_at"] or ""),
         "render_last_log": str(row["render_last_log"] or ""),
         "upload_state": cast(TaskState, row["upload_state"]),
         "upload_progress": int(row["upload_progress"]),
@@ -272,3 +305,82 @@ def delete_project(pid: str) -> None:
 
 def project_dir(pid: str) -> Path:
     return PROJECTS_DIR / pid
+
+
+def claim_next_queued_render() -> str | None:
+    with tx() as connection:
+        row = connection.execute(
+            "SELECT id FROM projects WHERE render_state='queued' ORDER BY updated_at LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        pid = str(row["id"])
+        job_id = uuid.uuid4().hex
+        now = _now()
+        cursor = connection.execute(
+            """
+            UPDATE projects
+            SET
+                render_state='running',
+                render_job_id=?,
+                render_started_at=?,
+                render_heartbeat_at=?,
+                updated_at=?
+            WHERE id=? AND render_state='queued'
+            """,
+            (job_id, now, now, now, pid),
+        )
+        if cursor.rowcount == 0:
+            return None
+    return pid
+
+
+def touch_render_heartbeat(pid: str) -> None:
+    update_project(pid, render_heartbeat_at=_now())
+
+
+def recover_stale_render_jobs(
+    *,
+    stale_after_sec: int,
+    max_runtime_sec: int,
+) -> int:
+    now = datetime.now(timezone.utc)
+    recovered = 0
+    with tx() as connection:
+        rows = connection.execute(
+            """
+            SELECT id, render_started_at, render_heartbeat_at
+            FROM projects
+            WHERE render_state='running'
+            """
+        ).fetchall()
+        for row in rows:
+            pid = str(row["id"])
+            started_at = _parse_iso_datetime(str(row["render_started_at"] or ""))
+            heartbeat_at = _parse_iso_datetime(str(row["render_heartbeat_at"] or ""))
+            heartbeat_dead = heartbeat_at is None or now - heartbeat_at > timedelta(seconds=stale_after_sec)
+            runtime_dead = started_at is not None and now - started_at > timedelta(seconds=max_runtime_sec)
+            if not heartbeat_dead and not runtime_dead:
+                continue
+            connection.execute(
+                """
+                UPDATE projects
+                SET
+                    render_state='error',
+                    render_progress=0,
+                    render_phase='',
+                    render_phase_pct=0,
+                    render_progress_detail='',
+                    render_speed_x=0,
+                    render_eta_sec=0,
+                    render_job_id='',
+                    render_started_at='',
+                    render_heartbeat_at='',
+                    render_last_log=?,
+                    updated_at=?
+                WHERE id=?
+                """,
+                ("Render worker heartbeat expired. Start render again.", _now(), pid),
+            )
+            recovered += 1
+    return recovered
