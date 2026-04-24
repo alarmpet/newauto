@@ -79,8 +79,8 @@ class TtsPipelineTests(unittest.TestCase):
         fake_model = FakeOmniVoiceModel()
 
         with patch("app.services.tts._get_model", return_value=fake_model), patch(
-            "soundfile.write"
-        ) as write_mock:
+            "app.services.tts._apply_seed"
+        ) as seed_mock, patch("soundfile.write") as write_mock:
             tts.run_tts_job(project_id)
 
         project = db.get_project(project_id)
@@ -93,6 +93,8 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertEqual(write_mock.call_count, 2)
         self.assertEqual(project["tts_profile"]["language"], "ko")
         self.assertEqual(project["tts_profile"]["mode"], "design")
+        self.assertIsNotNone(project["tts_profile"]["seed"])
+        self.assertEqual(seed_mock.call_count, 2)
         first_kwargs = fake_model.kwargs_seen[0]
         self.assertEqual(first_kwargs["language"], "ko")
         self.assertEqual(first_kwargs["speed"], 0.96)
@@ -104,6 +106,19 @@ class TtsPipelineTests(unittest.TestCase):
         timings = json.loads(timings_path.read_text(encoding="utf-8"))
         self.assertEqual(len(timings), 2)
         self.assertEqual([entry["text"] for entry in timings], fake_model.seen)
+
+        manifest_path = db.project_dir(project_id) / "tts" / "tts_run_manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["voice_preset"], "male-deep-calm")
+        self.assertEqual(len(manifest["sentences"]), 2)
+        seed = project["tts_profile"]["seed"]
+        self.assertIsNotNone(seed)
+        assert seed is not None
+        self.assertEqual(manifest["sentences"][0]["seed"], seed)
+        self.assertEqual(
+            manifest["sentences"][1]["seed"],
+            seed + 1,
+        )
 
     def test_run_tts_job_clears_stale_outputs_after_empty_audio_error(self) -> None:
         project_id = self.create_project()
@@ -122,8 +137,8 @@ class TtsPipelineTests(unittest.TestCase):
         fake_model = FakeOmniVoiceModel(empty_text="정상 문장입니다.")
 
         with patch("app.services.tts._get_model", return_value=fake_model), patch(
-            "soundfile.write"
-        ):
+            "app.services.tts._apply_seed"
+        ), patch("soundfile.write"):
             tts.run_tts_job(project_id)
 
         project = db.get_project(project_id)
@@ -132,6 +147,7 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertEqual(project["tts_state"], "error")
         self.assertFalse((output_dir / "0000.wav").exists())
         self.assertFalse((output_dir / "timings.json").exists())
+        self.assertFalse((output_dir / "tts_run_manifest.json").exists())
 
     def test_start_tts_route_persists_profile_payload(self) -> None:
         project_id = self.create_project()
@@ -170,22 +186,27 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertEqual(project["tts_profile"]["language"], "ko")
         self.assertEqual(project["tts_profile"]["speed"], 1.05)
         self.assertEqual(project["tts_profile"]["num_step"], 42)
+        self.assertIsInstance(project["tts_profile"]["seed"], int)
 
     def test_tts_preset_catalog_route_exposes_aliases(self) -> None:
         response = self.client.get("/api/tts/presets")
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertEqual(payload["aliases"]["male-30s-40s-lowmid"], "male-deep-calm")
-        self.assertEqual(payload["presets"]["male-mid-clear"]["instruct"], "male, moderate pitch")
+        self.assertEqual(
+            payload["presets"]["male-mid-clear"]["instruct"],
+            "male, moderate pitch",
+        )
+        self.assertIn("male-60s-low", payload["order"])
 
-    def test_tts_preview_route_generates_audio_file(self) -> None:
+    def test_tts_preview_route_generates_audio_file_and_lock(self) -> None:
         project_id = self.create_project()
         preview_path = db.project_dir(project_id) / "tts_preview.wav"
         fake_model = FakeOmniVoiceModel()
 
         with patch("app.services.tts._get_model", return_value=fake_model), patch(
-            "soundfile.write"
-        ) as write_mock:
+            "app.services.tts._apply_seed"
+        ) as seed_mock, patch("soundfile.write") as write_mock:
             response = self.client.post(
                 f"/api/projects/{project_id}/tts/preview",
                 json={
@@ -210,7 +231,14 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertEqual(payload["sample_text"], "샘플 음성을 들어봅니다.")
         self.assertEqual(payload["voice_preset"], "female-bright-clear")
         self.assertEqual(payload["tts_profile"]["num_step"], 38)
+        self.assertIsInstance(payload["tts_profile"]["seed"], int)
+        self.assertEqual(payload["preview_lock"]["voice_preset"], "female-bright-clear")
+        self.assertEqual(
+            payload["preview_lock"]["tts_profile"]["seed"],
+            payload["tts_profile"]["seed"],
+        )
         self.assertEqual(fake_model.seen, ["샘플 음성을 들어봅니다."])
+        self.assertEqual(seed_mock.call_args.args[0], payload["tts_profile"]["seed"])
         self.assertEqual(write_mock.call_count, 1)
         self.assertEqual(write_mock.call_args.args[0], preview_path)
 
@@ -227,3 +255,70 @@ class TtsPipelineTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("Unsupported instruct items", response.text)
+
+    def test_start_tts_reuses_preview_lock_seed(self) -> None:
+        project_id = self.create_project()
+        self.client.put(
+            f"/api/projects/{project_id}/script",
+            data={"title": "seed lock", "script": "첫 문장입니다."},
+        )
+        fake_model = FakeOmniVoiceModel()
+        with patch("app.services.tts._get_model", return_value=fake_model), patch(
+            "app.services.tts._apply_seed"
+        ), patch("soundfile.write"):
+            preview_response = self.client.post(
+                f"/api/projects/{project_id}/tts/preview",
+                json={
+                    "voice_preset": "male-60s-low",
+                    "sample_text": "미리듣기 샘플입니다.",
+                },
+            )
+        self.assertEqual(preview_response.status_code, 200)
+        preview_payload = preview_response.json()
+
+        with patch("app.services.tts.run_tts_job"):
+            response = self.client.post(
+                f"/api/projects/{project_id}/tts",
+                json={
+                    "voice_preset": "male-60s-low",
+                    "preview_lock": preview_payload["preview_lock"],
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["tts_profile"]["seed"], preview_payload["tts_profile"]["seed"])
+
+    def test_start_tts_rejects_changed_profile_after_preview(self) -> None:
+        project_id = self.create_project()
+        self.client.put(
+            f"/api/projects/{project_id}/script",
+            data={"title": "seed lock", "script": "첫 문장입니다."},
+        )
+        fake_model = FakeOmniVoiceModel()
+        with patch("app.services.tts._get_model", return_value=fake_model), patch(
+            "app.services.tts._apply_seed"
+        ), patch("soundfile.write"):
+            preview_response = self.client.post(
+                f"/api/projects/{project_id}/tts/preview",
+                json={
+                    "voice_preset": "male-60s-low",
+                    "sample_text": "미리듣기 샘플입니다.",
+                },
+            )
+        preview_payload = preview_response.json()
+
+        with patch("app.services.tts.run_tts_job"):
+            response = self.client.post(
+                f"/api/projects/{project_id}/tts",
+                json={
+                    "voice_preset": "male-60s-low",
+                    "tts_profile": {"speed": 1.05},
+                    "preview_lock": preview_payload["preview_lock"],
+                },
+            )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("generate a new sample first", response.text)

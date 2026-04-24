@@ -40,6 +40,7 @@ class TtsProfile(TypedDict):
     guidance_scale: float
     denoise: bool
     postprocess_output: bool
+    seed: int | None
 
 
 class ProjectRecord(TypedDict):
@@ -197,6 +198,29 @@ class TtsPreviewResponse(TypedDict):
     sample_text: str
     voice_preset: str
     tts_profile: TtsProfile
+    preview_lock: "TtsPreviewLock"
+
+
+class TtsPreviewLock(TypedDict):
+    voice_preset: str
+    tts_profile: TtsProfile
+    signature: str
+
+
+class TtsSentenceManifestEntry(TypedDict):
+    idx: int
+    text: str
+    voice_preset: str
+    effective_profile: TtsProfile
+    kwargs: dict[str, VoicePresetArg]
+    seed: int
+
+
+class TtsRunManifest(TypedDict):
+    generated_at: str
+    voice_preset: str
+    tts_profile: TtsProfile
+    sentences: list[TtsSentenceManifestEntry]
 
 
 class TtsPresetCatalogResponse(TypedDict):

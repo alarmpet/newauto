@@ -40,6 +40,7 @@
  *   guidance_scale: number,
  *   denoise: boolean,
  *   postprocess_output: boolean,
+ *   seed: number | null,
  * }} TtsProfile
  */
 
@@ -189,10 +190,19 @@
 
 /**
  * @typedef {{
+ *   voice_preset: string,
+ *   tts_profile: TtsProfile,
+ *   signature: string,
+ * }} TtsPreviewLock
+ */
+
+/**
+ * @typedef {{
  *   preview_url: string,
-  *   sample_text: string,
-  *   voice_preset: string,
-  *   tts_profile: TtsProfile,
+ *   sample_text: string,
+ *   voice_preset: string,
+ *   tts_profile: TtsProfile,
+ *   preview_lock: TtsPreviewLock,
  * }} TtsPreviewResponse
  */
 
@@ -603,12 +613,15 @@ const DEFAULT_TTS_PROFILE = {
   guidance_scale: 2.6,
   denoise: true,
   postprocess_output: true,
+  seed: null,
 };
 
 const DEFAULT_TTS_SAMPLE_TEXT = "안녕하세요. 지금 들으시는 음성은 현재 보이스 설정으로 만든 짧은 샘플입니다.";
 /** @type {TtsPresetCatalogResponse | null} */
 let ttsPresetCatalog = null;
 let ttsFormDirtyAfterPreset = false;
+/** @type {TtsPreviewLock | null} */
+let lastTtsPreviewLock = null;
 const PLAY_RES_Y = 1080;
 const SUBTITLE_POSITION_CENTER_RATIO = {
   top: 0.12,
@@ -895,6 +908,7 @@ function renderTtsProfileControls() {
   if (!ttsPreviewTextInput.value.trim()) {
     ttsPreviewTextInput.value = ttsPresetCatalog ? ttsPresetCatalog.sample_text : DEFAULT_TTS_SAMPLE_TEXT;
   }
+  lastTtsPreviewLock = null;
   ttsPreviewState.textContent = "샘플을 생성하면 여기에서 바로 재생할 수 있습니다.";
   ttsPreviewAudio.src = "";
   ttsPreviewAudio.load();
@@ -935,6 +949,7 @@ function readTtsProfileInputs() {
     ),
     denoise: ttsDenoiseSelect.value === "on",
     postprocess_output: ttsPostprocessSelect.value === "on",
+    seed: null,
   };
 }
 
@@ -956,6 +971,7 @@ function applyTtsPreset(presetId) {
   ttsPostprocessSelect.value = merged.postprocess_output ? "on" : "off";
   ttsInstructInput.value = merged.instruct;
   ttsFormDirtyAfterPreset = false;
+  lastTtsPreviewLock = null;
   updateTtsEffectiveProfile();
 }
 
@@ -968,6 +984,13 @@ function buildTtsProfilePayload() {
     return null;
   }
   return readTtsProfileInputs();
+}
+
+/**
+ * @returns {void}
+ */
+function clearTtsPreviewLock() {
+  lastTtsPreviewLock = null;
 }
 
 /**
@@ -1730,12 +1753,14 @@ async function generateTtsPreview() {
         }),
       })
     );
+    lastTtsPreviewLock = response.preview_lock;
     ttsPreviewAudio.src = `${response.preview_url}?t=${Date.now()}`;
     ttsPreviewAudio.load();
     void ttsPreviewAudio.play().catch(() => {
       // Some browsers block autoplay after async work.
     });
-    ttsPreviewState.textContent = `샘플 준비 완료: ${response.sample_text}`;
+    ttsPreviewState.textContent =
+      `샘플 준비 완료: ${response.sample_text} | seed ${response.preview_lock.tts_profile.seed}`;
   } finally {
     ttsPreviewRunButton.disabled = false;
   }
@@ -2184,6 +2209,26 @@ ttsPreviewRunButton.addEventListener("click", () => {
   void generateTtsPreview().catch((error) => handleError(error, "샘플 음성을 생성하지 못했습니다."));
 });
 
+for (const element of [
+  ttsModeSelect,
+  ttsLanguageSelect,
+  ttsSpeedInput,
+  ttsDurationInput,
+  ttsNumStepInput,
+  ttsGuidanceInput,
+  ttsDenoiseSelect,
+  ttsPostprocessSelect,
+  ttsInstructInput,
+  ttsPreviewTextInput,
+]) {
+  element.addEventListener("input", () => {
+    clearTtsPreviewLock();
+  });
+  element.addEventListener("change", () => {
+    clearTtsPreviewLock();
+  });
+}
+
 ttsRunButton.addEventListener("click", async () => {
   const project = requireCurrent();
   try {
@@ -2195,12 +2240,15 @@ ttsRunButton.addEventListener("click", async () => {
       body: JSON.stringify({
         voice_preset: canonicalId,
         tts_profile: ttsProfile,
+        preview_lock: lastTtsPreviewLock,
       }),
     });
     current = {
       ...project,
       voice_preset: canonicalId,
-      tts_profile: ttsProfile || presetProfile(canonicalId),
+      tts_profile: (lastTtsPreviewLock && lastTtsPreviewLock.voice_preset === canonicalId)
+        ? lastTtsPreviewLock.tts_profile
+        : (ttsProfile || presetProfile(canonicalId)),
       tts_state: "running",
       tts_progress: 0,
     };

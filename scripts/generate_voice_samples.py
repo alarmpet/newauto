@@ -67,14 +67,14 @@ def main() -> int:
     for preset_id in preset_ids:
         out_name = output_filename_for_preset(preset_id)
         out_path = output_dir / out_name
-        audio = tts.synthesize_preview(args.text, preset_id)
+        _, profile, _, audio = tts.synthesize_preview_with_profile(args.text, preset_id, {})
         tts.save_audio_file(audio, out_path)
         samples.append(
             {
                 "preset_id": preset_id,
                 "label": catalog["labels"][preset_id],
                 "output_file": out_name,
-                "kwargs": tts.get_preset_kwargs(preset_id),
+                "kwargs": tts.tts_profile_to_manifest_kwargs(profile),
             }
         )
 

@@ -5,7 +5,7 @@ from .types import TtsMode, TtsPresetCatalogResponse, TtsProfile, VoicePresetArg
 
 VOICE_SAMPLE_TEXT = (
     "안녕하세요. 지금 들으시는 음성은 OmniVoice 보이스 비교 샘플입니다. "
-    "목소리 톤과 속도, 전달감의 차이를 확인해 주세요."
+    "목소리의 톤과 전달감 차이를 확인해 주세요."
 )
 
 DEFAULT_TTS_PROFILE: TtsProfile = {
@@ -18,6 +18,7 @@ DEFAULT_TTS_PROFILE: TtsProfile = {
     "guidance_scale": 2.6,
     "denoise": True,
     "postprocess_output": True,
+    "seed": None,
 }
 
 _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
@@ -32,6 +33,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 2.9,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
     },
     "male-mid-clear": {
         "mode": "design",
@@ -43,6 +45,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 2.7,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
     },
     "male-40s-50s-lowmid": {
         "mode": "design",
@@ -54,6 +57,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 3.0,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
     },
     "male-announcer-40s-50s": {
         "mode": "design",
@@ -65,6 +69,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 2.9,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
     },
     "male-pastor-40s-50s": {
         "mode": "design",
@@ -76,6 +81,55 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 3.1,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
+    },
+    "male-60s-low": {
+        "mode": "design",
+        "language": "ko",
+        "instruct": "male, elderly, low pitch",
+        "speed": 0.9,
+        "duration": None,
+        "num_step": 40,
+        "guidance_scale": 3.1,
+        "denoise": True,
+        "postprocess_output": True,
+        "seed": None,
+    },
+    "male-pastor-60s": {
+        "mode": "design",
+        "language": "ko",
+        "instruct": "male, elderly, low pitch",
+        "speed": 0.87,
+        "duration": None,
+        "num_step": 42,
+        "guidance_scale": 3.2,
+        "denoise": True,
+        "postprocess_output": True,
+        "seed": None,
+    },
+    "male-narration-60s": {
+        "mode": "design",
+        "language": "ko",
+        "instruct": "male, elderly, moderate pitch",
+        "speed": 0.92,
+        "duration": None,
+        "num_step": 40,
+        "guidance_scale": 3.0,
+        "denoise": True,
+        "postprocess_output": True,
+        "seed": None,
+    },
+    "male-announcer-60s": {
+        "mode": "design",
+        "language": "ko",
+        "instruct": "male, elderly, moderate pitch",
+        "speed": 0.96,
+        "duration": None,
+        "num_step": 38,
+        "guidance_scale": 3.0,
+        "denoise": True,
+        "postprocess_output": True,
+        "seed": None,
     },
     "female-bright-clear": {
         "mode": "design",
@@ -87,6 +141,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 3.0,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
     },
     "female-low-calm": {
         "mode": "design",
@@ -98,6 +153,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 2.8,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
     },
     "elder-narration": {
         "mode": "design",
@@ -109,6 +165,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 3.1,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
     },
     "whisper-story": {
         "mode": "design",
@@ -120,6 +177,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 3.2,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
     },
     "english-bright": {
         "mode": "design",
@@ -131,6 +189,7 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "guidance_scale": 2.8,
         "denoise": True,
         "postprocess_output": True,
+        "seed": None,
     },
 }
 
@@ -152,6 +211,10 @@ VOICE_PRESET_ORDER = [
     "male-40s-50s-lowmid",
     "male-announcer-40s-50s",
     "male-pastor-40s-50s",
+    "male-60s-low",
+    "male-pastor-60s",
+    "male-narration-60s",
+    "male-announcer-60s",
     "female-bright-clear",
     "female-low-calm",
     "elder-narration",
@@ -161,23 +224,26 @@ VOICE_PRESET_ORDER = [
 
 VOICE_PRESET_LABELS: dict[str, str] = {
     "auto": "Auto Detect",
-    "male-deep-calm": "Male Deep Calm",
-    "male-mid-clear": "Male Mid Clear",
+    "male-deep-calm": "남성 저음 차분형",
+    "male-mid-clear": "남성 중음 또렷형",
     "male-40s-50s-lowmid": "40~50대 남성 중저음",
     "male-announcer-40s-50s": "40~50대 남성 아나운서",
     "male-pastor-40s-50s": "40~50대 남성 목사",
-    "female-bright-clear": "Female Bright Clear",
-    "female-low-calm": "Female Low Calm",
-    "elder-narration": "Elder Narration",
-    "whisper-story": "Whisper Story",
+    "male-60s-low": "60대 남성 저음",
+    "male-pastor-60s": "60대 남성 목사",
+    "male-narration-60s": "60대 남성 낭독",
+    "male-announcer-60s": "60대 남성 아나운서",
+    "female-bright-clear": "여성 밝고 선명한 톤",
+    "female-low-calm": "여성 차분한 저음",
+    "elder-narration": "노년 내레이션",
+    "whisper-story": "속삭이는 스토리텔러",
     "english-bright": "English Bright",
-    "male-calm": "Male Deep Calm",
-    "female-bright": "Female Bright Clear",
-    "narrator": "Male Mid Clear",
-    "male-30s-40s-lowmid": "Male Deep Calm",
-    "male-40s-50s-lowmid": "40~50대 남성 중저음",
-    "male-announcer-30s-40s": "Male Mid Clear",
-    "male-low-30s-40s": "Male Deep Calm",
+    "male-calm": "남성 저음 차분형",
+    "female-bright": "여성 밝고 선명한 톤",
+    "narrator": "남성 중음 또렷형",
+    "male-30s-40s-lowmid": "남성 저음 차분형",
+    "male-announcer-30s-40s": "남성 중음 또렷형",
+    "male-low-30s-40s": "남성 저음 차분형",
     "male-pastor-30s-40s": "40~50대 남성 목사",
 }
 
@@ -221,6 +287,14 @@ def _coerce_bool(value: object, fallback: bool) -> bool:
     return fallback
 
 
+def _coerce_seed(value: object) -> int | None:
+    if value is None or value == "":
+        return None
+    if isinstance(value, int):
+        return max(0, min(value, 2_147_483_647))
+    return None
+
+
 def normalize_tts_profile(
     payload: object,
     voice_preset: str,
@@ -251,19 +325,33 @@ def normalize_tts_profile(
     else:
         base_profile["duration"] = _clamp_float(duration_value, 0.0, 0.0, 30.0) or None
 
-    base_profile["speed"] = _clamp_float(overrides.get("speed"), float(base_profile["speed"]), 0.75, 1.25)
-    base_profile["num_step"] = _clamp_int(overrides.get("num_step"), int(base_profile["num_step"]), 16, 64)
+    base_profile["speed"] = _clamp_float(
+        overrides.get("speed"),
+        float(base_profile["speed"]),
+        0.75,
+        1.25,
+    )
+    base_profile["num_step"] = _clamp_int(
+        overrides.get("num_step"),
+        int(base_profile["num_step"]),
+        16,
+        64,
+    )
     base_profile["guidance_scale"] = _clamp_float(
         overrides.get("guidance_scale"),
         float(base_profile["guidance_scale"]),
         1.0,
         5.0,
     )
-    base_profile["denoise"] = _coerce_bool(overrides.get("denoise"), bool(base_profile["denoise"]))
+    base_profile["denoise"] = _coerce_bool(
+        overrides.get("denoise"),
+        bool(base_profile["denoise"]),
+    )
     base_profile["postprocess_output"] = _coerce_bool(
         overrides.get("postprocess_output"),
         bool(base_profile["postprocess_output"]),
     )
+    base_profile["seed"] = _coerce_seed(overrides.get("seed"))
 
     if base_profile["mode"] == "auto":
         base_profile["instruct"] = ""
@@ -285,6 +373,8 @@ def tts_profile_to_manifest_kwargs(profile: TtsProfile) -> dict[str, VoicePreset
         payload["instruct"] = profile["instruct"]
     if profile["duration"] is not None:
         payload["duration"] = profile["duration"]
+    if profile["seed"] is not None:
+        payload["seed"] = profile["seed"]
     return payload
 
 

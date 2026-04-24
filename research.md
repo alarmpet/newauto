@@ -729,3 +729,32 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `scripts/typecheck.ps1`.
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
+## 2026-04-24 TTS Seed Lock And Senior Male Presets Update
+
+### Architecture changes
+
+- Extended `TtsProfile` with `seed` so preview and full TTS can share the same deterministic base configuration.
+- Added preview-lock signing for TTS preview responses:
+  - canonical preset id
+  - effective profile
+  - signature
+- Added a sentence-level `tts_run_manifest.json` artifact that records the effective profile and seed used for every generated sentence.
+- Switched OmniVoice synthesis seeding to a wrapper-level RNG lock using `omnivoice.utils.common.fix_random_seed()` before each generation call.
+
+### Workflow changes
+
+- Added four new senior male presets to the shared preset catalog:
+  - `male-60s-low`
+  - `male-pastor-60s`
+  - `male-narration-60s`
+  - `male-announcer-60s`
+- Step 3 preview now returns a preview lock and keeps the concrete seed visible in the UI state.
+- `TTS 시작` now reuses the preview seed when a matching preview lock is present, and rejects runs when tuning changed after preview.
+- Voice sample generation script now uses the same preview synthesis path so offline comparison samples reflect the real effective profile behavior.
+
+### Verification
+
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.

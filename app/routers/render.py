@@ -32,6 +32,7 @@ class TtsProfilePayload(BaseModel):
     guidance_scale: float | None = Field(default=None, ge=1.0, le=5.0)
     denoise: bool | None = None
     postprocess_output: bool | None = None
+    seed: int | None = Field(default=None, ge=0, le=2147483647)
 
     def to_payload(self) -> dict[str, object]:
         payload: dict[str, object] = {}
@@ -45,6 +46,7 @@ class TtsProfilePayload(BaseModel):
             "guidance_scale",
             "denoise",
             "postprocess_output",
+            "seed",
         ):
             value = getattr(self, key)
             if value is not None:
@@ -52,11 +54,27 @@ class TtsProfilePayload(BaseModel):
         return payload
 
 
+class TtsPreviewLockPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    voice_preset: str
+    signature: str = Field(min_length=64, max_length=64)
+    tts_profile: TtsProfilePayload
+
+    def to_payload(self) -> dict[str, object]:
+        return {
+            "voice_preset": self.voice_preset,
+            "signature": self.signature,
+            "tts_profile": self.tts_profile.to_payload(),
+        }
+
+
 class TtsRunPayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     voice_preset: str = "auto"
     tts_profile: TtsProfilePayload | None = None
+    preview_lock: TtsPreviewLockPayload | None = None
 
 
 class TtsPreviewPayload(BaseModel):
@@ -92,6 +110,18 @@ def start_tts(pid: str, bg: BackgroundTasks, payload: TtsRunPayload) -> dict[str
         payload.voice_preset,
         project["script"],
     )
+    try:
+        if payload.preview_lock is not None:
+            preview_lock = tts_svc.validate_preview_lock(
+                payload.preview_lock.to_payload(),
+                voice_preset,
+                tts_svc.ensure_seed(tts_profile, forced_seed=payload.preview_lock.tts_profile.seed),
+            )
+            tts_profile = preview_lock["tts_profile"]
+        else:
+            tts_profile = tts_svc.ensure_seed(tts_profile)
+    except ValueError as exc:
+        raise HTTPException(400, str(exc)) from exc
     db.update_project(
         pid,
         voice_preset=voice_preset,
@@ -110,7 +140,7 @@ def generate_tts_preview(pid: str, payload: TtsPreviewPayload) -> TtsPreviewResp
     preview_path = db.project_dir(pid) / "tts_preview.wav"
     canonical_preset = canonical_voice_preset(payload.voice_preset)
     try:
-        voice_preset, tts_profile, audio = tts_svc.synthesize_preview_with_profile(
+        voice_preset, tts_profile, preview_lock, audio = tts_svc.synthesize_preview_with_profile(
             sample_text,
             canonical_preset,
             payload.tts_profile.to_payload() if payload.tts_profile is not None else {},
@@ -125,6 +155,7 @@ def generate_tts_preview(pid: str, payload: TtsPreviewPayload) -> TtsPreviewResp
         "sample_text": sample_text,
         "voice_preset": voice_preset,
         "tts_profile": tts_profile,
+        "preview_lock": preview_lock,
     }
 
 
