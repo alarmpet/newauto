@@ -699,3 +699,33 @@ powershell -ExecutionPolicy Bypass -File .\scripts\typecheck.ps1
 - Verified `scripts/typecheck.ps1`.
 - Verified `node --check app/static/app.js`.
 - Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.
+
+## 2026-04-24 Subtitle Layout Consistency Update
+
+### Architecture changes
+
+- Reworked subtitle wrapping so the first rendered line now respects the configured line-length cap more reliably.
+- Added block-height-aware subtitle placement helpers so vertical position can account for:
+  - font size
+  - line count
+  - outline width
+- Rebalanced effective line-length calculation for large fonts by lowering the old hard floor and using a more realistic character-width estimate.
+
+### Workflow changes
+
+- `lower` subtitle placement now targets a lower-third center ratio instead of relying on the previous fixed ASS margin.
+- Dialogue events now override `MarginV` per cue based on actual wrapped line count, which keeps one-line and two-line captions visually closer to the intended anchor.
+- Step 4 subtitle preview now follows the same position ratios used by backend rendering, reducing preview/render mismatch.
+- ASS output now uses `WrapStyle: 0` as a safety net for extreme overflow cases.
+
+### Verification
+
+- Added subtitle regression tests covering:
+  - first-line max-length behavior
+  - large-font effective line length
+  - lower-third center placement
+  - top margin fine-tuning
+  - screenshot-like long sentence wrapping
+- Verified `scripts/typecheck.ps1`.
+- Verified `node --check app/static/app.js`.
+- Verified `omnivoice_env\\Scripts\\python.exe -m unittest discover -s tests -v`.

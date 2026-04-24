@@ -23,6 +23,15 @@ DEFAULT_SUBTITLE_STYLE: SubtitleStyle = {
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 _POSITION_VALUES: set[SubtitlePosition] = {"top", "upper", "middle", "lower", "bottom"}
 _EFFECT_VALUES: set[SubtitleEffect] = {"none", "fade", "pop", "karaoke"}
+PLAY_RES_X = 1920
+PLAY_RES_Y = 1080
+POSITION_CENTER_RATIO: dict[SubtitlePosition, float] = {
+    "top": 0.12,
+    "upper": 0.30,
+    "middle": 0.50,
+    "lower": 0.78,
+    "bottom": 0.88,
+}
 
 
 def _fmt_ts(sec: float) -> str:
@@ -35,53 +44,38 @@ def _fmt_ts(sec: float) -> str:
     return f"{hours:02d}:{minutes:02d}:{seconds:02d},{milliseconds:03d}"
 
 
-def _candidate_split_points(text: str, markers: str) -> list[int]:
-    return [index for index, char in enumerate(text[:-1], start=1) if char in markers]
-
-
-def _score_split(text: str, split_index: int, max_len: int) -> tuple[int, int, int]:
-    left = text[:split_index].rstrip()
-    right = text[split_index:].lstrip(" ,;:")
-    longest = max(len(left), len(right))
-    overflow = max(0, len(left) - max_len) + max(0, len(right) - max_len)
-    imbalance = abs(len(left) - len(right))
-    midpoint_distance = abs(split_index - (len(text) // 2))
-    return (overflow, longest, imbalance + midpoint_distance)
-
-
-def _choose_split_index(text: str, max_len: int) -> int | None:
+def _find_break_backward(text: str, max_len: int) -> int:
     if len(text) <= max_len:
-        return None
-    min_index = max(1, min(len(text) - 1, int(len(text) * 0.2)))
-    max_index = min(len(text) - 1, max(min_index + 1, int(len(text) * 0.8)))
-    candidate_groups = [
-        _candidate_split_points(text, ".!?"),
-        _candidate_split_points(text, ",;:"),
-        _candidate_split_points(text, " "),
-    ]
-    for candidates in candidate_groups:
-        filtered = [index for index in candidates if min_index <= index <= max_index]
-        if filtered:
-            return min(filtered, key=lambda index: _score_split(text, index, max_len))
-    return None
+        return len(text)
+    upper = min(max_len, len(text) - 1)
+    for chars in (".!?", ",;:", " "):
+        for index in range(upper, 0, -1):
+            if text[index - 1] in chars:
+                return index
+    return upper
 
 
 def _smart_wrap(text: str, max_len: int = 26) -> str:
     normalized = " ".join(text.strip().split())
     if len(normalized) <= max_len:
         return normalized
+    first_split = _find_break_backward(normalized, max_len)
+    first_line = normalized[:first_split].rstrip()
+    remainder = normalized[first_split:].lstrip(" ,;:")
+    if not first_line or not remainder:
+        midpoint = min(max_len, max(1, len(normalized) // 2))
+        first_line = normalized[:midpoint].rstrip()
+        remainder = normalized[midpoint:].lstrip()
+    if len(remainder) <= max_len:
+        return f"{first_line}\n{remainder}"
 
-    split_index = _choose_split_index(normalized, max_len)
-    if split_index is None:
-        split_index = len(normalized) // 2
-
-    left = normalized[:split_index].rstrip()
-    right = normalized[split_index:].lstrip(" ,;:")
-    if not left or not right:
-        midpoint = len(normalized) // 2
-        left = normalized[:midpoint].rstrip()
-        right = normalized[midpoint:].lstrip()
-    return f"{left}\n{right}"
+    second_split = _find_break_backward(remainder, max_len)
+    second_left = remainder[:second_split].rstrip()
+    second_right = remainder[second_split:].lstrip(" ,;:")
+    merged_second_line = f"{second_left} {second_right}".strip() if second_right else second_left
+    if not merged_second_line:
+        merged_second_line = remainder
+    return f"{first_line}\n{merged_second_line}"
 
 
 def _coerce_int(value: object, default: int, min_value: int, max_value: int) -> int:
@@ -174,28 +168,40 @@ def _ass_color(hex_color: str, opacity: float = 0.0) -> str:
 
 
 def _ass_alignment(position: SubtitlePosition) -> int:
-    if position in {"top", "upper"}:
-        return 8
     if position == "middle":
         return 5
     return 2
 
 
-def _ass_margin_v(position: SubtitlePosition, user_margin_v: int) -> int:
-    if position == "upper":
-        return 220
-    if position == "lower":
-        return 140
+def _estimate_block_height_px(font_size: int, line_count: int, outline: int) -> int:
+    return int(font_size * 1.4) * max(1, line_count) + (outline * 2)
+
+
+def _ass_margin_v(
+    position: SubtitlePosition,
+    user_margin_v: int,
+    font_size: int,
+    line_count: int,
+    outline: int,
+) -> int:
     if position == "middle":
         return 0
-    return user_margin_v
+    block_height = _estimate_block_height_px(font_size, line_count, outline)
+    target_center_y = int(PLAY_RES_Y * POSITION_CENTER_RATIO[position])
+    margin = PLAY_RES_Y - target_center_y - (block_height // 2)
+    if position == "top":
+        margin -= user_margin_v
+    elif position == "bottom":
+        margin += user_margin_v
+    return max(8, margin)
 
 
 def _effective_max_line_chars(style: SubtitleStyle) -> int:
-    available_width = max(480, 1920 - (style["margin_h"] * 2))
-    estimated_char_width = max(24.0, style["font_size"] * 1.35)
+    available_width = max(480, PLAY_RES_X - (style["margin_h"] * 2))
+    estimated_char_width = max(20.0, style["font_size"] * 1.05)
     safe_chars = int(available_width / estimated_char_width)
-    return max(16, min(style["max_line_chars"], safe_chars, 40))
+    floor = max(6, 24 // max(1, style["font_size"] // 24))
+    return max(floor, min(style["max_line_chars"], safe_chars, 40))
 
 
 def _escape_ass_text(text: str) -> str:
@@ -288,10 +294,10 @@ def write_ass(
     lines = [
         "[Script Info]",
         "ScriptType: v4.00+",
-        "WrapStyle: 2",
+        "WrapStyle: 0",
         "ScaledBorderAndShadow: yes",
-        "PlayResX: 1920",
-        "PlayResY: 1080",
+        f"PlayResX: {PLAY_RES_X}",
+        f"PlayResY: {PLAY_RES_Y}",
         "",
         "[V4+ Styles]",
         (
@@ -313,7 +319,7 @@ def write_ass(
             f"{normalized['shadow']},"
             f"{_ass_alignment(normalized['position'])},"
             f"{normalized['margin_h']},{normalized['margin_h']},"
-            f"{_ass_margin_v(normalized['position'], normalized['margin_v'])},"
+            f"{normalized['margin_v']},"
             "1"
         ),
         "",
@@ -321,16 +327,25 @@ def write_ass(
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     for timing in adjusted_timings:
+        plain_wrapped = _smart_wrap(timing["text"], max_line_chars)
+        line_count = plain_wrapped.count("\n") + 1
+        event_margin_v = _ass_margin_v(
+            normalized["position"],
+            normalized["margin_v"],
+            normalized["font_size"],
+            line_count,
+            normalized["outline_width"],
+        )
         text = (
             _karaoke_text(timing, word_timings or [], max_line_chars)
             if normalized["effect"] == "karaoke"
-            else _escape_ass_text(_smart_wrap(timing["text"], max_line_chars))
+            else _escape_ass_text(plain_wrapped)
         )
         lines.append(
             "Dialogue: 0,"
             f"{_fmt_ass_ts(timing['start'])},"
             f"{_fmt_ass_ts(timing['end'])},"
-            "Default,,0,0,0,,"
+            f"Default,,0,0,{event_margin_v},,"
             f"{_effect_tag(normalized['effect'])}{text}"
         )
     out_path.write_text("\n".join(lines), encoding="utf-8")

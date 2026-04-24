@@ -5,7 +5,16 @@ from unittest.mock import patch
 
 from app import db
 from app.services import yt_upload
-from app.services.subtitle import DEFAULT_SUBTITLE_STYLE, normalize_subtitle_style, write_ass, write_srt
+from app.services.subtitle import (
+    DEFAULT_SUBTITLE_STYLE,
+    _ass_margin_v,
+    _effective_max_line_chars,
+    _estimate_block_height_px,
+    _smart_wrap,
+    normalize_subtitle_style,
+    write_ass,
+    write_srt,
+)
 from app.types import SubtitleStyle, TimingEntry
 
 
@@ -66,6 +75,71 @@ class FakeMediaFileUpload:
 
 
 class SubtitleRenderingTests(unittest.TestCase):
+    def test_smart_wrap_keeps_first_line_within_max_len(self) -> None:
+        text = "여러분 혹시 내 몸에 전혀 맞지 않는 무겁고 거추장스러운 옷을 입고 하루 종일 사람들을 상대해 본 적이 있으신가요"
+        wrapped = _smart_wrap(text, 20)
+
+        first_line = wrapped.split("\n", maxsplit=1)[0]
+        self.assertLessEqual(len(first_line), 20)
+
+    def test_smart_wrap_returns_at_most_two_lines(self) -> None:
+        wrapped = _smart_wrap("x" * 100, 10)
+        self.assertLessEqual(wrapped.count("\n"), 1)
+
+    def test_effective_max_chars_lowers_floor_for_large_font(self) -> None:
+        style: SubtitleStyle = {
+            **DEFAULT_SUBTITLE_STYLE,
+            "font_size": 96,
+            "margin_h": 400,
+            "max_line_chars": 20,
+        }
+        self.assertLessEqual(_effective_max_line_chars(style), 12)
+
+    def test_effective_max_chars_uses_realistic_korean_width_for_large_font(self) -> None:
+        style: SubtitleStyle = {
+            **DEFAULT_SUBTITLE_STYLE,
+            "font_size": 96,
+            "margin_h": 120,
+            "max_line_chars": 20,
+        }
+        effective = _effective_max_line_chars(style)
+        self.assertGreaterEqual(effective, 14)
+        self.assertLessEqual(effective, 18)
+
+    def test_ass_margin_v_lower_places_center_near_lower_third(self) -> None:
+        margin_v = _ass_margin_v("lower", user_margin_v=100, font_size=96, line_count=2, outline=2)
+        block_height = _estimate_block_height_px(96, 2, 2)
+        caption_center_y = 1080 - margin_v - (block_height // 2)
+
+        self.assertLess(abs(caption_center_y - 842), 6)
+
+    def test_ass_margin_v_top_uses_user_margin_for_fine_tune(self) -> None:
+        base = _ass_margin_v("top", user_margin_v=0, font_size=48, line_count=1, outline=2)
+        tuned = _ass_margin_v("top", user_margin_v=50, font_size=48, line_count=1, outline=2)
+
+        self.assertLess(tuned, base)
+
+    def test_screenshot_case_wraps_into_readable_lines(self) -> None:
+        style: SubtitleStyle = {
+            **DEFAULT_SUBTITLE_STYLE,
+            "font_size": 96,
+            "position": "lower",
+            "margin_h": 120,
+            "margin_v": 100,
+            "max_line_chars": 20,
+            "outline_width": 2,
+        }
+        effective = _effective_max_line_chars(style)
+        wrapped = _smart_wrap(
+            "여러분, 혹시 내 몸에 전혀 맞지 않는 무겁고 거추장스러운 옷을 입고 하루 종일 사람들을 상대해 본 적이 있으신가요?",
+            effective,
+        )
+
+        self.assertLessEqual(effective, 20)
+        self.assertLessEqual(wrapped.count("\n"), 1)
+        self.assertLessEqual(len(wrapped.split("\n", maxsplit=1)[0]), effective)
+        self.assertIn("\n", wrapped)
+
     def test_write_ass_applies_style_and_effect(self) -> None:
         timings: list[TimingEntry] = [
             {
@@ -92,7 +166,9 @@ class SubtitleRenderingTests(unittest.TestCase):
 
         self.assertIn("Style: Default,Malgun Gothic,60", content)
         self.assertIn("&H006DE6FF", content)
-        self.assertIn(",8,144,144,80,", content)
+        self.assertIn("Style: Default,Malgun Gothic,60,&H006DE6FF", content)
+        self.assertIn(",2,144,144,80,", content)
+        self.assertIn("Dialogue: 0,0:00:00.00,0:00:02.50,Default,,0,0,", content)
         self.assertIn(r"{\fad(120,120)}", content)
         self.assertIn(r"\N", content)
 
@@ -119,8 +195,10 @@ class SubtitleRenderingTests(unittest.TestCase):
             upper_content = upper_output.read_text(encoding="utf-8")
             lower_content = lower_output.read_text(encoding="utf-8")
 
-        self.assertIn(",8,120,120,220,", upper_content)
-        self.assertIn(",2,120,120,140,", lower_content)
+        self.assertIn(",2,120,120,48,", upper_content)
+        self.assertIn(",2,120,120,48,", lower_content)
+        self.assertRegex(upper_content, r"Dialogue: 0,0:00:00\.00,0:00:01\.40,Default,,0,0,\d+,,")
+        self.assertRegex(lower_content, r"Dialogue: 0,0:00:00\.00,0:00:01\.00,Default,,0,0,\d+,,")
         self.assertIn("Dialogue: 0,0:00:00.00,0:00:01.40,", upper_content)
 
     def test_write_srt_extends_short_cues_without_overlap(self) -> None:

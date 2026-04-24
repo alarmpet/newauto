@@ -609,6 +609,14 @@ const DEFAULT_TTS_SAMPLE_TEXT = "안녕하세요. 지금 들으시는 음성은 
 /** @type {TtsPresetCatalogResponse | null} */
 let ttsPresetCatalog = null;
 let ttsFormDirtyAfterPreset = false;
+const PLAY_RES_Y = 1080;
+const SUBTITLE_POSITION_CENTER_RATIO = {
+  top: 0.12,
+  upper: 0.30,
+  middle: 0.50,
+  lower: 0.78,
+  bottom: 0.88,
+};
 
 /** @type {Record<string, Partial<SubtitleStyle>>} */
 const SUBTITLE_PRESETS = {
@@ -1406,6 +1414,21 @@ function usesFixedVerticalAnchor(position) {
 
 /**
  * @param {SubtitleStyle} style
+ * @returns {number}
+ */
+function subtitlePreviewCenterPercent(style) {
+  let centerPercent = SUBTITLE_POSITION_CENTER_RATIO[style.position] * 100;
+  if (style.position === "top") {
+    centerPercent -= (style.margin_v / PLAY_RES_Y) * 100;
+  }
+  if (style.position === "bottom") {
+    centerPercent += (style.margin_v / PLAY_RES_Y) * 100;
+  }
+  return centerPercent;
+}
+
+/**
+ * @param {SubtitleStyle} style
  * @returns {void}
  */
 function writeSubtitleStyleInputs(style) {
@@ -1440,8 +1463,9 @@ function renderSubtitleStyleControls() {
 function renderSubtitlePreview() {
   const style = readSubtitleStyleInputs();
   const previewWidth = Math.max(42, 100 - Math.round((style.margin_h / 400) * 36));
+  const centerPercent = subtitlePreviewCenterPercent(style);
   subtitlePositionHint.textContent = usesFixedVerticalAnchor(style.position)
-    ? "Upper, middle, lower positions use fixed anchors. Lower is tuned closer to the lower-third area."
+    ? "Upper, middle, lower positions use fixed center anchors. Lower targets the lower-third area."
     : "Top and bottom use the vertical margin value directly, so you can fine-tune the edge spacing.";
   subtitlePreviewCaption.textContent = style.effect === "pop"
     ? "자막 스타일 미리보기!"
@@ -1453,37 +1477,11 @@ function renderSubtitlePreview() {
   subtitlePreviewCaption.style.backgroundColor = `rgba(0, 0, 0, ${style.background_opacity})`;
   subtitlePreviewCaption.style.fontWeight = style.effect === "pop" ? "800" : "700";
   subtitlePreviewCaption.style.width = `${previewWidth}%`;
-  subtitlePreviewCaption.style.transform = style.effect === "pop"
-    ? "translateX(-50%) scale(1.05)"
-    : "translateX(-50%)";
-  subtitlePreviewCaption.style.top = "";
+  subtitlePreviewCaption.style.top = `${centerPercent}%`;
   subtitlePreviewCaption.style.bottom = "";
-  if (style.position === "top") {
-    subtitlePreviewCaption.style.top = `${Math.max(8, Math.round(style.margin_v * 0.25))}px`;
-    return;
-  }
-  if (style.position === "upper") {
-    subtitlePreviewCaption.style.top = "28%";
-    subtitlePreviewCaption.style.transform = style.effect === "pop"
-      ? "translate(-50%, -50%) scale(1.05)"
-      : "translate(-50%, -50%)";
-    return;
-  }
-  if (style.position === "middle") {
-    subtitlePreviewCaption.style.top = "50%";
-    subtitlePreviewCaption.style.transform = style.effect === "pop"
-      ? "translate(-50%, -50%) scale(1.05)"
-      : "translate(-50%, -50%)";
-    return;
-  }
-  if (style.position === "lower") {
-    subtitlePreviewCaption.style.bottom = "14%";
-    subtitlePreviewCaption.style.transform = style.effect === "pop"
-      ? "translateX(-50%) scale(1.05)"
-      : "translateX(-50%)";
-    return;
-  }
-  subtitlePreviewCaption.style.bottom = `${Math.max(8, Math.round(style.margin_v * 0.25))}px`;
+  subtitlePreviewCaption.style.transform = style.effect === "pop"
+    ? "translate(-50%, -50%) scale(1.05)"
+    : "translate(-50%, -50%)";
 }
 
 /**

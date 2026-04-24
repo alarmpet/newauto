@@ -18,3 +18,4 @@
 - `[2026-04-24-03-35] 렌더 진행률 가시화: FFmpeg progress 파싱, phase 세부 진행률/ETA 저장, Step 4 실시간 진행 표시, 회귀 테스트 추가`
 - `[2026-04-24-03-48] 재시작 후 작업 복구 추가: stale running 상태를 startup 시 error로 정리하고 render/TTS/upload 재시작 가능하도록 자동 복구`
 - `[2026-04-24-04-24] 렌더 성능/worker 분리 업데이트: Ken Burns duration 폭증 수정, runaway guard, WAL, detached render worker, heartbeat watchdog, queued UI, worker 회귀 테스트 추가`
+- `[2026-04-24-15-46] 자막 레이아웃 정합성 수정: TDD 회귀 테스트 추가, 큰 폰트 line length 재계산, lower-third 배치 보정, preview/render 좌표계 통일, ASS WrapStyle 안전장치 적용`
