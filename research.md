@@ -3113,3 +3113,12 @@ Follow-up:
   - `python -m mypy app\routers\flow.py scripts\newauto_mcp.py tests\test_flow_uivision.py`
   - `python -m pytest tests\test_flow_uivision.py tests\test_script_compile.py tests\test_source_draft.py tests\test_scene_plan.py tests\test_render_plan.py tests\test_visual_relevance.py`
   - `npm run typecheck:frontend`
+## 2026-05-07 Ui.Vision/Flow 실제 조작 검증
+
+- Ui.Vision Chrome 확장 `9.5.9`와 Windows XModules `3.2.3` 설치가 확인됐다.
+- XModules 하드드라이브 저장소는 `C:\Users\petbl\Desktop\uivision`이며, 매크로 JSON은 `macros` 폴더에 둘 수 있다.
+- 공식 Ui.Vision 문서와 포럼 기준으로 하드드라이브 저장소는 XModules의 FileAccess 기능을 사용하고, command-line API는 `storage=xfile`로 파일 시스템 매크로를 찾을 수 있다.
+- Flow 자동화는 당장 Playwright/CDP보다 화면 조작 좌표 기반이 안정적이었다. Flow 인증 후 생성 화면에서 입력창에 prompt를 붙여넣고, 하단 우측 화살표를 누른 뒤, 결과 상세 화면 상단 다운로드 아이콘 -> `1K 원본 크기`를 누르면 무료 다운로드가 가능했다.
+- 프로젝트 `fc7439ddbb12`에서 6개 문장 모두 Flow 이미지 생성, 다운로드, `/api/flow/assets/{pid}/attach-local` 연결까지 완료했다.
+- 같은 좌표 기반 절차를 `scripts/flow_desktop_control.py`로 분리했다. 인증된 Flow 창이 떠 있는 상태에서 sentence 번호별 prompt TXT를 붙여넣고, 생성 후 1K 다운로드 및 attach-local까지 처리한다.
+- 다음 구조 변경 방향: 이 검증된 화면 절차를 Ui.Vision 단건 매크로로 녹화/JSON화하고, 다운로드 직후 파일명을 `flow_sNNN_*`로 바꾸는 XRun 단계를 붙인다.

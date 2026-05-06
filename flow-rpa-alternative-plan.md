@@ -482,3 +482,13 @@ Ui.Vision은 브라우저 포커스를 점유한다.
 - Browser Use GitHub: https://github.com/browser-use/browser-use
 - Browser MCP GitHub: https://github.com/BrowserMCP/mcp
 - Browser MCP troubleshooting: https://docs.browsermcp.io/troubleshooting
+## 2026-05-07 실행 체크포인트
+
+- [완료] Ui.Vision Chrome 확장 설치 확인: `gcbalfbdmfieckjlnblleoemohcganoc`, version `9.5.9`.
+- [완료] Ui.Vision XModules 설치 확인: `UI.Vision RPA XModules for Windows version 3.2.3`.
+- [완료] 하드드라이브 저장소 확인: `C:\Users\petbl\Desktop\uivision\macros`.
+- [완료] Flow 인증 후 단건 생성 조작 확인: Flow 프로젝트 `3d5d0440-9b88-47c2-9dae-1de89780a959`에서 prompt 1개 생성 성공.
+- [완료] Flow 1K 다운로드 확인: `Create_a_cinematic_9_16_image_202605070102.jpeg`.
+- [완료] 6문장 Flow 이미지 반복 생성/다운로드/프로젝트 연결 확인: project `fc7439ddbb12`, `flow_sentence_001.jpeg` ~ `flow_sentence_006.jpeg`.
+- [완료] 반복 조작 보조 스크립트 추가: `scripts/flow_desktop_control.py`.
+- [진행 예정] 위 좌표/절차를 Ui.Vision 녹화 매크로 또는 JSON 매크로로 고정하여 LM Studio 대화에서 재사용.
