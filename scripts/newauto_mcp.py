@@ -51,8 +51,13 @@ def _flow_mode() -> FlowMode:
 
 def _mcp_instructions() -> str:
     mode = _flow_mode()
+    today = date.today()
+    yesterday = today.fromordinal(today.toordinal() - 1)
     base = (
-        f"The current local date is {date.today().isoformat()}. "
+        f"The current local date is {today.isoformat()}. "
+        f"Dates on or before {today.isoformat()} are not future dates. "
+        f"If the user asks for information since/after {yesterday.isoformat()} or {today.isoformat()}, treat that as a valid current/past-date research filter and call the workflow tool; never refuse it as future data. "
+        "If a date filter appears in Korean such as '이후', keep it inside the keyword_or_url request string so source collection can search with that date context. "
         "Use these tools when the user wants to create a YouTube video workflow in newauto, "
         "collect source material from a URL or keyword, generate an HPSL Korean script, "
         "create sentence-level Google Flow prompts, open Flow/newauto for the user, "
@@ -678,7 +683,7 @@ def start_stepwise_hpsl_video_workflow(
     target_minutes: int = 1,
     tone: str = "설명형",
 ) -> str:
-    """Start an approval-gated video workflow. This first step creates the project and collects sources only, then waits for user approval."""
+    """Start an approval-gated video workflow. Do not reject user date filters; pass them through in keyword_or_url."""
     _configure_stdout()
     _ensure_server()
     clean_request = keyword_or_url.strip()
@@ -1177,7 +1182,7 @@ def make_hpsl_flow_short_video(
     target_minutes: int = 1,
     tone: str = "설명형",
 ) -> str:
-    """Compatibility wrapper: start the approval-gated workflow so one accidental old-tool call cannot block or timeout."""
+    """Compatibility wrapper. Do not answer date objections yourself; start the stepwise workflow with the full request string."""
     return cast(
         str,
         start_stepwise_hpsl_video_workflow(

@@ -3161,3 +3161,9 @@ Follow-up:
 - fallback 결과도 기존 keyword cache에 저장해 같은 키워드 재시도 시 검색 호출을 줄인다.
 - `scripts.newauto_mcp.start_stepwise_hpsl_video_workflow()`는 자료 수집 실패 시 tool call 자체를 실패시키지 않고 `next_step=source_collect` 상태를 저장한다.
 - `continue_stepwise_hpsl_video_workflow()`에 `source_collect` 재시도 단계를 추가해 사용자가 `진행`을 보내면 자료 수집부터 다시 시도할 수 있게 했다.
+
+## 2026-05-07 LM Studio date filter correction
+
+- Gemma4가 `2026-05-06 이후`를 미래 날짜로 오판하고 도구 호출 전에 거절하는 문제가 확인됐다.
+- MCP instructions에 현재 로컬 날짜와 전날 날짜를 명시하고, `on or before current date`는 미래가 아니며 `since/after YYYY-MM-DD` 날짜 필터는 workflow tool로 넘기라고 강화했다.
+- `start_stepwise_hpsl_video_workflow`와 `make_hpsl_flow_short_video` docstring도 날짜 판단으로 거절하지 말고 전체 요청 문자열을 `keyword_or_url`로 전달하도록 수정했다.
