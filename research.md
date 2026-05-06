@@ -3167,3 +3167,12 @@ Follow-up:
 - Gemma4가 `2026-05-06 이후`를 미래 날짜로 오판하고 도구 호출 전에 거절하는 문제가 확인됐다.
 - MCP instructions에 현재 로컬 날짜와 전날 날짜를 명시하고, `on or before current date`는 미래가 아니며 `since/after YYYY-MM-DD` 날짜 필터는 workflow tool로 넘기라고 강화했다.
 - `start_stepwise_hpsl_video_workflow`와 `make_hpsl_flow_short_video` docstring도 날짜 판단으로 거절하지 말고 전체 요청 문자열을 `keyword_or_url`로 전달하도록 수정했다.
+
+## 2026-05-07 Flow direct-control timeout fix
+
+- 직접 Flow 창을 제어해 LM Studio MCP 경로의 실패 지점을 재현했다. 원인은 단일 timeout이 아니라 여러 Flow 창 선택 오류, 작은 창 기준 고정 좌표, 상세 이미지 화면에서 다음 prompt를 입력하는 상태 오류, Windows 한글/깨진 파일명으로 인한 stale 다운로드 오인으로 분리됐다.
+- `scripts/flow_desktop_control.py`는 가장 큰 Flow Chrome/Edge/Chromium 창을 선택하고, prompt 입력/Generate/download/1K 메뉴 클릭을 활성 Flow 창 크기 기준 상대 좌표로 수행한다.
+- Generate 전에 현재 Chrome URL을 확인해 `/edit/` 또는 `/scene/` 상세 화면이면 프로젝트 prompt 화면으로 복귀한다. 이로써 다음 문장이 기존 이미지 수정 prompt에 들어가는 문제를 줄였다.
+- ASCII Flow prompt는 직접 타이핑하고 비 ASCII만 클립보드 fallback을 사용한다. Flow 화면에서 `Ctrl+V`가 "클립보드 항목 없음" 토스트를 만드는 실패를 줄이기 위한 변경이다.
+- 다운로드 단계는 전달받은 `downloads_before`뿐 아니라 다운로드 시작 시점의 현재 Downloads 파일명을 항상 기준선에 합친다. 파일명이 mojibake로 달라져도 오래된 다운로드를 새 파일로 착각하지 않게 됐다.
+- 프로젝트 `ad246c22458f`에서 LM Studio MCP가 호출하는 `continue_stepwise_hpsl_video_workflow()` 함수 경로로 검증했다. 1번 문장 download/attach 성공 후 2번 문장에서 stale 파일 오인을 발견했고, 수정 후 새 파일 `Narration_language_Korean_202605070348.jpeg`가 2번 문장에 정상 attach됐다.

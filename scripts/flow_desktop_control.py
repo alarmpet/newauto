@@ -6,7 +6,7 @@ import subprocess
 import time
 import urllib.request
 from pathlib import Path
-from typing import cast
+from typing import Protocol, cast
 
 import pyautogui
 import pygetwindow as gw
@@ -19,16 +19,60 @@ SCREENSHOT_DIR = ROOT / "storage" / "flow_desktop_screenshots"
 ALLOWED_SUFFIXES = {".jpeg", ".jpg", ".png", ".webp", ".mp4", ".mov", ".webm"}
 
 
-def _flow_window_title() -> str:
+class WindowLike(Protocol):
+    title: str
+    width: int
+    height: int
+    left: int
+    top: int
+
+    def activate(self) -> None:
+        ...
+
+
+def _activate_flow_window() -> WindowLike:
+    candidates: list[WindowLike] = []
     for window in gw.getAllWindows():
-        title = str(window.title)
+        candidate = cast(WindowLike, window)
+        title = str(candidate.title)
         if "Flow" in title and ("Chrome" in title or "Edge" in title or "Chromium" in title):
-            try:
-                window.activate()
-            except Exception:
-                pass
-            return title
-    raise RuntimeError("Flow browser window was not found. Open/authenticate Flow first.")
+            if candidate.width <= 0 or candidate.height <= 0:
+                continue
+            candidates.append(candidate)
+    if not candidates:
+        raise RuntimeError("Flow browser window was not found. Open/authenticate Flow first.")
+    candidates.sort(
+        key=lambda item: (
+            item.width * item.height,
+            -abs(item.left),
+            -abs(item.top),
+        ),
+        reverse=True,
+    )
+    selected = candidates[0]
+    try:
+        selected.activate()
+    except Exception:
+        pass
+    time.sleep(0.3)
+    _dismiss_browser_overlays(selected)
+    return selected
+
+
+def _flow_window_title() -> str:
+    return str(_activate_flow_window().title)
+
+
+def _dismiss_browser_overlays(window: WindowLike) -> None:
+    pyautogui.press("esc")
+    time.sleep(0.15)
+    # Chrome's "restore pages" bubble can sit over Flow controls after a
+    # browser crash/restart. This click lands on its close button when present,
+    # and on empty page chrome when absent.
+    pyautogui.click(window.left + window.width - 40, window.top + 112)
+    time.sleep(0.15)
+    pyautogui.press("esc")
+    time.sleep(0.15)
 
 
 def _screenshot(project_id: str, sentence_number: int, label: str) -> Path:
@@ -52,6 +96,50 @@ def _copy_to_clipboard(text: str) -> None:
             text=True,
             check=True,
         )
+
+
+def _read_clipboard() -> str:
+    try:
+        import pyperclip
+
+        return str(pyperclip.paste())
+    except Exception:
+        completed = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", "Get-Clipboard"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        return completed.stdout.strip()
+
+
+def _current_browser_url() -> str:
+    pyautogui.hotkey("ctrl", "l")
+    time.sleep(0.1)
+    pyautogui.hotkey("ctrl", "c")
+    time.sleep(0.1)
+    url = _read_clipboard()
+    pyautogui.press("esc")
+    time.sleep(0.1)
+    return url
+
+
+def _ensure_project_prompt_view() -> None:
+    url = _current_browser_url()
+    if "/edit/" in url or "/scene/" in url:
+        pyautogui.hotkey("alt", "left")
+        time.sleep(1.8)
+
+
+def _enter_prompt_text(text: str) -> None:
+    pyautogui.hotkey("ctrl", "a")
+    pyautogui.press("backspace")
+    time.sleep(0.1)
+    if text.isascii():
+        pyautogui.write(text, interval=0.001)
+        return
+    _copy_to_clipboard(text)
+    pyautogui.hotkey("ctrl", "v")
 
 
 def _prompt_path(project_id: str, sentence_number: int) -> Path:
@@ -123,21 +211,45 @@ def _save_pending_attach(project_id: str, sentence_number: int, asset_path: Path
     return path
 
 
+def _click_flow_download_1k(window: WindowLike) -> None:
+    download_x = window.left + int(window.width * 0.84)
+    download_y = window.top + int(window.height * 0.24)
+    pyautogui.click(download_x, download_y)
+    time.sleep(0.5)
+    pyautogui.click(download_x - 116, download_y + 43)
+    time.sleep(0.5)
+
+
+def _open_first_flow_card(window: WindowLike) -> None:
+    pyautogui.click(window.left + int(window.width * 0.12), window.top + int(window.height * 0.43))
+    time.sleep(1.5)
+
+
+def _download_from_current_flow_view(window: WindowLike, previous_names: set[str]) -> Path:
+    _click_flow_download_1k(window)
+    try:
+        return _newest_generated_download(previous_names, timeout_seconds=6)
+    except RuntimeError:
+        _open_first_flow_card(window)
+        _click_flow_download_1k(window)
+        return _newest_generated_download(previous_names, timeout_seconds=45)
+
+
 def click_generate(project_id: str, sentence_number: int) -> dict[str, object]:
     prompt = _prompt_path(project_id, sentence_number).read_text(encoding="utf-8")
     previous_names = _recent_download_names()
-    title = _flow_window_title()
+    window = _activate_flow_window()
+    title = str(window.title)
     time.sleep(0.4)
     pyautogui.press("esc")
     time.sleep(0.2)
+    _ensure_project_prompt_view()
     before = _screenshot(project_id, sentence_number, "before_generate")
-    _copy_to_clipboard(prompt)
-    pyautogui.click(360, 815)
+    pyautogui.click(window.left + int(window.width * 0.44), window.top + window.height - 90)
     time.sleep(0.2)
-    pyautogui.hotkey("ctrl", "a")
-    pyautogui.hotkey("ctrl", "v")
+    _enter_prompt_text(prompt)
     time.sleep(0.5)
-    pyautogui.click(895, 854)
+    pyautogui.click(window.left + int(window.width * 0.69), window.top + window.height - 66)
     time.sleep(0.8)
     after = _screenshot(project_id, sentence_number, "after_generate")
     return {
@@ -158,17 +270,20 @@ def download_and_attach(
     previous_names: set[str],
     download_timeout_seconds: int,
 ) -> dict[str, object]:
-    title = _flow_window_title()
+    window = _activate_flow_window()
+    title = str(window.title)
     time.sleep(0.4)
+    previous_names = set(previous_names)
+    previous_names.update(_recent_download_names())
     pyautogui.press("esc")
     time.sleep(0.3)
     before = _screenshot(project_id, sentence_number, "before_download")
-    pyautogui.click(225, 420)
-    time.sleep(1.5)
-    pyautogui.click(987, 181)
-    time.sleep(0.8)
-    pyautogui.click(874, 223)
-    asset_path = _newest_generated_download(previous_names, timeout_seconds=download_timeout_seconds)
+    try:
+        asset_path = _download_from_current_flow_view(window, previous_names)
+    except RuntimeError:
+        _open_first_flow_card(window)
+        _click_flow_download_1k(window)
+        asset_path = _newest_generated_download(previous_names, timeout_seconds=download_timeout_seconds)
     after = _screenshot(project_id, sentence_number, "after_download")
     try:
         attached = _attach_asset(api_base, project_id, sentence_number, asset_path)

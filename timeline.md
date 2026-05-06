@@ -179,3 +179,6 @@
 - `[2026-05-07T03:07:43+09:00] Git commit: Add source collection fallback recovery. Summary: added a no-cost DuckDuckGo HTML fallback for keyword source collection, source_collect retry state for LM Studio MCP workflows, tests, and the recovery plan document.`
 - `[2026-05-07-03-24] LM Studio 날짜 필터 오판 보정: Gemma4가 2026-05-06 이후를 미래 날짜로 거절하지 않도록 MCP instructions와 workflow tool docstring에 현재 날짜/전날 날짜 규칙과 날짜 필터 pass-through 지침을 추가했다.`
 - `[2026-05-07T03:15:05+09:00] Git commit: Clarify current date for LM Studio workflow. Summary: strengthened MCP instructions and workflow tool docstrings so Gemma4 treats 2026-05-06 as a valid past/current date filter on 2026-05-07 and passes the full request to source collection.`
+
+- `[2026-05-07T03:53:05+09:00] Git commit: Fix Flow desktop wait download path. Summary: directly controlled the authenticated Flow window, fixed multi-window selection, relative Generate/download coordinates, detail-page recovery before new prompts, direct ASCII prompt typing, and stale/mojibake Downloads baselining; verified sentence 1 and sentence 2 download/attach through the same LM Studio MCP function path.`
+
