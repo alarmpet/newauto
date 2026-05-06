@@ -182,3 +182,5 @@
 
 - `[2026-05-07T03:53:05+09:00] Git commit: Fix Flow desktop wait download path. Summary: directly controlled the authenticated Flow window, fixed multi-window selection, relative Generate/download coordinates, detail-page recovery before new prompts, direct ASCII prompt typing, and stale/mojibake Downloads baselining; verified sentence 1 and sentence 2 download/attach through the same LM Studio MCP function path.`
 
+
+- `[2026-05-07T04:00:00+09:00] Plan: LM Studio MCP Flow runtime diagnosis. Summary: analyzed the repeated generic Flow timeout response and found a likely runtime mismatch: current MCP source does not contain the LM Studio error text, no visible newauto_mcp.py process was running, port 9001 was owned by Python 3.10 rather than the expected run-newauto-9001 environment, and project ad246c22458f is actually at flow_generate with 2/6 assets attached. Created lmstudio-mcp-flow-runtime-diagnosis-plan.md with a diagnose_newauto_runtime-first recovery plan.`

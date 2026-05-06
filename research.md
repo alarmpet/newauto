@@ -3176,3 +3176,12 @@ Follow-up:
 - ASCII Flow prompt는 직접 타이핑하고 비 ASCII만 클립보드 fallback을 사용한다. Flow 화면에서 `Ctrl+V`가 "클립보드 항목 없음" 토스트를 만드는 실패를 줄이기 위한 변경이다.
 - 다운로드 단계는 전달받은 `downloads_before`뿐 아니라 다운로드 시작 시점의 현재 Downloads 파일명을 항상 기준선에 합친다. 파일명이 mojibake로 달라져도 오래된 다운로드를 새 파일로 착각하지 않게 됐다.
 - 프로젝트 `ad246c22458f`에서 LM Studio MCP가 호출하는 `continue_stepwise_hpsl_video_workflow()` 함수 경로로 검증했다. 1번 문장 download/attach 성공 후 2번 문장에서 stale 파일 오인을 발견했고, 수정 후 새 파일 `Narration_language_Korean_202605070348.jpeg`가 2번 문장에 정상 attach됐다.
+
+## 2026-05-07 LM Studio MCP runtime mismatch diagnosis
+
+- LM Studio에서 `continue_stepwise_hpsl_video_workflow`가 여전히 generic timeout 답변을 내는 문제를 조사했다.
+- 현재 `scripts/newauto_mcp.py`에는 사용자가 본 "최종 단계인 Flow 이미지/영상 생성 과정에서 시간 초과" 문구가 존재하지 않는다. 따라서 최신 MCP 함수 반환이 아니라 stale MCP, MCP transport failure 후 Gemma4 요약, 또는 다른 MCP 설정을 의심해야 한다.
+- Windows process list에서 `scripts\newauto_mcp.py` 프로세스가 확인되지 않았다. LM Studio의 tool 목록이 보여도 실제 최신 stdio MCP 프로세스가 살아 있는지 별도 검증이 필요하다.
+- `127.0.0.1:9001` listener는 `run-newauto-9001.cmd`가 기대하는 `omnivoice_env`가 아니라 Python 3.10 프로세스가 소유하고 있었다. MCP와 API 서버 runtime이 섞이면 최신 코드/의존성/encoding 진단이 불안정해진다.
+- 프로젝트 `ad246c22458f` 상태는 `next_step=flow_generate`, coverage `2/6`, missing `[3,4,5,6]`이다. 올바른 다음 동작은 3번 문장 Generate 클릭이며, "최종 렌더링 timeout"이 아니다.
+- 대응 계획은 `lmstudio-mcp-flow-runtime-diagnosis-plan.md`로 작성했다. 최우선은 `diagnose_newauto_runtime` MCP tool을 추가해 LM Studio 내부에서 MCP commit, PID, Python executable, 9001 server PID, stepwise state, coverage를 직접 확인하게 만드는 것이다.
