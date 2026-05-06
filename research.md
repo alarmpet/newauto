@@ -3153,3 +3153,11 @@ Follow-up:
 - Flow 창 탐지는 Chrome뿐 아니라 Edge/Chromium 제목도 허용한다.
 - Generate/Download 클릭 전후 스크린샷을 `storage/flow_desktop_screenshots`에 저장해 실패 지점을 확인할 수 있게 했다.
 - LM Studio가 직접 `open_flow()`를 호출하는 경우에도 Ui.Vision 모드에서는 CDP/Playwright open을 기다리지 않고 `webbrowser.open(FLOW_URL)`만 실행한 뒤 즉시 반환하도록 변경했다. 이 경로가 남아 있으면 인증은 이미 끝났는데도 `open_flow` tool call timeout이 발생한다.
+
+## 2026-05-07 Source collection fallback recovery
+
+- LM Studio의 `make_hpsl_flow_short_video`가 자료 수집 단계에서 `HTTP 500 Internal Server Error`로 실패하는 경로를 점검했다.
+- `app.services.source_research.collect_sources_from_keyword()`에 무료 DuckDuckGo HTML 검색 fallback을 추가했다. Brave API 키가 없거나 Brave 검색 호출이 HTTP/네트워크 오류를 내면 DuckDuckGo HTML 결과를 파싱한다.
+- fallback 결과도 기존 keyword cache에 저장해 같은 키워드 재시도 시 검색 호출을 줄인다.
+- `scripts.newauto_mcp.start_stepwise_hpsl_video_workflow()`는 자료 수집 실패 시 tool call 자체를 실패시키지 않고 `next_step=source_collect` 상태를 저장한다.
+- `continue_stepwise_hpsl_video_workflow()`에 `source_collect` 재시도 단계를 추가해 사용자가 `진행`을 보내면 자료 수집부터 다시 시도할 수 있게 했다.

@@ -689,7 +689,31 @@ def start_stepwise_hpsl_video_workflow(
     pid = str(created.get("id") or "")
     if not pid:
         raise NewautoError("newauto project creation did not return an id.")
-    source_mode = _prepare_sources_for_project(pid, clean_request)
+    try:
+        source_mode = _prepare_sources_for_project(pid, clean_request)
+    except NewautoError as exc:
+        failed_state: dict[str, object] = {
+            "project_id": pid,
+            "request": clean_request,
+            "title": project_title,
+            "target_minutes": max(1, min(8, int(target_minutes or 1))),
+            "tone": tone,
+            "source_mode": "source collection failed",
+            "next_step": "source_collect",
+            "voice_preset": "male-announcer-40s-50s",
+            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        }
+        _save_stepwise_state(failed_state)
+        webbrowser.open(_project_url(pid, step=1))
+        return (
+            "1단계 중단: 자료 수집에서 오류가 났지만 워크플로우 상태는 저장했어.\n\n"
+            f"- project_id: {pid}\n"
+            f"- request: {clean_request}\n"
+            f"- reason: {exc}\n"
+            f"- newauto: {_project_url(pid, step=1)}\n\n"
+            "방금 코드는 Brave API가 없어도 DuckDuckGo HTML 검색 fallback을 쓰도록 수정했어. "
+            "MCP/서버를 재시작한 뒤 같은 요청을 다시 보내면 자료 수집부터 다시 시도할 수 있어."
+        )
     project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
     source_count, _, warning_count = _project_counts(project)
     state: dict[str, object] = {
@@ -727,6 +751,33 @@ def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
     if not pid:
         raise NewautoError("Stepwise state is missing project_id.")
     next_step = str(state.get("next_step") or "")
+
+    if next_step == "source_collect":
+        clean_request = str(state.get("request") or "").strip()
+        if not clean_request:
+            return "자료 수집을 재시도할 원본 키워드/URL이 상태에 없어. 새 워크플로우로 다시 시작해줘."
+        try:
+            source_mode = _prepare_sources_for_project(pid, clean_request)
+        except NewautoError as exc:
+            return (
+                "1단계 재시도 실패: 아직 자료 수집이 완료되지 않았어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- request: {clean_request}\n"
+                f"- reason: {exc}\n\n"
+                "서버/MCP를 재시작했는지 확인한 뒤 다시 `진행`이라고 말해줘."
+            )
+        project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
+        source_count, _, warning_count = _project_counts(project)
+        _set_stepwise_fields(state, {"next_step": "script_generate", "source_mode": source_mode})
+        return (
+            "1단계 완료: 자료 수집 재시도가 성공했어.\n\n"
+            f"- project_id: {pid}\n"
+            f"- source: {source_mode}\n"
+            f"- collected sources: {source_count}\n"
+            f"- warnings: {warning_count}\n\n"
+            "다음 단계: HPSL(훅-포인트-스토리-교훈) 대본 생성.\n"
+            "`진행`이라고 말하면 대본 생성만 실행할게."
+        )
 
     if next_step == "script_generate":
         project = _queue_hpsl_script(pid, state)
