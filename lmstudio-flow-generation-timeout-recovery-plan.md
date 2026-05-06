@@ -1,183 +1,250 @@
-# LM Studio + Flow 생성 실패 원인 분석 및 해결 계획
+# LM Studio + Flow Timeout Recovery Plan
 
-작성일: 2026-05-07
+작성일: 2026-05-07  
+리뷰 반영: `lmstudio-flow-timeout-recovery-plan-review.md`
 
 ## 결론
 
-현재 문제는 Flow 로그인/인증 문제가 아니다.
+Flow 로그인/인증은 핵심 문제가 아니다. 현재 반복 실패의 본질은 **LM Studio MCP tool call 안에서 Flow 이미지 생성, 대기, 다운로드, attach를 한 번에 처리하려고 해서 timeout이 나는 구조**다.
 
-핵심 원인은 다음 5가지다.
+따라서 해결 방향은 Ui.Vision이나 Flow 로그인을 다시 건드리는 것이 아니라, 워크플로우를 **1문장 2단계**로 분리하는 것이다.
 
-1. LM Studio MCP 호출이 Flow 이미지 생성을 동기식으로 오래 기다리다가 timeout에 걸린다.
-2. Ui.Vision/Flow 단계 문구가 "준비 완료"와 "실제 생성 완료"를 섞어서 말해 사용자가 어디서 멈췄는지 알기 어렵다.
-3. 기존 데스크톱 제어 스크립트가 Flow의 현재 그리드 화면을 고려하지 않고, 결과 상세 화면 기준으로 바로 다운로드 버튼을 눌렀다.
-4. 새 다운로드 파일이 없을 때 예전 다운로드 파일을 fallback으로 붙이는 위험한 로직이 있었다.
-5. 대본은 한국어여야 하지만 Flow 이미지 프롬프트에는 한국어 narration이 그대로 들어가 이미지 생성 prompt 품질이 흔들렸다.
+```text
+진행 1회: 문장 N 프롬프트 입력 + Generate 클릭 + 즉시 반환
+진행 2회: 생성 완료된 결과 카드 다운로드 + attach + 다음 문장으로 이동
+```
 
-## 현재 확인된 상태
+이렇게 해야 LM Studio tool call이 30초 안팎으로 끝나고, 실패 위치도 명확해진다.
+
+## 현재 확인된 사실
 
 - 프로젝트 `cb505a7a5358`는 존재한다.
-- 단계 상태는 `flow_generate`이다.
-- `uivision` 폴더와 `prompt_001.txt` ~ `prompt_006.txt`가 생성되어 있다.
-- Flow 브라우저는 로그인된 상태로 열린다.
-- 실제 Flow 이미지는 생성된다.
-- 문제는 생성 후 다운로드/attach까지 한 MCP 호출 안에서 안정적으로 끝내지 못하는 것이다.
+- 현재 저장 상태는 `next_step = flow_generate`다.
+- Flow 브라우저는 로그인된 상태로 열려 있다.
+- `uivision/prompt_001.txt` ~ `prompt_006.txt`는 생성되어 있다.
+- Flow 이미지 생성 자체는 실제로 성공한다.
+- 실패는 생성 후 기다림, 결과 카드 열기, 다운로드, attach를 한 번의 MCP 호출에 묶으면서 발생한다.
 
-## 이미 반영한 긴급 수정
+## 이미 반영된 수정
 
-- Flow 프롬프트 생성 로직 변경:
-  - 대본/narration은 한국어로 보존.
-  - Flow에 붙여넣는 이미지 프롬프트는 영어 장면 설명만 포함.
-  - `Narration context: 한국어 문장`을 제거하고 `Narration language: Korean. Do not render Korean text in the image.`로 대체.
-- `/api/flow/prompts/{pid}/uivision/prepare`는 기존 깨진 프롬프트를 재사용하지 않고 항상 현재 로직으로 재생성하도록 변경.
-- `scripts/flow_desktop_control.py` 수정:
-  - 시작 시 `Esc`로 열린 Flow 메뉴를 닫는다.
-  - 올바른 생성 화살표 좌표를 누른다.
-  - 생성 후 결과 카드를 먼저 열고 다운로드 메뉴를 누른다.
-  - 새 다운로드가 없으면 예전 파일을 fallback으로 붙이지 않고 실패한다.
-- `scripts/newauto_mcp.py` 수정:
-  - `flow_generate` 단계에서 Ui.Vision 안내만 하지 않고, 빠진 문장 1개를 데스크톱 제어 스크립트로 생성/다운로드/attach 시도한다.
+- [완료] `FLOW_AUTOMATION_BACKEND=uivision` 기본 분기.
+- [완료] `FLOW_MODE=uivision` MCP instructions 분기.
+- [완료] `/api/flow/assets/{pid}/attach-renamed`와 `flow_sNNN_` 파일명 기반 attach.
+- [완료] 한글 대본과 영어 Flow 이미지 프롬프트 분리.
+- [완료] `/api/flow/prompts/{pid}/uivision/prepare`가 기존 깨진 prompt를 재사용하지 않고 재생성하도록 변경.
+- [완료] 기존 다운로드 파일을 fallback으로 붙이는 위험한 경로 제거.
+- [완료] Flow 그리드 화면에서 결과 카드를 먼저 열고 다운로드하는 순서 반영.
 
-## 남은 구조 문제
+## 아직 미구현인 핵심 항목
 
-### 1. MCP timeout
+### 1. `flow_wait_sentence` 단계 추가
 
-Flow 이미지 1장 생성은 보통 45~80초가 걸릴 수 있다.
+현재 `continue_stepwise_hpsl_video_workflow()`의 `flow_generate` 단계는 여전히 `generate + wait + download + attach`를 한 번에 시도할 수 있다.
 
-LM Studio의 tool call은 이 시간을 기다리다가 timeout으로 실패할 수 있다. 따라서 MCP가 "생성 완료까지 기다리는 구조"이면 계속 불안정하다.
+이 구조가 timeout의 직접 원인이다.
 
-### 2. 단계명이 부정확함
-
-현재 LM Studio 응답이 "5단계 최종 작업 지시 완료"처럼 말하지만 실제 상태는 `flow_generate`이다.
-
-이 때문에 사용자는 인증 문제가 남았다고 오해한다.
-
-### 3. 실행 주체 혼선
-
-Ui.Vision 매크로, 데스크톱 제어 스크립트, Playwright/CDP가 섞여 있다.
-
-당장 안정적인 경로는 다음 하나로 고정해야 한다.
+필수 변경:
 
 ```text
-LM Studio continue
-  -> MCP
-  -> scripts/flow_desktop_control.py
-  -> 인증된 Flow Chrome 창
-  -> 프롬프트 1개 입력
-  -> 생성 클릭
-  -> 별도 완료 확인/다운로드/attach
+flow_generate
+  -> prompt 입력
+  -> Generate 클릭
+  -> downloads_before 저장
+  -> active_sentence_number 저장
+  -> next_step = flow_wait_sentence
+  -> 즉시 반환
+
+flow_wait_sentence
+  -> 결과 카드 열기
+  -> 다운로드
+  -> 새 다운로드 파일만 감지
+  -> attach
+  -> missing이 남으면 next_step = flow_generate
+  -> 모두 완료되면 next_step = tts
 ```
 
-## 권장 해결 구조
+### 2. `flow_desktop_control.py` 함수 분리
 
-### Phase 1: 1문장 2단계 방식으로 변경
+현재 단일 `generate_one()` 함수가 너무 많은 책임을 가진다.
 
-한 번의 MCP 호출에서 생성 완료까지 기다리지 않는다.
+분리해야 한다.
 
 ```text
-continue 1회차:
-  - 빠진 문장 1개 프롬프트 입력
+click_generate(project_id, sentence_number)
+  - Flow 창 활성화
+  - Esc로 열린 메뉴 닫기
+  - prompt_NNN.txt 복사
+  - 입력창 클릭
+  - Ctrl+A / Ctrl+V
   - Generate 클릭
-  - state를 flow_wait_sentence로 저장
-  - 즉시 응답: "1번 문장 생성 시작. 완료되면 진행이라고 말해."
+  - 10초 안에 반환
 
-continue 2회차:
-  - 방금 생성된 결과 카드 열기
-  - 다운로드
-  - 새 파일만 감지
-  - 해당 문장에 attach
-  - 다음 문장으로 이동
+download_and_attach(project_id, sentence_number, downloads_before)
+  - Flow 창 활성화
+  - 결과 카드 열기
+  - 다운로드 메뉴 클릭
+  - 1K 원본 크기 클릭
+  - 새 파일 다운로드 완료까지 polling
+  - attach-local 호출
 ```
 
-이렇게 하면 LM Studio tool timeout을 피할 수 있다.
+### 3. `.crdownload` 감시와 다운로드 완료 polling
 
-### Phase 2: 상태 파일 추가
+고정 `sleep(8)`은 불안정하다.
 
-`storage/stepwise_workflows/{project_id}.json`에 다음 필드를 추가한다.
+필수 조건:
+
+- 새 파일명만 허용한다.
+- `.crdownload` 파일은 무시한다.
+- 같은 이름의 `.crdownload`가 사라질 때까지 기다린다.
+- timeout 안에 새 완성 파일이 없으면 실패한다.
+
+권장 로직:
+
+```text
+deadline = now + 45초
+while now < deadline:
+  새 이미지/영상 파일 찾기
+  .crdownload 제외
+  파일 크기가 2회 연속 동일하면 완료로 판단
+  완료 파일 반환
+실패 처리
+```
+
+### 4. attach 실패 시 pending 저장
+
+다운로드는 성공했지만 attach API가 실패하면 같은 이미지를 다시 생성하면 안 된다.
+
+필수 변경:
+
+```text
+storage/projects/{pid}/uivision/pending_attach_{sentence_number}.json
+```
+
+저장 내용:
 
 ```json
 {
-  "next_step": "flow_wait_sentence",
-  "active_sentence_number": 2,
-  "flow_generate_started_at": "2026-05-07T02:10:00",
-  "downloads_before": ["..."]
+  "sentence_number": 2,
+  "asset_path": "C:/Users/petbl/Downloads/...",
+  "created_at": "2026-05-07T02:20:00"
 }
 ```
 
-이 상태를 기준으로 다음 `진행`에서 다운로드/attach만 수행한다.
+다음 `flow_wait_sentence` 호출은 pending 파일이 있으면 Flow를 다시 누르지 않고 attach만 재시도한다.
 
-### Phase 3: Flow 화면 상태별 복구
+### 5. Flow 창 탐지 개선
 
-Flow 화면은 최소 3가지 상태가 있다.
+현재 Flow 창 탐지는 Chrome 제목에 의존할 수 있다.
 
-- 빈 입력 화면
-- 생성 결과가 그리드에 있는 화면
-- 결과 상세 화면
-
-스크립트는 상태를 강하게 가정하지 말고 다음 순서로 복구해야 한다.
+개선:
 
 ```text
-1. 열린 메뉴 닫기: Esc
-2. 입력창이 있으면 prompt 입력
-3. 생성 클릭
-4. 다운로드 단계에서는 결과 카드 후보 클릭
-5. 상세 화면에서 다운로드 아이콘 클릭
-6. 1K 원본 크기 클릭
+Flow + Chrome
+Flow + Edge
+Flow + Chromium
+labs.google URL 또는 Flow title
 ```
 
-### Phase 4: LM Studio 안내문 수정
+최소 변경:
 
-Gemma4가 "로그인 필요"라고 반복하지 않게 MCP 응답 문구를 고친다.
+```python
+if "Flow" in title and ("Chrome" in title or "Edge" in title or "Chromium" in title):
+```
 
-권장 문구:
+### 6. 좌표 클릭 전후 상태 확인
+
+좌표 클릭은 당장은 가장 실용적이지만, 상태 검증이 없으면 엉뚱한 곳을 누른다.
+
+필수 보강:
+
+- 클릭 전 스크린샷 저장.
+- 클릭 후 스크린샷 저장.
+- 새 다운로드가 없으면 실패로 반환.
+- 실패 메시지에 스크린샷 경로 포함.
+
+추후 개선:
+
+- `pyautogui.locateOnScreen()` 이미지 매칭 fallback.
+- 입력창/다운로드 아이콘/1K 메뉴 버튼 template 이미지 저장.
+
+## 수정할 워크플로우 상세
+
+### `flow_generate`
+
+목표: 생성 클릭만 하고 빠르게 반환한다.
+
+```text
+1. project 상태 조회
+2. missing sentence 중 첫 번째 선택
+3. pending attach가 있으면 flow_wait_sentence로 넘김
+4. downloads_before 목록 저장
+5. click_generate 실행
+6. next_step = flow_wait_sentence
+7. active_sentence_number = N
+8. "문장 N 생성 시작. Flow에서 이미지가 보이면 진행이라고 말해줘." 반환
+```
+
+성공 응답 예:
 
 ```text
 Flow 로그인은 완료된 것으로 보입니다.
-현재 필요한 작업은 인증이 아니라 문장 N번 이미지 생성/다운로드입니다.
-이번 호출에서는 생성 클릭만 했고, Flow 생성이 끝나면 `진행`이라고 말해주세요.
+현재 필요한 작업은 인증이 아니라 문장 2번 이미지 생성입니다.
+이번 호출에서는 Generate 클릭만 했습니다.
+Flow에서 이미지가 보이면 `진행`이라고 말해주세요.
 ```
 
-### Phase 5: 최종 batch는 나중에
+### `flow_wait_sentence`
 
-6문장 batch 생성은 v2로 둔다.
-
-현재는 1문장씩:
+목표: 다운로드와 attach만 수행한다.
 
 ```text
-문장 1 생성 시작 -> 진행 -> 다운로드/attach
-문장 2 생성 시작 -> 진행 -> 다운로드/attach
-...
-문장 6 완료 -> TTS 단계
+1. active_sentence_number 읽기
+2. pending attach 파일이 있으면 attach만 재시도
+3. pending이 없으면 결과 카드 열기
+4. 1K 다운로드 클릭
+5. downloads_before에 없던 새 파일 감지
+6. attach-local 호출
+7. 성공 시 pending 삭제
+8. missing이 남으면 next_step = flow_generate
+9. 모두 끝나면 next_step = tts
 ```
 
-이 구조가 어디서 실패했는지 가장 잘 보인다.
+성공 응답 예:
 
-## 즉시 다음 작업
-
-- [완료] 한글 대본/영문 Flow 프롬프트 분리.
-- [완료] stale download fallback 제거.
-- [완료] Flow 그리드 결과 카드 열기 후 다운로드 순서 반영.
-- [필요] MCP `flow_generate`를 "생성 클릭만 하고 즉시 반환"으로 바꾸기.
-- [필요] 새 단계 `flow_wait_sentence` 추가.
-- [필요] `flow_wait_sentence`에서 다운로드/attach만 수행.
-- [필요] LM Studio 응답 문구에서 "로그인 필요" 반복 제거.
-- [필요] `cb505a7a5358` 프로젝트로 1문장 시작/완료 왕복 테스트.
-- [필요] 6문장 전체 생성 후 TTS 단계 진입 확인.
+```text
+문장 2번 이미지 다운로드/연결 완료.
+coverage: 2/6
+다음 문장을 생성하려면 `진행`이라고 말해주세요.
+```
 
 ## 테스트 기준
 
-```text
-1. continue: "문장 1 생성 시작"을 30초 안에 반환해야 한다.
-2. Flow에서 이미지가 보인 뒤 continue: 다운로드/attach 완료를 반환해야 한다.
-3. 같은 문장에 예전 다운로드 파일이 붙으면 실패로 간주한다.
-4. Flow prompt TXT에는 한글 문장이 직접 들어가지 않아야 한다.
-5. script.txt와 hpsl_script.json의 narration은 한국어여야 한다.
-6. 6문장 attach 후 next_step이 tts로 이동해야 한다.
-```
+- [필요] `flow_generate` 호출은 30초 안에 반환해야 한다.
+- [필요] `flow_generate`는 다운로드나 attach를 하지 않아야 한다.
+- [필요] `flow_wait_sentence`는 prompt를 다시 입력하지 않아야 한다.
+- [필요] 새 다운로드 파일이 없으면 예전 파일을 붙이지 않아야 한다.
+- [필요] `.crdownload` 파일은 완료 파일로 취급하지 않아야 한다.
+- [필요] attach 실패 시 pending attach 파일이 생성되어야 한다.
+- [필요] 다음 호출에서 pending attach를 우선 처리해야 한다.
+- [필요] Edge/Chromium Flow 창도 탐지해야 한다.
+- [필요] 6문장 attach 완료 후 `next_step`이 `tts`로 이동해야 한다.
+
+## 우선순위
+
+1. [필요] `flow_generate`와 `flow_wait_sentence` 분리.
+2. [필요] `flow_desktop_control.py`를 `click_generate` / `download_and_attach` 모드로 분리.
+3. [필요] `.crdownload` polling 추가.
+4. [필요] attach 실패 pending 저장.
+5. [필요] Flow 창 탐지에 Edge/Chromium 지원.
+6. [필요] 클릭 전후 스크린샷 경로를 실패 응답에 포함.
+7. [필요] `cb505a7a5358`로 1문장 시작/완료 왕복 테스트.
+8. [필요] 6문장 전체 attach 후 TTS 단계 진입 확인.
 
 ## 운영 원칙
 
-- 로그인/권한 승인만 사용자가 한다.
+- 사용자는 로그인/권한 승인만 한다.
 - 이미지 생성 클릭, 결과 카드 열기, 다운로드, attach는 자동화가 한다.
-- 한 번에 6장을 만들지 않고, LM Studio에서 `진행`을 누를 때마다 한 단계만 간다.
-- timeout이 나면 같은 단계에서 멈추고, 다음 호출로 복구 가능해야 한다.
+- LM Studio에서는 `진행`을 누를 때마다 하나의 짧은 단계만 실행한다.
+- timeout이 나면 같은 단계에서 복구 가능해야 한다.
+- batch 생성은 v2로 미루고, v1은 1문장씩 안정화한다.

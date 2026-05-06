@@ -3130,3 +3130,15 @@ Follow-up:
 - `scripts/flow_desktop_control.py`에서 새 다운로드가 없을 때 예전 다운로드 파일을 fallback으로 붙일 수 있는 위험한 경로를 제거했다.
 - Flow prompt는 한국어 narration을 직접 포함하지 않고 영어 장면 설명만 포함하도록 `flow_prompting.py`를 바꿨다. 한국어 대본은 `script.txt`와 `hpsl_script.json`에 보존한다.
 - 다음 구조 변경은 `flow_generate`를 생성 클릭 즉시 반환 단계로 나누고, `flow_wait_sentence` 단계에서 다운로드/attach만 수행하는 1문장 2단계 방식이다.
+
+## 2026-05-07 Flow timeout recovery review 반영
+
+- `lmstudio-flow-timeout-recovery-plan-review.md` 검토 결과 기존 원인 분석은 타당하지만, 아직 코드에 없는 `flow_wait_sentence` 단계가 timeout 해결의 필수 항목으로 확인됐다.
+- 계획서를 `click_generate`와 `download_and_attach` 분리 중심으로 업데이트했다.
+- 추가 반영 항목:
+  - `.crdownload` 감시와 파일 크기 안정화 polling;
+  - attach 실패 시 `pending_attach_{N}.json` 저장;
+  - Edge/Chromium Flow 창 탐지;
+  - 좌표 클릭 전후 스크린샷 및 실패 응답에 경로 포함;
+  - `flow_wait_sentence` 호출 시 prompt 재입력 없이 다운로드/attach만 수행.
+- 우선순위는 `flow_generate`/`flow_wait_sentence` 분리 -> desktop control 모드 분리 -> 다운로드 polling -> pending attach 순서로 조정했다.

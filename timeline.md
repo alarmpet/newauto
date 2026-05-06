@@ -169,4 +169,5 @@
 
 - `[2026-05-07-02-12] LM Studio Flow timeout 원인 분석: cb505a7a5358 프로젝트는 Flow 로그인 문제가 아니라 flow_generate 단계의 동기식 이미지 생성 대기가 MCP timeout을 유발하는 상태임을 확인했다. 한글 대본/영문 Flow prompt 분리, stale download fallback 제거, Flow 그리드 카드 다운로드 순서 반영을 진행했고, 1문장 2단계 생성/다운로드 구조 전환 계획서를 lmstudio-flow-generation-timeout-recovery-plan.md로 작성했다.`
 - `[2026-05-07T02:13:37+09:00] Git commit: Diagnose Flow MCP timeout path. Summary: documented the Flow timeout recovery plan, split Korean narration from English Flow prompts, removed stale download fallback, and wired the Ui.Vision flow_generate path toward one-sentence desktop control.`
-
+- `[2026-05-07-02-24] Flow timeout recovery review 반영: lmstudio-flow-timeout-recovery-plan-review.md를 검토해 기존 계획서를 flow_wait_sentence 필수 구현, click_generate/download_and_attach 분리, .crdownload polling, pending_attach 저장, Edge/Chromium 창 탐지, 클릭 전후 스크린샷 검증 기준 중심으로 업데이트했다.`
+- `[2026-05-07T02:38:42+09:00] Git commit: Update Flow timeout recovery plan review. Summary: reviewed lmstudio-flow-timeout-recovery-plan-review.md and updated the recovery plan, research notes, and timeline around the required flow_wait_sentence split, desktop control mode split, download polling, pending attach recovery, and browser window detection.`
