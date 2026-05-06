@@ -3152,3 +3152,4 @@ Follow-up:
 - attach 실패 시 `storage/projects/{pid}/uivision/pending_attach_{NNN}.json`을 저장하고, 다음 `flow_wait_sentence` 호출에서 Flow 재생성 없이 attach만 재시도하도록 했다.
 - Flow 창 탐지는 Chrome뿐 아니라 Edge/Chromium 제목도 허용한다.
 - Generate/Download 클릭 전후 스크린샷을 `storage/flow_desktop_screenshots`에 저장해 실패 지점을 확인할 수 있게 했다.
+- LM Studio가 직접 `open_flow()`를 호출하는 경우에도 Ui.Vision 모드에서는 CDP/Playwright open을 기다리지 않고 `webbrowser.open(FLOW_URL)`만 실행한 뒤 즉시 반환하도록 변경했다. 이 경로가 남아 있으면 인증은 이미 끝났는데도 `open_flow` tool call timeout이 발생한다.

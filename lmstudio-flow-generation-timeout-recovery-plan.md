@@ -40,6 +40,7 @@ Flow 로그인/인증은 핵심 문제가 아니다. 현재 반복 실패의 본
 - [완료] attach 실패 시 `pending_attach_{sentence_number}.json`을 저장하고 다음 호출에서 attach만 재시도하도록 변경.
 - [완료] Flow 창 탐지에 Chrome, Edge, Chromium title을 허용하도록 변경.
 - [완료] Generate/Download 클릭 전후 스크린샷을 저장하고 결과/오류 응답에 경로를 남기도록 변경.
+- [완료] Ui.Vision 모드의 `open_flow()`와 `open_flow_for_auth()`가 CDP/Playwright 연결을 기다리지 않고 Flow URL만 열고 즉시 반환하도록 변경.
 
 ## 구현 완료된 핵심 항목
 
@@ -248,3 +249,4 @@ coverage: 2/6
 - LM Studio에서는 `진행`을 누를 때마다 하나의 짧은 단계만 실행한다.
 - timeout이 나면 같은 단계에서 복구 가능해야 한다.
 - batch 생성은 v2로 미루고, v1은 1문장씩 안정화한다.
+- Ui.Vision 모드에서 `open_flow`는 인증 페이지를 열기만 해야 하며, 브라우저 자동화 연결을 기다리면 안 된다.

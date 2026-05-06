@@ -78,8 +78,10 @@ def _mcp_instructions() -> str:
     return (
         base
         + " FLOW_MODE=uivision: Google Flow screen operation belongs to Ui.Vision RPA, not Gemma4. "
-        "After Flow prompts are generated, call prepare_uivision_flow_batch and ask the user to run or confirm "
-        "the Ui.Vision macro. When renamed files like flow_s001_*.png are downloaded, call attach_renamed_flow_downloads. "
+        "After Flow prompts are generated, use continue_stepwise_hpsl_video_workflow. In flow_generate it will click "
+        "Generate once through the desktop controller and return quickly. In flow_wait_sentence it will download and "
+        "attach the generated asset. open_flow must only open the Flow page and return; do not wait for CDP automation. "
+        "When renamed files like flow_s001_*.png are downloaded, call attach_renamed_flow_downloads only as a fallback. "
         "Use attach_latest_flow_downloads only as a fallback for manual downloads."
     )
 
@@ -1225,6 +1227,15 @@ def open_flow_for_auth(project_id: str = "") -> str:
     """Open a persistent Playwright Flow browser profile for the user to authenticate once."""
     _configure_stdout()
     pid = project_id.strip() or "manual"
+    if _flow_backend() == "uivision":
+        webbrowser.open(FLOW_URL)
+        return (
+            "Flow 페이지를 열었어.\n"
+            f"- project_id: {pid}\n"
+            f"- Flow: {FLOW_URL}\n\n"
+            "Ui.Vision/데스크톱 제어 모드에서는 CDP 연결을 기다리지 않아. "
+            "로그인/권한승인이 끝났으면 LM Studio에 `진행`이라고 말해줘."
+        )
     result = _run_flow_browser_script(["open", "--project-id", pid], timeout_sec=60)
     return (
         "Flow 인증용 브라우저를 열었어.\n"
@@ -1350,6 +1361,24 @@ def open_newauto_project(project_id: str, step: int = 2) -> str:
 @mcp.tool()
 def open_flow() -> str:
     """Open Google Flow for the user. Use this when the next step is user authentication or clicking Generate in Flow."""
+    if _flow_backend() == "uivision":
+        try:
+            state = _load_stepwise_state("")
+            pid = str(state.get("project_id") or "manual")
+            if str(state.get("next_step") or "") == "flow_auth":
+                _set_next_step(state, "flow_generate")
+        except Exception:
+            pid = "manual"
+        webbrowser.open(FLOW_URL)
+        return (
+            "Flow 페이지를 열었어.\n\n"
+            f"- project_id: {pid}\n"
+            f"- Flow: {FLOW_URL}\n"
+            f"- backend: {_flow_backend()}\n\n"
+            "이 모드에서는 CDP/Playwright 연결을 기다리지 않아서 timeout이 나지 않아. "
+            "로그인/권한승인이 끝났거나 이미 로그인되어 있으면 `진행`이라고 말해줘. "
+            "다음 단계에서는 Generate 클릭만 빠르게 실행할게."
+        )
     try:
         state = _load_stepwise_state("")
         pid = str(state.get("project_id") or "manual")
