@@ -62,7 +62,8 @@ class FlowUiVisionTests(unittest.TestCase):
 
         text_response = self.client.get(f"/api/flow/prompts/{project_id}/sentence/1")
         self.assertEqual(text_response.status_code, 200)
-        self.assertIn("Narration context: 첫 문장", text_response.text)
+        self.assertIn("Narration language: Korean.", text_response.text)
+        self.assertNotIn("첫 문장", text_response.text)
 
     def test_prepare_uivision_writes_csv_and_prompt_files(self) -> None:
         project_id = self.create_project_with_sentences()

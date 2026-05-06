@@ -58,6 +58,53 @@ def _safe_text(value: str, fallback: str) -> str:
     return stripped if stripped else fallback
 
 
+def _is_ascii_text(value: str) -> bool:
+    return all(ord(char) < 128 for char in value)
+
+
+def _keyword_scene(text: str) -> str:
+    lowered = text.lower()
+    if "gemini" in lowered and ("home" in lowered or "camera" in lowered or "smart" in lowered):
+        return "Google Gemini smart home assistant controlling cameras and connected home devices"
+    if "gemini" in lowered or "google" in lowered or "ai" in lowered:
+        return "Google Gemini AI assistant shown as a practical everyday productivity companion"
+    if "agent" in lowered or "nano banana" in lowered:
+        return "AI agent workspace with clean visual layout panels and an image generation control surface"
+    if "video" in lowered or "8" in lowered:
+        return "short-form video generation workstation producing a polished vertical cinematic clip"
+    if "music" in lowered or "melody" in lowered or "lo-fi" in lowered:
+        return "AI music creation desk with waveform layers, melody blocks, and calm lo-fi production controls"
+    korean_matches: tuple[tuple[str, str], ...] = (
+        ("카메라", "smart camera feed review screen with clear AI event markers"),
+        ("스마트", "connected smart home devices responding to an AI assistant"),
+        ("동영상", "short-form video generation workstation producing a polished vertical cinematic clip"),
+        ("영상", "short-form video generation workstation producing a polished vertical cinematic clip"),
+        ("음악", "AI music creation desk with waveform layers and melody controls"),
+        ("멜로디", "AI music creation desk with waveform layers and melody controls"),
+        ("로파이", "calm lo-fi music production desk with soft studio lighting"),
+        ("사진", "creative AI studio transforming a photo into a customized media scene"),
+        ("감정", "creative AI interface translating emotions into visual mood boards"),
+        ("농담", "creative AI assistant turning a short joke into a playful media concept"),
+        ("아이디어", "rough idea sketch transforming into a finished vertical video scene"),
+        ("생각", "rough idea sketch transforming into a finished vertical video scene"),
+        ("기능", "clean product feature showcase with modular AI tool panels"),
+        ("레이아웃", "clean visual layout editor with organized AI-generated panels"),
+        ("일상", "everyday person using an AI assistant on a phone and laptop"),
+    )
+    for keyword, scene in korean_matches:
+        if keyword in text:
+            return scene
+    return "clear editorial technology scene about a practical AI workflow"
+
+
+def _english_visual_text(*, sentence: str, core_keyword: str, visual_keyword: str) -> str:
+    candidates = [visual_keyword.strip(), core_keyword.strip(), sentence.strip()]
+    for candidate in candidates:
+        if candidate and _is_ascii_text(candidate):
+            return candidate[:180]
+    return _keyword_scene(" ".join(candidates))
+
+
 def _build_flow_prompt(
     *,
     sentence: str,
@@ -67,8 +114,14 @@ def _build_flow_prompt(
     aspect_ratio: str,
     section: str,
 ) -> str:
-    subject = _safe_text(visual_keyword, "a concrete visual metaphor matching the narration")
-    action = _safe_text(core_keyword, "showing the key idea clearly")
+    subject = _safe_text(
+        _english_visual_text(sentence=sentence, core_keyword=core_keyword, visual_keyword=visual_keyword),
+        "a concrete visual metaphor matching the narration",
+    )
+    action = _safe_text(
+        _english_visual_text(sentence=sentence, core_keyword=core_keyword, visual_keyword=core_keyword),
+        "showing the key idea clearly",
+    )
     mood = _safe_text(emotion, "focused curiosity")
     return "\n".join(
         [
@@ -81,7 +134,7 @@ def _build_flow_prompt(
             "Lighting: clean cinematic lighting, high clarity, realistic details.",
             "Style: realistic editorial documentary, polished but not glossy, suitable for YouTube storytelling.",
             "Avoid: text overlays, subtitles, readable words, logos, watermarks, UI screenshots, distorted hands, clutter.",
-            f"Narration context: {sentence}",
+            "Narration language: Korean. Do not render Korean text in the image.",
         ]
     )
 

@@ -3122,3 +3122,11 @@ Follow-up:
 - 프로젝트 `fc7439ddbb12`에서 6개 문장 모두 Flow 이미지 생성, 다운로드, `/api/flow/assets/{pid}/attach-local` 연결까지 완료했다.
 - 같은 좌표 기반 절차를 `scripts/flow_desktop_control.py`로 분리했다. 인증된 Flow 창이 떠 있는 상태에서 sentence 번호별 prompt TXT를 붙여넣고, 생성 후 1K 다운로드 및 attach-local까지 처리한다.
 - 다음 구조 변경 방향: 이 검증된 화면 절차를 Ui.Vision 단건 매크로로 녹화/JSON화하고, 다운로드 직후 파일명을 `flow_sNNN_*`로 바꾸는 XRun 단계를 붙인다.
+## 2026-05-07 LM Studio Flow timeout root cause
+
+- Flow 로그인/인증은 완료되어도 LM Studio MCP가 계속 멈추는 원인은 인증이 아니라 동기식 대기 구조였다.
+- Flow 이미지 1장은 45~80초가 걸릴 수 있고, 이 시간을 MCP tool call 안에서 기다리면 LM Studio가 timeout을 내기 쉽다.
+- `cb505a7a5358` 상태는 `flow_generate`였고, 프롬프트 파일은 준비되어 있었으며 실제 Flow 이미지는 생성됐다. 실패 지점은 생성 후 결과 카드 열기/다운로드/attach였다.
+- `scripts/flow_desktop_control.py`에서 새 다운로드가 없을 때 예전 다운로드 파일을 fallback으로 붙일 수 있는 위험한 경로를 제거했다.
+- Flow prompt는 한국어 narration을 직접 포함하지 않고 영어 장면 설명만 포함하도록 `flow_prompting.py`를 바꿨다. 한국어 대본은 `script.txt`와 `hpsl_script.json`에 보존한다.
+- 다음 구조 변경은 `flow_generate`를 생성 클릭 즉시 반환 단계로 나누고, `flow_wait_sentence` 단계에서 다운로드/attach만 수행하는 1문장 2단계 방식이다.

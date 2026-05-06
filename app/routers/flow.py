@@ -248,9 +248,7 @@ def get_flow_prompts(pid: str) -> FlowPromptManifest:
 @router.get("/prompts/{pid}/csv")
 def get_flow_prompts_csv(pid: str) -> Response:
     project = _require(pid)
-    manifest = load_flow_prompt_manifest(project)
-    if not manifest["entries"]:
-        manifest = generate_flow_prompt_manifest(project)
+    manifest = generate_flow_prompt_manifest(project)
     return Response(content=_flow_prompt_csv(manifest), media_type="text/csv; charset=utf-8")
 
 
@@ -259,9 +257,7 @@ def get_single_flow_prompt_text(pid: str, sentence_number: int) -> PlainTextResp
     if sentence_number < 1:
         raise HTTPException(400, "sentence_number must be 1 or greater.")
     project = _require(pid)
-    manifest = load_flow_prompt_manifest(project)
-    if not manifest["entries"]:
-        manifest = generate_flow_prompt_manifest(project)
+    manifest = generate_flow_prompt_manifest(project)
     sentence_idx = sentence_number - 1
     prompt = _prompt_for_sentence(manifest, sentence_idx)
     if not prompt:
@@ -272,9 +268,7 @@ def get_single_flow_prompt_text(pid: str, sentence_number: int) -> PlainTextResp
 @router.post("/prompts/{pid}/uivision/prepare")
 def prepare_uivision_flow_files(pid: str) -> UiVisionPrepareResponse:
     project = _require(pid)
-    manifest = load_flow_prompt_manifest(project)
-    if not manifest["entries"]:
-        manifest = generate_flow_prompt_manifest(project)
+    manifest = generate_flow_prompt_manifest(project)
     csv_path, prompt_paths = _write_uivision_files(pid, manifest)
     return cast(
         UiVisionPrepareResponse,

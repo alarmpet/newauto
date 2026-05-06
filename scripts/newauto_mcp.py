@@ -25,6 +25,7 @@ URL_RE = re.compile(r"https?://[^\s)>\"]+")
 DEFAULT_DOWNLOADS_DIR = Path.home() / "Downloads"
 FLOW_ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mov", ".webm"}
 FLOW_BROWSER_SCRIPT = ROOT_DIR / "scripts" / "flow_browser_automation.py"
+FLOW_DESKTOP_SCRIPT = ROOT_DIR / "scripts" / "flow_desktop_control.py"
 STEPWISE_DIR = ROOT_DIR / "storage" / "stepwise_workflows"
 STEPWISE_LATEST_PATH = STEPWISE_DIR / "latest.json"
 SOURCE_DRAFT_WORKER_LOCK = ROOT_DIR / "storage" / "source_draft_worker.lock"
@@ -403,6 +404,36 @@ def _run_flow_browser_script(args: list[str], *, timeout_sec: int = 180) -> dict
     return cast(dict[str, object], payload)
 
 
+def _run_flow_desktop_control(project_id: str, sentence_number: int, *, wait_seconds: int = 62) -> str:
+    python_command = os.environ.get("NEWAUTO_DESKTOP_PYTHON", "python").strip() or "python"
+    command = [
+        python_command,
+        str(FLOW_DESKTOP_SCRIPT),
+        project_id,
+        "--sentence",
+        str(sentence_number),
+        "--wait-seconds",
+        str(wait_seconds),
+        "--api-base",
+        BASE_URL,
+    ]
+    completed = subprocess.run(
+        command,
+        cwd=str(ROOT_DIR),
+        capture_output=True,
+        text=True,
+        timeout=max(90, wait_seconds + 35),
+        encoding="utf-8",
+        errors="replace",
+    )
+    if completed.returncode != 0:
+        raise NewautoError(
+            "Flow desktop control failed: "
+            f"{completed.stderr.strip() or completed.stdout.strip() or completed.returncode}"
+        )
+    return completed.stdout.strip()
+
+
 def _pid_exists(pid: int) -> bool:
     if pid <= 0:
         return False
@@ -705,12 +736,49 @@ def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
         backend = _flow_backend()
         if backend == "uivision":
             _prepare_uivision_payload(pid)
-            _set_next_step(state, "flow_download")
+            project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
+            sentence_count, attached_count, missing = _project_sentence_asset_status(project)
+            if not missing:
+                _set_next_step(state, "tts")
+                return (
+                    "4단계 완료: Flow 이미지가 이미 모든 문장에 연결되어 있어.\n\n"
+                    f"- project_id: {pid}\n"
+                    f"- coverage: {attached_count}/{sentence_count}\n\n"
+                    "다음 단계: OmniVoice 음성 생성.\n"
+                    "`진행`이라고 말하면 음성 생성만 실행하고 다시 멈출게."
+                )
+            sentence_number = missing[0]
+            try:
+                output = _run_flow_desktop_control(pid, sentence_number)
+            except NewautoError as exc:
+                return (
+                    "4단계 중단: Flow 데스크톱 제어가 사용자 확인을 필요로 해.\n\n"
+                    f"- project_id: {pid}\n"
+                    f"- target sentence: {sentence_number}\n"
+                    f"- reason: {exc}\n\n"
+                    "Flow 창이 로그인된 상태로 열려 있고, 생성 입력창이 보이는지 확인해줘. "
+                    "인증/팝업을 처리한 뒤 `진행`이라고 말하면 같은 문장을 다시 시도할게."
+                )
+            refreshed = _json_request("GET", f"/api/projects/{pid}", timeout=30)
+            sentence_count, attached_count, missing = _project_sentence_asset_status(refreshed)
+            if missing:
+                return (
+                    "4단계 일부 완료: Flow 이미지 1개를 생성/다운로드/연결했어.\n\n"
+                    f"- project_id: {pid}\n"
+                    f"- completed sentence: {sentence_number}\n"
+                    f"- coverage: {attached_count}/{sentence_count}\n"
+                    f"- missing: {missing}\n"
+                    f"- desktop result: {output[:500]}\n\n"
+                    "`진행`이라고 말하면 다음 빠진 문장 1개를 이어서 생성할게."
+                )
+            _set_next_step(state, "tts")
             return (
-                "4단계 대기: Flow 생성은 Ui.Vision 매크로가 담당해.\n\n"
-                f"{_uivision_instructions(pid, sentence_number=1, batch=False)}\n\n"
-                "처음에는 1번 문장 단건 매크로로 테스트하는 걸 권장해. "
-                "다운로드와 rename까지 끝나면 `진행`이라고 말해줘."
+                "4단계 완료: Flow 이미지 생성/다운로드/문장별 연결이 모두 끝났어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- coverage: {attached_count}/{sentence_count}\n"
+                f"- desktop result: {output[:500]}\n\n"
+                "다음 단계: OmniVoice 음성 생성.\n"
+                "`진행`이라고 말하면 음성 생성만 실행하고 다시 멈출게."
             )
         if backend == "assisted":
             _prepare_uivision_payload(pid)
@@ -764,11 +832,11 @@ def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
                     f"- reason: {exc}\n\n"
                     "Ui.Vision 매크로가 다운로드 직후 파일명을 `flow_s001_...`처럼 바꾸도록 실행해줘. "
                     "끝나면 `진행`이라고 말하면 같은 단계에서 다시 첨부할게."
-                )
+            )
             attached = attach_response.get("attached")
-            refreshed = attach_response.get("project")
+            raw_refreshed = attach_response.get("project")
             refreshed_project = (
-                refreshed if isinstance(refreshed, dict) else _json_request("GET", f"/api/projects/{pid}", timeout=30)
+                raw_refreshed if isinstance(raw_refreshed, dict) else _json_request("GET", f"/api/projects/{pid}", timeout=30)
             )
             sentence_count, attached_count, missing = _project_sentence_asset_status(
                 cast(dict[str, object], refreshed_project)
@@ -813,8 +881,10 @@ def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
             timeout=60,
         )
         attached = attach_response.get("attached")
-        refreshed = attach_response.get("project")
-        refreshed_project = refreshed if isinstance(refreshed, dict) else _json_request("GET", f"/api/projects/{pid}", timeout=30)
+        raw_refreshed = attach_response.get("project")
+        refreshed_project = (
+            raw_refreshed if isinstance(raw_refreshed, dict) else _json_request("GET", f"/api/projects/{pid}", timeout=30)
+        )
         sentence_count, attached_count, missing = _project_sentence_asset_status(cast(dict[str, object], refreshed_project))
         if missing:
             return (

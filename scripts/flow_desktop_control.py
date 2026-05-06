@@ -56,9 +56,6 @@ def _newest_generated_download(previous_names: set[str]) -> Path:
     for path in recent:
         if path.name not in previous_names and path.is_file() and path.suffix.lower() in allowed_suffixes:
             return path
-    for path in recent:
-        if path.is_file() and path.suffix.lower() in allowed_suffixes:
-            return path
     raise RuntimeError("No generated Flow download was found.")
 
 
@@ -83,14 +80,20 @@ def generate_one(project_id: str, sentence_number: int, wait_seconds: int, api_b
     previous_names = _recent_download_names()
     _flow_window_title()
     time.sleep(0.4)
+    pyautogui.press("esc")
+    time.sleep(0.2)
     _copy_to_clipboard(prompt)
     pyautogui.click(360, 815)
     time.sleep(0.2)
     pyautogui.hotkey("ctrl", "a")
     pyautogui.hotkey("ctrl", "v")
     time.sleep(0.5)
-    pyautogui.click(790, 850)
+    pyautogui.click(895, 854)
     time.sleep(wait_seconds)
+    pyautogui.press("esc")
+    time.sleep(0.3)
+    pyautogui.click(225, 420)
+    time.sleep(1.5)
     pyautogui.click(987, 181)
     time.sleep(0.8)
     pyautogui.click(874, 223)

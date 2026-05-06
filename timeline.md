@@ -167,3 +167,6 @@
 - `[2026-05-07-01-18] Ui.Vision/Flow ?ㅼ“??寃利??꾨즺: Chrome ?뺤옣 9.5.9? XModules 3.2.3 ?ㅼ튂瑜??뺤씤?섍퀬, Flow ?몄쬆???꾨줈?앺듃?먯꽌 6媛?臾몄옣 ?꾨＼?꾪듃瑜?吏곸젒 ?붾㈃ ?쒖뼱濡?遺숈뿬?ｌ뼱 ?앹꽦/1K ?ㅼ슫濡쒕뱶/?꾨줈?앺듃 attach源뚯? ?꾨즺?덈떎. 寃利??꾨줈?앺듃??fc7439ddbb12?대ŉ ?앹꽦 ?먯궛? flow_sentence_001.jpeg~flow_sentence_006.jpeg?대떎. 媛숈? ?덉감瑜??ъ궗?⑺븷 ???덈룄濡?scripts/flow_desktop_control.py??異붽??덈떎.`
 - `[2026-05-07T01:17:42+09:00] Git commit: Verify Flow desktop control path. Summary: confirmed Ui.Vision/Flow install, generated/downloaded/attached all 6 Flow sentence images for project fc7439ddbb12, and added scripts/flow_desktop_control.py plus documentation updates.`
 
+- `[2026-05-07-02-12] LM Studio Flow timeout 원인 분석: cb505a7a5358 프로젝트는 Flow 로그인 문제가 아니라 flow_generate 단계의 동기식 이미지 생성 대기가 MCP timeout을 유발하는 상태임을 확인했다. 한글 대본/영문 Flow prompt 분리, stale download fallback 제거, Flow 그리드 카드 다운로드 순서 반영을 진행했고, 1문장 2단계 생성/다운로드 구조 전환 계획서를 lmstudio-flow-generation-timeout-recovery-plan.md로 작성했다.`
+- `[2026-05-07T02:13:37+09:00] Git commit: Diagnose Flow MCP timeout path. Summary: documented the Flow timeout recovery plan, split Korean narration from English Flow prompts, removed stale download fallback, and wired the Ui.Vision flow_generate path toward one-sentence desktop control.`
+
