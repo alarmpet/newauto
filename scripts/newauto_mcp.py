@@ -404,7 +404,15 @@ def _run_flow_browser_script(args: list[str], *, timeout_sec: int = 180) -> dict
     return cast(dict[str, object], payload)
 
 
-def _run_flow_desktop_control(project_id: str, sentence_number: int, *, wait_seconds: int = 62) -> str:
+def _run_flow_desktop_control(
+    project_id: str,
+    sentence_number: int,
+    *,
+    mode: str,
+    downloads_before: list[str] | None = None,
+    wait_seconds: int = 62,
+    download_timeout_seconds: int = 45,
+) -> dict[str, object]:
     python_command = os.environ.get("NEWAUTO_DESKTOP_PYTHON", "python").strip() or "python"
     command = [
         python_command,
@@ -412,26 +420,89 @@ def _run_flow_desktop_control(project_id: str, sentence_number: int, *, wait_sec
         project_id,
         "--sentence",
         str(sentence_number),
+        "--mode",
+        mode,
         "--wait-seconds",
         str(wait_seconds),
+        "--download-timeout-seconds",
+        str(download_timeout_seconds),
         "--api-base",
         BASE_URL,
     ]
+    if downloads_before is not None:
+        command.extend(["--downloads-before-json", json.dumps(downloads_before, ensure_ascii=False)])
     completed = subprocess.run(
         command,
         cwd=str(ROOT_DIR),
         capture_output=True,
         text=True,
-        timeout=max(90, wait_seconds + 35),
+        timeout=35 if mode == "click-generate" else max(90, download_timeout_seconds + 35),
         encoding="utf-8",
         errors="replace",
     )
+    if completed.stdout.strip():
+        try:
+            payload = json.loads(completed.stdout.strip())
+        except json.JSONDecodeError:
+            payload = {}
+        if isinstance(payload, dict):
+            parsed_payload = cast(dict[str, object], payload)
+            if completed.returncode == 0 or parsed_payload.get("ok") is False:
+                return parsed_payload
     if completed.returncode != 0:
         raise NewautoError(
             "Flow desktop control failed: "
             f"{completed.stderr.strip() or completed.stdout.strip() or completed.returncode}"
         )
-    return completed.stdout.strip()
+    try:
+        payload = json.loads(completed.stdout.strip())
+    except json.JSONDecodeError as exc:
+        raise NewautoError(f"Flow desktop control returned invalid JSON: {completed.stdout[:500]}") from exc
+    if not isinstance(payload, dict):
+        raise NewautoError("Flow desktop control returned non-object JSON.")
+    return cast(dict[str, object], payload)
+
+
+def _set_stepwise_fields(state: dict[str, object], fields: dict[str, object]) -> dict[str, object]:
+    updated = dict(state)
+    updated.update(fields)
+    updated["updated_at"] = time.strftime("%Y-%m-%dT%H:%M:%S")
+    _save_stepwise_state(updated)
+    return updated
+
+
+def _pending_attach_path(project_id: str, sentence_number: int) -> Path:
+    return _uivision_project_dir(project_id) / f"pending_attach_{sentence_number:03d}.json"
+
+
+def _load_pending_attach(project_id: str, sentence_number: int) -> dict[str, object] | None:
+    path = _pending_attach_path(project_id, sentence_number)
+    if not path.exists():
+        return None
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(payload, dict):
+        raise NewautoError(f"Pending attach file is invalid: {path}")
+    return cast(dict[str, object], payload)
+
+
+def _attach_pending_flow_asset(project_id: str, sentence_number: int, pending: dict[str, object]) -> dict[str, object]:
+    asset_path = str(pending.get("asset_path") or "")
+    if not asset_path:
+        raise NewautoError(f"Pending attach for sentence {sentence_number} has no asset_path.")
+    response = _json_request(
+        "POST",
+        f"/api/flow/assets/{project_id}/attach-local",
+        payload={"paths": [asset_path], "start_sentence_number": sentence_number},
+        timeout=60,
+    )
+    _pending_attach_path(project_id, sentence_number).unlink(missing_ok=True)
+    return response
+
+
+def _object_to_str_list(value: object) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    return [str(item) for item in value]
 
 
 def _pid_exists(pid: int) -> bool:
@@ -748,37 +819,53 @@ def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
                     "`진행`이라고 말하면 음성 생성만 실행하고 다시 멈출게."
                 )
             sentence_number = missing[0]
+            pending = _load_pending_attach(pid, sentence_number)
+            if pending is not None:
+                _set_stepwise_fields(
+                    state,
+                    {
+                        "next_step": "flow_wait_sentence",
+                        "active_sentence_number": sentence_number,
+                    },
+                )
+                return (
+                    "4단계 복구 대기: 이미 다운로드된 Flow 파일이 있고 attach만 남아 있어.\n\n"
+                    f"- project_id: {pid}\n"
+                    f"- target sentence: {sentence_number}\n"
+                    f"- pending asset: {pending.get('asset_path')}\n\n"
+                    "`진행`이라고 말하면 Flow를 다시 생성하지 않고 이 파일을 문장 asset에 연결할게."
+                )
             try:
-                output = _run_flow_desktop_control(pid, sentence_number)
+                result = _run_flow_desktop_control(pid, sentence_number, mode="click-generate")
             except NewautoError as exc:
                 return (
-                    "4단계 중단: Flow 데스크톱 제어가 사용자 확인을 필요로 해.\n\n"
+                    "4단계 중단: Flow Generate 클릭 전에 사용자 확인이 필요해.\n\n"
                     f"- project_id: {pid}\n"
                     f"- target sentence: {sentence_number}\n"
                     f"- reason: {exc}\n\n"
                     "Flow 창이 로그인된 상태로 열려 있고, 생성 입력창이 보이는지 확인해줘. "
                     "인증/팝업을 처리한 뒤 `진행`이라고 말하면 같은 문장을 다시 시도할게."
                 )
-            refreshed = _json_request("GET", f"/api/projects/{pid}", timeout=30)
-            sentence_count, attached_count, missing = _project_sentence_asset_status(refreshed)
-            if missing:
-                return (
-                    "4단계 일부 완료: Flow 이미지 1개를 생성/다운로드/연결했어.\n\n"
-                    f"- project_id: {pid}\n"
-                    f"- completed sentence: {sentence_number}\n"
-                    f"- coverage: {attached_count}/{sentence_count}\n"
-                    f"- missing: {missing}\n"
-                    f"- desktop result: {output[:500]}\n\n"
-                    "`진행`이라고 말하면 다음 빠진 문장 1개를 이어서 생성할게."
-                )
-            _set_next_step(state, "tts")
+            downloads_before = _object_to_str_list(result.get("downloads_before"))
+            screenshots = _object_to_str_list(result.get("screenshots"))
+            _set_stepwise_fields(
+                state,
+                {
+                    "next_step": "flow_wait_sentence",
+                    "active_sentence_number": sentence_number,
+                    "downloads_before": downloads_before,
+                    "flow_generate_started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    "flow_generate_screenshots": screenshots,
+                },
+            )
             return (
-                "4단계 완료: Flow 이미지 생성/다운로드/문장별 연결이 모두 끝났어.\n\n"
+                "4단계 진행: Flow Generate 클릭만 완료했어.\n\n"
                 f"- project_id: {pid}\n"
-                f"- coverage: {attached_count}/{sentence_count}\n"
-                f"- desktop result: {output[:500]}\n\n"
-                "다음 단계: OmniVoice 음성 생성.\n"
-                "`진행`이라고 말하면 음성 생성만 실행하고 다시 멈출게."
+                f"- target sentence: {sentence_number}\n"
+                f"- coverage before: {attached_count}/{sentence_count}\n"
+                f"- screenshots: {screenshots}\n\n"
+                "이 호출에서는 다운로드/attach를 기다리지 않았어. "
+                "Flow 화면에 결과 이미지가 보이면 `진행`이라고 말해줘. 그러면 다운로드와 문장 연결만 실행할게."
             )
         if backend == "assisted":
             _prepare_uivision_payload(pid)
@@ -808,6 +895,96 @@ def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
             f"- prompts processed: {result.get('processed')}\n\n"
             "다음 단계: Flow 결과 다운로드 자동 클릭/감지.\n"
             "결과가 화면에 생성됐으면 `진행`이라고 말해줘. 아직 생성 중이면 기다렸다가 말해줘."
+        )
+
+    if next_step == "flow_wait_sentence":
+        sentence_number = _object_to_int(state.get("active_sentence_number"), 0)
+        if sentence_number <= 0:
+            _set_next_step(state, "flow_generate")
+            return (
+                "4단계 복구: 기다리는 문장 번호가 없어 flow_generate로 되돌렸어.\n\n"
+                f"- project_id: {pid}\n\n"
+                "`진행`이라고 말하면 빠진 문장부터 다시 Generate 클릭을 시도할게."
+            )
+        pending = _load_pending_attach(pid, sentence_number)
+        try:
+            if pending is not None:
+                attach_response = _attach_pending_flow_asset(pid, sentence_number, pending)
+                result = {
+                    "ok": True,
+                    "mode": "pending-attach",
+                    "downloaded": pending.get("asset_path"),
+                    "attached": attach_response.get("attached"),
+                }
+            else:
+                downloads_before = _object_to_str_list(state.get("downloads_before"))
+                result = _run_flow_desktop_control(
+                    pid,
+                    sentence_number,
+                    mode="download-attach",
+                    downloads_before=downloads_before,
+                    download_timeout_seconds=45,
+                )
+        except NewautoError as exc:
+            return (
+                "4단계 대기: Flow 결과 다운로드/연결을 아직 끝내지 못했어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- target sentence: {sentence_number}\n"
+                f"- reason: {exc}\n\n"
+                "Flow에서 해당 결과 이미지가 보이는지 확인해줘. 보이면 다시 `진행`이라고 말해줘. "
+                "같은 문장을 재생성하지 않고 다운로드/attach만 다시 시도할게."
+            )
+        if result.get("ok") is not True:
+            return (
+                "4단계 대기: 다운로드는 되었지만 문장 연결이 아직 끝나지 않았어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- target sentence: {sentence_number}\n"
+                f"- downloaded: {result.get('downloaded')}\n"
+                f"- pending_attach: {result.get('pending_attach')}\n"
+                f"- error: {result.get('error')}\n\n"
+                "`진행`이라고 말하면 같은 파일을 다시 attach만 시도할게."
+            )
+        refreshed = _json_request("GET", f"/api/projects/{pid}", timeout=30)
+        sentence_count, attached_count, missing = _project_sentence_asset_status(refreshed)
+        if missing:
+            _set_stepwise_fields(
+                state,
+                {
+                    "next_step": "flow_generate",
+                    "active_sentence_number": 0,
+                    "downloads_before": [],
+                    "flow_generate_started_at": "",
+                    "flow_generate_screenshots": [],
+                },
+            )
+            return (
+                "4단계 일부 완료: Flow 결과 다운로드와 문장 연결이 끝났어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- completed sentence: {sentence_number}\n"
+                f"- downloaded: {result.get('downloaded')}\n"
+                f"- attached: {result.get('attached')}\n"
+                f"- coverage: {attached_count}/{sentence_count}\n"
+                f"- missing: {missing}\n\n"
+                "`진행`이라고 말하면 다음 빠진 문장 Generate 클릭만 이어서 실행할게."
+            )
+        _set_stepwise_fields(
+            state,
+            {
+                "next_step": "tts",
+                "active_sentence_number": 0,
+                "downloads_before": [],
+                "flow_generate_started_at": "",
+                "flow_generate_screenshots": [],
+            },
+        )
+        return (
+            "4단계 완료: Flow 이미지 생성/다운로드/문장별 연결이 모두 끝났어.\n\n"
+            f"- project_id: {pid}\n"
+            f"- completed sentence: {sentence_number}\n"
+            f"- downloaded: {result.get('downloaded')}\n"
+            f"- coverage: {attached_count}/{sentence_count}\n\n"
+            "다음 단계: OmniVoice 음성 생성.\n"
+            "`진행`이라고 말하면 음성 생성만 실행하고 다시 멈출게."
         )
 
     if next_step == "flow_download":

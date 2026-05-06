@@ -3142,3 +3142,13 @@ Follow-up:
   - 좌표 클릭 전후 스크린샷 및 실패 응답에 경로 포함;
   - `flow_wait_sentence` 호출 시 prompt 재입력 없이 다운로드/attach만 수행.
 - 우선순위는 `flow_generate`/`flow_wait_sentence` 분리 -> desktop control 모드 분리 -> 다운로드 polling -> pending attach 순서로 조정했다.
+
+## 2026-05-07 Flow timeout recovery 구현
+
+- `scripts/newauto_mcp.py`의 Ui.Vision `flow_generate` 경로를 변경해 Generate 클릭만 실행한 뒤 `next_step = flow_wait_sentence`로 저장하도록 했다.
+- 새 `flow_wait_sentence` 단계는 기존 prompt를 다시 입력하지 않고, 생성 결과 카드 열기 -> 1K 다운로드 -> 새 파일 감지 -> attach만 수행한다.
+- `scripts/flow_desktop_control.py`는 `--mode click-generate`와 `--mode download-attach`로 분리했다. 구형 `generate-one` 모드는 호환용으로 남겼지만 내부적으로 두 단계를 순서대로 호출한다.
+- 다운로드 감지는 새 파일명, 허용 확장자, `.crdownload` 제외, 파일 크기 2회 안정화 조건을 사용한다.
+- attach 실패 시 `storage/projects/{pid}/uivision/pending_attach_{NNN}.json`을 저장하고, 다음 `flow_wait_sentence` 호출에서 Flow 재생성 없이 attach만 재시도하도록 했다.
+- Flow 창 탐지는 Chrome뿐 아니라 Edge/Chromium 제목도 허용한다.
+- Generate/Download 클릭 전후 스크린샷을 `storage/flow_desktop_screenshots`에 저장해 실패 지점을 확인할 수 있게 했다.

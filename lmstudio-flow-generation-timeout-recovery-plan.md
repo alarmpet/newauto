@@ -34,16 +34,20 @@ Flow 로그인/인증은 핵심 문제가 아니다. 현재 반복 실패의 본
 - [완료] `/api/flow/prompts/{pid}/uivision/prepare`가 기존 깨진 prompt를 재사용하지 않고 재생성하도록 변경.
 - [완료] 기존 다운로드 파일을 fallback으로 붙이는 위험한 경로 제거.
 - [완료] Flow 그리드 화면에서 결과 카드를 먼저 열고 다운로드하는 순서 반영.
+- [완료] `flow_generate`와 `flow_wait_sentence`를 분리해 LM Studio tool call timeout을 피하는 1문장 2단계 구조로 변경.
+- [완료] `flow_desktop_control.py`를 `click-generate`와 `download-attach` 모드로 분리.
+- [완료] 새 다운로드 파일 polling에서 `.crdownload`를 제외하고 파일 크기 안정화를 확인하도록 변경.
+- [완료] attach 실패 시 `pending_attach_{sentence_number}.json`을 저장하고 다음 호출에서 attach만 재시도하도록 변경.
+- [완료] Flow 창 탐지에 Chrome, Edge, Chromium title을 허용하도록 변경.
+- [완료] Generate/Download 클릭 전후 스크린샷을 저장하고 결과/오류 응답에 경로를 남기도록 변경.
 
-## 아직 미구현인 핵심 항목
+## 구현 완료된 핵심 항목
 
 ### 1. `flow_wait_sentence` 단계 추가
 
-현재 `continue_stepwise_hpsl_video_workflow()`의 `flow_generate` 단계는 여전히 `generate + wait + download + attach`를 한 번에 시도할 수 있다.
+`continue_stepwise_hpsl_video_workflow()`의 `flow_generate` 단계는 더 이상 `generate + wait + download + attach`를 한 번에 시도하지 않는다.
 
-이 구조가 timeout의 직접 원인이다.
-
-필수 변경:
+구현된 흐름:
 
 ```text
 flow_generate
@@ -65,9 +69,7 @@ flow_wait_sentence
 
 ### 2. `flow_desktop_control.py` 함수 분리
 
-현재 단일 `generate_one()` 함수가 너무 많은 책임을 가진다.
-
-분리해야 한다.
+단일 `generate_one()` 경로 대신 CLI `--mode`로 실행 경로를 분리했다.
 
 ```text
 click_generate(project_id, sentence_number)
@@ -90,9 +92,9 @@ download_and_attach(project_id, sentence_number, downloads_before)
 
 ### 3. `.crdownload` 감시와 다운로드 완료 polling
 
-고정 `sleep(8)`은 불안정하다.
+고정 `sleep(8)` 의존을 제거하고 새 다운로드 파일 polling을 추가했다.
 
-필수 조건:
+구현 조건:
 
 - 새 파일명만 허용한다.
 - `.crdownload` 파일은 무시한다.
@@ -115,7 +117,7 @@ while now < deadline:
 
 다운로드는 성공했지만 attach API가 실패하면 같은 이미지를 다시 생성하면 안 된다.
 
-필수 변경:
+구현 변경:
 
 ```text
 storage/projects/{pid}/uivision/pending_attach_{sentence_number}.json
@@ -135,9 +137,7 @@ storage/projects/{pid}/uivision/pending_attach_{sentence_number}.json
 
 ### 5. Flow 창 탐지 개선
 
-현재 Flow 창 탐지는 Chrome 제목에 의존할 수 있다.
-
-개선:
+Flow 창 탐지는 Chrome, Edge, Chromium title을 허용한다.
 
 ```text
 Flow + Chrome
@@ -146,7 +146,7 @@ Flow + Chromium
 labs.google URL 또는 Flow title
 ```
 
-최소 변경:
+구현:
 
 ```python
 if "Flow" in title and ("Chrome" in title or "Edge" in title or "Chromium" in title):
@@ -156,7 +156,7 @@ if "Flow" in title and ("Chrome" in title or "Edge" in title or "Chromium" in ti
 
 좌표 클릭은 당장은 가장 실용적이지만, 상태 검증이 없으면 엉뚱한 곳을 누른다.
 
-필수 보강:
+구현 보강:
 
 - 클릭 전 스크린샷 저장.
 - 클릭 후 스크린샷 저장.
@@ -220,24 +220,24 @@ coverage: 2/6
 
 ## 테스트 기준
 
-- [필요] `flow_generate` 호출은 30초 안에 반환해야 한다.
-- [필요] `flow_generate`는 다운로드나 attach를 하지 않아야 한다.
-- [필요] `flow_wait_sentence`는 prompt를 다시 입력하지 않아야 한다.
-- [필요] 새 다운로드 파일이 없으면 예전 파일을 붙이지 않아야 한다.
-- [필요] `.crdownload` 파일은 완료 파일로 취급하지 않아야 한다.
-- [필요] attach 실패 시 pending attach 파일이 생성되어야 한다.
-- [필요] 다음 호출에서 pending attach를 우선 처리해야 한다.
-- [필요] Edge/Chromium Flow 창도 탐지해야 한다.
+- [완료] `flow_generate` 호출은 30초 안에 반환하도록 `click-generate`만 실행한다.
+- [완료] `flow_generate`는 다운로드나 attach를 하지 않는다.
+- [완료] `flow_wait_sentence`는 prompt를 다시 입력하지 않고 다운로드/attach만 수행한다.
+- [완료] 새 다운로드 파일이 없으면 예전 파일을 붙이지 않는다.
+- [완료] `.crdownload` 파일은 완료 파일로 취급하지 않는다.
+- [완료] attach 실패 시 pending attach 파일이 생성된다.
+- [완료] 다음 호출에서 pending attach를 우선 처리한다.
+- [완료] Edge/Chromium Flow 창도 탐지한다.
 - [필요] 6문장 attach 완료 후 `next_step`이 `tts`로 이동해야 한다.
 
 ## 우선순위
 
-1. [필요] `flow_generate`와 `flow_wait_sentence` 분리.
-2. [필요] `flow_desktop_control.py`를 `click_generate` / `download_and_attach` 모드로 분리.
-3. [필요] `.crdownload` polling 추가.
-4. [필요] attach 실패 pending 저장.
-5. [필요] Flow 창 탐지에 Edge/Chromium 지원.
-6. [필요] 클릭 전후 스크린샷 경로를 실패 응답에 포함.
+1. [완료] `flow_generate`와 `flow_wait_sentence` 분리.
+2. [완료] `flow_desktop_control.py`를 `click_generate` / `download_and_attach` 모드로 분리.
+3. [완료] `.crdownload` polling 추가.
+4. [완료] attach 실패 pending 저장.
+5. [완료] Flow 창 탐지에 Edge/Chromium 지원.
+6. [완료] 클릭 전후 스크린샷 경로를 실패 응답에 포함.
 7. [필요] `cb505a7a5358`로 1문장 시작/완료 왕복 테스트.
 8. [필요] 6문장 전체 attach 후 TTS 단계 진입 확인.
 
