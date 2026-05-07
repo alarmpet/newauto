@@ -184,3 +184,5 @@
 
 
 - `[2026-05-07T04:00:00+09:00] Plan: LM Studio MCP Flow runtime diagnosis. Summary: analyzed the repeated generic Flow timeout response and found a likely runtime mismatch: current MCP source does not contain the LM Studio error text, no visible newauto_mcp.py process was running, port 9001 was owned by Python 3.10 rather than the expected run-newauto-9001 environment, and project ad246c22458f is actually at flow_generate with 2/6 assets attached. Created lmstudio-mcp-flow-runtime-diagnosis-plan.md with a diagnose_newauto_runtime-first recovery plan.`
+
+- `[2026-05-07T04:12:00+09:00] Plan review update: incorporated lmstudio-mcp-flow-runtime-diagnosis-plan-review.md into the runtime diagnosis plan. Summary: made diagnose_newauto_runtime and debug footer the hard P0, narrowed the 9001 Python finding to an intended-runtime comparison via resolve_omnivoice_python.ps1, added Flow focus/coordinate residual risks, and separated MCP transport timeout from desktop subprocess timeout.`

@@ -411,12 +411,170 @@ Then continue:
 
 ## 4. Immediate Next Implementation Order
 
+Review incorporation status: updated from `lmstudio-mcp-flow-runtime-diagnosis-plan-review.md`.
+
+The review confirms the main diagnosis, but tightens the priority order: first prove which MCP code LM Studio is executing, then prove which API process owns `9001`, then resume Flow.
+
 1. Implement `diagnose_newauto_runtime`.
-2. Add debug footer to `continue_stepwise_hpsl_video_workflow`.
-3. Add explicit failure codes around `_run_flow_desktop_control`.
-4. Add process/port single-owner check for `9001`.
-5. Restart LM Studio MCP and verify commit shown inside LM Studio.
-6. Only then resume `ad246c22458f`.
+2. Add `_debug_footer()` and append commit/PID/API PID to every `continue_stepwise_hpsl_video_workflow` return path.
+3. Add `storage/runtime_diagnostics/latest.json` snapshot writer and expose it through `diagnose_newauto_runtime`.
+4. Add process/port single-owner check for `9001`, but do not assume Python 3.10 is wrong until `scripts/resolve_omnivoice_python.ps1` output is captured and compared.
+5. Add explicit failure codes around `_run_flow_desktop_control`.
+6. Add single-step smoke tools:
+   - `flow_generate_one_sentence(project_id, sentence_number)`
+   - `flow_download_one_sentence(project_id, sentence_number)`
+   - `flow_asset_coverage(project_id)`
+7. Restart LM Studio MCP and verify the commit shown inside LM Studio.
+8. Only then resume `ad246c22458f`.
+
+## 4.1 Review-Added Implementation Details
+
+### `diagnose_newauto_runtime` minimum payload
+
+The first implementation must return enough information to prove runtime identity inside LM Studio:
+
+```text
+=== newauto MCP Runtime Diagnosis ===
+mcp_script: C:\Users\petbl\newauto\scripts\newauto_mcp.py
+mcp_file_hash: <hash>
+git_commit: <short sha>
+mcp_pid: <pid>
+python_executable: <sys.executable>
+cwd: C:\Users\petbl\newauto
+BASE_URL: http://127.0.0.1:9001
+FLOW_AUTOMATION_BACKEND: <env or default>
+FLOW_MODE: <uivision|playwright>
+api_server_ok: true|false
+api_server_pid_9001: <pid>
+resolved_omnivoice_python: <path from scripts/resolve_omnivoice_python.ps1>
+stepwise_next_step: flow_generate
+asset_coverage: 2/6 missing=[3, 4, 5, 6]
+```
+
+If this tool is unavailable in LM Studio, MCP is stale or not loaded.
+If this tool returns an old commit, LM Studio is executing stale MCP code.
+If this tool returns a different script path, LM Studio is wired to the wrong MCP command.
+
+### Debug footer helper
+
+Add a helper similar to:
+
+```python
+def _debug_footer(next_step_before: str = "", next_step_after: str = "") -> str:
+    ...
+```
+
+The footer should be appended to all `continue_stepwise_hpsl_video_workflow` returns, including success, user-blocked, and failure states:
+
+```text
+---
+mcp_commit: <short sha>
+mcp_pid: <pid>
+api_pid_9001: <pid>
+step: flow_generate -> flow_wait_sentence
+```
+
+This is more important than another Flow click fix because it immediately shows whether LM Studio is running the expected code.
+
+### `9001` runtime pinning nuance
+
+The previous plan described Python 3.10 on `9001` as the "wrong" process. The review correctly narrows this:
+
+- Python 3.10 is wrong only if it differs from the path returned by `scripts/resolve_omnivoice_python.ps1`.
+- The code must record both:
+  - current listener owner for port `9001`;
+  - resolved intended Python from `resolve_omnivoice_python.ps1`.
+- `run-newauto-9001.cmd` should fail fast or warn if `9001` is already owned by a different process before starting.
+
+Acceptance:
+
+```text
+api_server_pid_9001 is single
+api_server_python_path == resolved_omnivoice_python
+```
+
+or, if intentionally different:
+
+```text
+api_server_python_path is documented as the blessed runtime
+```
+
+### Flow coordinate and focus risks
+
+The review adds that `flow_desktop_control.py` still has screen-coordinate fragility:
+
+- `window.height - 90` and `window.height - 66` can drift with DPI/browser chrome height.
+- `_ensure_project_prompt_view()` uses `Ctrl+L`, `Ctrl+C`, and `Esc`, which temporarily moves focus to the address bar.
+- After `Alt+Left`, `time.sleep(1.8)` may be insufficient if Flow project reload is slow.
+
+Planned mitigation after runtime identity is proven:
+
+- Add a screenshot after `_ensure_project_prompt_view()`.
+- Add a small wait loop that checks URL no longer contains `/edit/` or `/scene/`.
+- Add a second prompt input focus click before typing.
+- Save an explicit failure code if prompt typing happens while the address bar still has focus.
+
+### MCP timeout distinction
+
+The review highlights that subprocess timeout and MCP transport timeout are different.
+
+Current subprocess limits:
+
+```text
+click-generate: 35s
+download-attach: max(90, download_timeout_seconds + 35)
+```
+
+Plan update:
+
+- `click-generate` remains fast and should return under 10 seconds.
+- `download-attach` must avoid blocking beyond LM Studio's MCP transport limit.
+- If download is not ready, prefer returning `FLOW_DOWNLOAD_NOT_READY` quickly over waiting long enough for MCP transport timeout.
+- Add a failure code for cases where the subprocess was still running when LM Studio/tool transport timed out:
+
+```text
+MCP_TRANSPORT_TIMEOUT_SUSPECTED
+```
+
+## 4.2 No-Code Diagnostic Commands Before Implementation
+
+Use these commands to confirm the review findings before and after restarting LM Studio MCP:
+
+```powershell
+# MCP process identity
+Get-CimInstance Win32_Process |
+  Where-Object { $_.CommandLine -match 'newauto_mcp.py|run-newauto-mcp' } |
+  Select-Object ProcessId,Name,CommandLine
+
+# Port 9001 owner
+$pid9001 = (Get-NetTCPConnection -LocalPort 9001 -State Listen -ErrorAction SilentlyContinue).OwningProcess
+Get-CimInstance Win32_Process | Where-Object { $_.ProcessId -eq $pid9001 } |
+  Select-Object ProcessId,ExecutablePath,CommandLine
+
+# Intended Python selected by run-newauto-9001
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\resolve_omnivoice_python.ps1
+
+# Stepwise state
+Get-Content .\storage\stepwise_workflows\ad246c22458f.json
+
+# MCP script hash
+Get-FileHash .\scripts\newauto_mcp.py -Algorithm MD5
+```
+
+## 4.3 Review-Adjusted Resume Gate
+
+Do not resume the Flow workflow from LM Studio until all of these are true:
+
+```text
+diagnose_newauto_runtime exists in LM Studio
+diagnose_newauto_runtime returns the current git commit
+diagnose_newauto_runtime returns a live MCP PID
+diagnose_newauto_runtime returns exactly one 9001 listener
+stepwise_next_step == flow_generate
+asset_coverage == 2/6 missing=[3,4,5,6]
+```
+
+If any line fails, the next action is runtime restart/config repair, not another `continue_stepwise_hpsl_video_workflow` call.
 
 ## 5. Expected User-Facing Behavior After Fix
 
@@ -453,4 +611,3 @@ Flow 웹 UI 문제...
 ```
 
 That text is not actionable and should be treated as a broken MCP/runtime signal.
-

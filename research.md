@@ -3185,3 +3185,10 @@ Follow-up:
 - `127.0.0.1:9001` listener는 `run-newauto-9001.cmd`가 기대하는 `omnivoice_env`가 아니라 Python 3.10 프로세스가 소유하고 있었다. MCP와 API 서버 runtime이 섞이면 최신 코드/의존성/encoding 진단이 불안정해진다.
 - 프로젝트 `ad246c22458f` 상태는 `next_step=flow_generate`, coverage `2/6`, missing `[3,4,5,6]`이다. 올바른 다음 동작은 3번 문장 Generate 클릭이며, "최종 렌더링 timeout"이 아니다.
 - 대응 계획은 `lmstudio-mcp-flow-runtime-diagnosis-plan.md`로 작성했다. 최우선은 `diagnose_newauto_runtime` MCP tool을 추가해 LM Studio 내부에서 MCP commit, PID, Python executable, 9001 server PID, stepwise state, coverage를 직접 확인하게 만드는 것이다.
+
+## 2026-05-07 LM Studio MCP diagnosis review 반영
+
+- `lmstudio-mcp-flow-runtime-diagnosis-plan-review.md`를 검토해 계획서의 우선순위를 조정했다. 핵심은 Flow 재시도보다 `diagnose_newauto_runtime`과 debug footer를 먼저 구현해 LM Studio가 어떤 MCP 코드/프로세스를 실행 중인지 증명하는 것이다.
+- `9001`의 Python 3.10 listener를 무조건 오류로 단정하지 않고, `scripts/resolve_omnivoice_python.ps1`가 선택하는 intended Python과 비교해 runtime drift 여부를 판정하도록 계획을 수정했다.
+- `flow_desktop_control.py`의 잔여 리스크도 계획에 추가했다: `Ctrl+L` URL 확인 후 focus 복귀, `Alt+Left` 후 Flow reload 대기, DPI/browser chrome 높이에 따른 상대 좌표 드리프트.
+- MCP transport timeout과 desktop subprocess timeout을 분리했다. 다운로드가 준비되지 않은 경우 긴 대기로 LM Studio transport timeout을 유발하기보다 `FLOW_DOWNLOAD_NOT_READY` 같은 빠른 상태 반환을 우선하도록 보정했다.
