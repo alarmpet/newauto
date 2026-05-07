@@ -3281,3 +3281,14 @@ Follow-up:
 - `scripts/newauto_mcp.py` now launches that script with `--project-id`, `--mode`, and `--query`, keeping the MCP return fast while avoiding HTTP transport/watchdog collisions.
 - Verified project `6a6b70ae0535`: restarted source collection, collected 3 sources and 3 warnings through the direct job, then advanced `source_collect_wait -> script_generate`.
 - Full dependency-following mypy is currently blocked by pre-existing `app/services/subtitle.py` literal-return errors in the dirty worktree; changed MCP/source-collect files pass `mypy --follow-imports=skip`.
+
+## 2026-05-07 LM Studio/newauto failure split diagnosis
+
+- Confirmed the repeated LM Studio `continue_video_workflow` timeout is not a single root cause.
+- LM Studio side: MCP calls can be reported as timeout even when the underlying direct tool path returns in about 2 seconds and advances state. Gemma4 then guesses causes despite the wrapper instructions.
+- newauto side: source collection and script generation had real robustness gaps:
+  - source collection initially called long HTTP endpoints from detached jobs, which collided with API watchdog behavior.
+  - article extraction can raise non-HTTP exceptions such as `TimeoutError`; the direct job now skips those per-result instead of failing the whole collection.
+  - collected article text can look mojibake in PowerShell JSON output; direct Python DB reads confirmed project `91ef204fe625` now stores normal Korean text.
+- Added mojibake repair helpers to `scripts/source_collect_job.py` before sources/fact notes are persisted, and broadened per-result skip handling.
+- Verified project `91ef204fe625`: source collection succeeded, HPSL script generation completed with normal Korean text, and `continue_video_workflow` advanced `script_generate_wait -> flow_prompts`.

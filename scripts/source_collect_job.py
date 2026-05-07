@@ -13,7 +13,65 @@ from fastapi import HTTPException
 from app import db
 from app.services.source_fetch import analyze_source_url
 from app.services.source_research import collect_sources_from_keyword
+from app.services.text_health import looks_mojibake
 from app.types import SourceDraftFactNote, SourceDraftSource
+
+
+def _hangul_count(text: str) -> int:
+    return sum(1 for char in text if "\uac00" <= char <= "\ud7a3")
+
+
+def _mojibake_marker_count(text: str) -> int:
+    markers = ("\ufffd", "\u00c3", "\u00e2", "\u00ec", "\u00ed", "\u00eb", "\u00ea", "\u0080")
+    return sum(text.count(marker) for marker in markers)
+
+
+def _repair_mojibake_text(text: str) -> str:
+    if not text or not looks_mojibake(text):
+        return text
+    candidates: list[str] = []
+    for encoding in ("latin-1", "cp1252"):
+        try:
+            candidates.append(text.encode(encoding).decode("utf-8"))
+        except UnicodeError:
+            continue
+    if not candidates:
+        return text
+    repaired = min(
+        candidates,
+        key=lambda candidate: (_mojibake_marker_count(candidate), -_hangul_count(candidate), len(candidate)),
+    )
+    if _hangul_count(repaired) > _hangul_count(text) or _mojibake_marker_count(repaired) < _mojibake_marker_count(text):
+        return repaired
+    return text
+
+
+def _repair_source(source: SourceDraftSource) -> SourceDraftSource:
+    repaired = dict(source)
+    for key in ("title", "author", "excerpt"):
+        value = repaired.get(key)
+        if isinstance(value, str):
+            repaired[key] = _repair_mojibake_text(value)
+    return SourceDraftSource(
+        id=str(repaired["id"]),
+        url=str(repaired["url"]),
+        final_url=str(repaired["final_url"]),
+        title=str(repaired["title"]),
+        domain=str(repaired["domain"]),
+        author=str(repaired["author"]),
+        published_at=str(repaired["published_at"]),
+        language=str(repaired["language"]),
+        excerpt=str(repaired["excerpt"]),
+        fetched_at=str(repaired["fetched_at"]),
+        word_count=int(repaired["word_count"]),
+    )
+
+
+def _repair_fact_note(note: SourceDraftFactNote) -> SourceDraftFactNote:
+    return SourceDraftFactNote(
+        source_id=note["source_id"],
+        note=_repair_mojibake_text(note["note"]),
+    )
 
 
 def _error_text(exc: BaseException) -> str:
@@ -96,7 +154,14 @@ def _collect_url(pid: str, url: str) -> None:
     except Exception as exc:
         _set_error(pid, "url", url, exc)
         raise
-    _set_done(pid, "url", url, [extracted.source], extracted.fact_notes, extracted.warnings)
+    _set_done(
+        pid,
+        "url",
+        url,
+        [_repair_source(extracted.source)],
+        [_repair_fact_note(note) for note in extracted.fact_notes],
+        extracted.warnings,
+    )
 
 
 def _collect_keyword(pid: str, keyword: str) -> None:
@@ -109,11 +174,11 @@ def _collect_keyword(pid: str, keyword: str) -> None:
         for result in search_results:
             try:
                 extracted = analyze_source_url(result.url)
-            except HTTPException:
+            except Exception:
                 skipped += 1
                 continue
-            sources.append(extracted.source)
-            fact_notes.extend(extracted.fact_notes)
+            sources.append(_repair_source(extracted.source))
+            fact_notes.extend(_repair_fact_note(note) for note in extracted.fact_notes)
             if len(sources) >= 5:
                 break
         if not sources:
