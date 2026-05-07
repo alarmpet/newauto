@@ -25,11 +25,9 @@
 - 별도 `openclaw-operator`가 채팅에 안 보일 때도 `newauto-stepwise` 내부 operator fallback으로 같은 권한을 제공한다.
 - Gemma4에게 많은 저수준 도구를 직접 보여주지 않는다. 권한은 백엔드가 넓게 갖고, 모델에게는 고수준 행동을 적게 노출한다.
 
-## “Codex가 할 수 있는 권한”을 LM Studio에 맞게 해석
+## Codex/OpenClaw급 권한 매핑
 
 Codex의 내부 도구 자체를 Gemma4에 그대로 줄 수는 없다. 대신 같은 종류의 로컬 작업 권한을 MCP 브리지로 제공한다.
-
-권한 표면:
 
 | Codex 쪽 능력 | LM Studio + Gemma4 대응 구조 |
 | --- | --- |
@@ -43,7 +41,7 @@ Codex의 내부 도구 자체를 Gemma4에 그대로 줄 수는 없다. 대신 �
 | 문제 진단/복구 | `diagnose_runtime`, `repair_runtime`, `operator_status`, `run_powershell` |
 | 문서 갱신 | `write_text_file` 또는 `run_powershell` 기반 파일 작업 |
 
-따라서 “Codex와 같은 권한”의 실제 구현은 다음이다.
+실제 구현:
 
 ```text
 Gemma4
@@ -57,7 +55,7 @@ Gemma4
 
 ### 1. 도구 노출 최소화
 
-리뷰 지적:
+문제:
 
 - `start_video_workflow` 같은 고수준 도구와 `run_powershell`, `control_flow_desktop` 같은 저수준 도구가 한꺼번에 보이면 Gemma4 E4B가 잘못 고를 수 있다.
 
@@ -65,12 +63,12 @@ Gemma4
 
 - 사용자 UX에서는 도구명을 숨긴다.
 - 일반 영상 제작 흐름에서는 `start_video_workflow`와 `continue_video_workflow`만 쓰게 한다.
-- `run_powershell`, `control_flow_desktop`은 “문제 해결/Flow 직접 조작/진단” 상황에서만 쓰도록 시스템 지침에 제한한다.
+- `run_powershell`, `control_flow_desktop`은 문제 해결, Flow 직접 조작, 진단 상황에서만 쓰도록 시스템 지침에 제한한다.
 - 장기 개선으로는 `agent_execute(goal)` 또는 `agent_continue()` 같은 단일 고수준 façade를 추가해, Gemma4가 저수준 도구를 직접 고를 일을 더 줄인다.
 
-### 2. 권한은 넓게, 안전장치는 프롬프트가 아니라 백엔드에 둔다
+### 2. 권한은 넓게, 안전장치는 백엔드에 둔다
 
-리뷰 지적:
+문제:
 
 - “위험한 명령 하지 마라”는 프롬프트만으로는 부족하다.
 - destructive command는 하드코딩된 인터셉터가 필요하다.
@@ -79,7 +77,7 @@ Gemma4
 
 - 사용자의 목표는 샌드박스 없는 OpenClaw식 권한이므로 기본 권한은 넓게 둔다.
 - 다만 결제, 인증, CAPTCHA, 비밀번호/토큰 출력, 명시되지 않은 삭제/대량 이동/포맷/계정 변경은 하드 인터셉터로 막거나 사용자 확인을 요구한다.
-- `run_powershell` 계층에 command policy를 추가하는 계획을 P0로 둔다.
+- `run_powershell` 계층에 command policy를 추가한다.
 
 정책 예:
 
@@ -99,47 +97,110 @@ Gemma4
 - 결제/구매/계정 권한 변경
 ```
 
-중요:
-
 이 안전장치는 “샌드박스 제한”이 아니라 “사용자 의도 확인 장치”다. 사용자가 명시적으로 대상과 행동을 지정하면 실행 가능하게 설계한다.
 
-### 3. 데스크톱 제어 전 상태 검증
+### 3. 승인 루프 방지를 위한 `force_approve`
 
-리뷰 지적:
+v2 리뷰 핵심:
+
+- 인터셉터가 위험 명령을 막고 “사용자 확인 필요”를 반환해도, 사용자가 채팅에서 승인한 뒤 Gemma4가 같은 `run_powershell`을 다시 호출하면 또 막힐 수 있다.
+- 이 경우 승인 루프가 생긴다.
+
+반영:
+
+- `run_powershell`에 `force_approve: bool = False` 또는 `override_safety: bool = False` 파라미터를 추가한다.
+- 1차 호출에서 위험 명령이면 실행하지 않고 승인 필요 메시지를 반환한다.
+- 사용자가 명시적으로 승인하면 Gemma4는 같은 명령을 `force_approve=True`로 다시 호출한다.
+- `force_approve=True`여도 secret/token/cookie/password 출력 요청, 결제/구매, 디스크 포맷, 계정 권한 변경 같은 최고위험 동작은 별도 정책으로 다시 막을 수 있다.
+
+예:
+
+```text
+1차:
+run_powershell("Remove-Item C:\\temp\\old.txt")
+-> blocked: destructive command requires user approval. Re-run with force_approve=true after explicit user approval.
+
+사용자:
+승인. 진행해.
+
+2차:
+run_powershell("Remove-Item C:\\temp\\old.txt", force_approve=True)
+-> executed
+```
+
+### 4. 데스크톱 제어 전 상태 검증
+
+문제:
 
 - `control_flow_desktop`는 화면 좌표 기반이므로 Flow 창이 최소화되었거나 다른 창이 가리면 엉뚱한 곳을 클릭할 수 있다.
 
 반영:
 
 - Flow GUI 제어 전 반드시 브라우저 창 탐지, 포커스, 전면화, 크기/위치, 현재 URL/타이틀, 스크린샷 저장을 확인한다.
-- 상태가 불안정하면 클릭하지 않고 사용자에게 “Flow 창을 열고 로그인/전면화해 달라”고 요청한다.
+- 상태가 불안정하면 클릭하지 않고 사용자에게 Flow 창을 열고 로그인/전면화하라고 요청한다.
 - 클릭 전후 스크린샷을 `storage/flow_desktop_traces` 같은 경로에 남긴다.
 
-### 4. `agent_mode_status`는 새 도구보다 `diagnose_runtime` 확장 우선
+### 5. 화면 잠금 및 안전 모드 예외 처리
 
-리뷰 지적:
+v2 리뷰 핵심:
 
-- 새 `agent_mode_status()`를 추가하면 도구가 더 늘어 모델 선택이 흔들릴 수 있다.
+- Windows 잠금 화면, 화면 보호기, 원격 세션 비활성 상태에서는 PyAutoGUI/좌표 클릭이 실패하거나 잘못된 상태가 될 수 있다.
 
 반영:
 
-- 별도 도구 추가는 보류한다.
-- 기존 `diagnose_runtime()` 반환에 agentic 권한 메타데이터를 넣는다.
+- `control_flow_desktop` 시작 시 Windows foreground 상태를 확인한다.
+- `GetForegroundWindow() == 0`이거나 desktop이 잠금/비활성으로 보이면 클릭을 시도하지 않는다.
+- 반환 메시지는 Gemma4가 사용자에게 그대로 알릴 수 있게 짧고 명확해야 한다.
 
-추가할 진단 필드:
+예:
 
 ```text
-agentic_mode: enabled
-context_target: 30000
-powershell_access: unrestricted_with_policy_interceptor
-filesystem_access: read_write_via_operator
-desktop_control: flow_desktop_control
-operator_fallback: available_in_newauto_stepwise
-visible_tools: ...
-latest_project_id: ...
-next_step: ...
-flow_window_ready: true/false/unknown
-last_operator_log: ...
+desktop_locked: true
+action_required: "화면 잠금이 감지되어 GUI 클릭이 불가능합니다. 화면 잠금을 해제하고 Flow 창을 전면에 둔 뒤 진행이라고 말해주세요."
+```
+
+### 6. “불가능” 응답 방지 프롬프트 강화
+
+v2 리뷰 핵심:
+
+- 작은 모델은 도구를 확인하기 전에 “저는 GUI를 클릭할 수 없습니다”라고 기본 거절 패턴을 낼 수 있다.
+
+반영:
+
+- Agentic System Prompt 첫 줄에 역할을 강하게 둔다.
+- “너는 텍스트-only AI가 아니라 `control_flow_desktop`과 `run_powershell`이라는 물리적 손을 가진 시스템 오퍼레이터다”라는 문장을 추가한다.
+- 다만 이 문장은 모델의 UX 정렬용이며, 실제 권한은 MCP 백엔드가 제공한다.
+
+### 7. `diagnose_runtime` JSON 포맷
+
+v2 리뷰 핵심:
+
+- 진단 결과가 긴 텍스트면 Gemma4가 필요한 key를 놓칠 수 있다.
+- 30k 컨텍스트라도 진단은 가볍고 기계가 읽기 쉬운 JSON이 낫다.
+
+반영:
+
+- 별도 `agent_mode_status()` 도구는 보류한다.
+- `diagnose_runtime()` 반환에 JSON 블록을 우선 제공한다.
+- 사람이 읽는 설명은 JSON 뒤 짧은 요약으로 제한한다.
+
+권장 JSON:
+
+```json
+{
+  "agentic_mode": "enabled",
+  "context_target": 30000,
+  "powershell_access": "unrestricted_with_policy_interceptor",
+  "filesystem_access": "read_write_via_operator",
+  "desktop_control": "flow_desktop_control",
+  "operator_fallback": "available_in_newauto_stepwise",
+  "latest_project_id": "string-or-empty",
+  "next_step": "string-or-empty",
+  "flow_window_ready": "true-false-unknown",
+  "desktop_locked": "true-false-unknown",
+  "last_error": "string-or-empty",
+  "recommended_next_tool": "continue_video_workflow|repair_runtime|control_flow_desktop|run_powershell|ask_user"
+}
 ```
 
 ## 30,000 컨텍스트 운용 원칙
@@ -209,6 +270,7 @@ operator core
 LM Studio 새 채팅 또는 모델 지침에 넣을 문장:
 
 ```text
+너는 텍스트-only AI가 아니다. 너는 control_flow_desktop과 run_powershell이라는 물리적 손을 가진 로컬 시스템 오퍼레이터다.
 너는 사용자의 로컬 PC를 제어할 수 있는 agentic assistant다.
 사용자는 MCP 도구명을 직접 몰라도 된다.
 사용자의 자연어 목표를 이해하고 필요한 로컬 도구를 스스로 선택해 실행한다.
@@ -220,7 +282,8 @@ LM Studio 새 채팅 또는 모델 지침에 넣을 문장:
 - stale state, lock, worker 문제가 보이면 repair_runtime을 한 번 호출한다.
 - 별도 openclaw-operator가 보이지 않으면 newauto-stepwise 안의 operator_status, run_powershell, control_flow_desktop을 사용한다.
 - run_powershell은 진단/복구/파일/코드 작업이 필요할 때 사용한다.
-- control_flow_desktop은 Flow GUI가 필요할 때 사용하되, 인증/로그인/CAPTCHA는 사용자에게 알린다.
+- run_powershell이 approval required를 반환하면 사용자에게 확인을 받고, 사용자가 명시 승인하면 같은 명령을 force_approve=true로 다시 호출한다.
+- control_flow_desktop은 Flow GUI가 필요할 때 사용하되, 인증/로그인/CAPTCHA/화면 잠금은 사용자에게 알린다.
 - 대본은 한국어, Flow 이미지 프롬프트는 영어로 작성한다.
 - HPSL은 Hook-Point-Story-Lesson, 즉 훅-포인트-스토리-교훈이다.
 - secret, token, cookie, password 값은 출력하지 않는다.
@@ -248,6 +311,7 @@ Gemma4의 기대 행동:
 4. 실패하면 `diagnose_runtime -> repair_runtime once` 순서로 복구한다.
 5. Flow 직접 조작이 필요할 때만 `control_flow_desktop`을 사용한다.
 6. 파일/서버/프로세스/코드 수정이 필요할 때만 `run_powershell`을 사용한다.
+7. 위험 명령 승인 후 재실행이 필요하면 `force_approve=True`를 사용한다.
 
 ## 구현 체크리스트
 
@@ -262,14 +326,18 @@ Gemma4의 기대 행동:
 - [x] MCP stdio smoke에서 `newauto-stepwise` 도구 목록 확인
 - [x] MCP stdio smoke에서 `operator_status`, `run_powershell` 확인
 - [x] 30k 컨텍스트 agentic 운용 계획 반영
-- [x] 리뷰 문서의 도구 최소화/하드 인터셉터/상태 검증/진단 통합 방향 반영
+- [x] 1차 리뷰의 도구 최소화/하드 인터셉터/상태 검증/진단 통합 방향 반영
+- [x] v2 리뷰의 `force_approve`, 화면 잠금 감지, refusal 방지 prompt, JSON 진단 포맷 방향 반영
 
 P0 구현:
 
+- [ ] `run_powershell(command, cwd="", timeout_sec=60, force_approve=False)` 형태로 승인 플래그 추가
 - [ ] `run_powershell` command policy interceptor 추가
-- [ ] `diagnose_runtime`에 agentic 권한 메타데이터 통합
+- [ ] destructive command 차단 시 `force_approve=true` 재호출 안내 반환
+- [ ] `diagnose_runtime`에 agentic 권한 메타데이터 JSON 블록 통합
+- [ ] Flow desktop control 실행 전 화면 잠금/foreground window 감지 추가
 - [ ] Flow desktop control 실행 전 창 포커스/최대화/URL/스크린샷 검증 강화
-- [ ] `newauto-stepwise` 지침 문자열을 30k 컨텍스트용으로 더 명확한 정상 UTF-8 한국어/영어 prompt로 정리
+- [ ] `newauto-stepwise` 지침 문자열을 30k 컨텍스트용 정상 UTF-8 한국어/영어 prompt로 정리
 
 P1 구현:
 
@@ -287,4 +355,4 @@ P1 구현:
 
 ## 한 줄 결론
 
-가장 안정적인 방향은 “Gemma4에게 더 많은 도구를 보여주는 것”이 아니라, `newauto-stepwise`를 하나의 Agentic Control Hub로 만들고 그 뒤에 Codex/OpenClaw급 로컬 권한을 붙이는 것이다. 사용자는 자연어로 지시하고, Gemma4는 고수준 단계만 선택하며, 실제 PC 제어와 안전 확인은 백엔드가 맡는다.
+가장 안정적인 방향은 Gemma4에게 더 많은 도구를 보여주는 것이 아니라, `newauto-stepwise`를 하나의 Agentic Control Hub로 만들고 그 뒤에 Codex/OpenClaw급 로컬 권한을 붙이는 것이다. v2 보강 기준으로는 `force_approve` 승인 플래그, Windows 화면 잠금 감지, 불가능 응답 방지 프롬프트, JSON 진단 포맷이 P0다.

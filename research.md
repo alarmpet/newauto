@@ -3388,3 +3388,12 @@ Follow-up:
 - Replaced the proposed `agent_mode_status()` tool with the review's recommendation: extend `diagnose_runtime()` with agentic metadata such as power access, filesystem access, desktop control readiness, operator fallback availability, latest project id, next step, and Flow window readiness.
 - Added a Flow desktop preflight requirement before coordinate clicks: detect/focus/maximize the browser window, validate URL/title where possible, save screenshots, and stop for user intervention if the UI is not ready.
 - The plan keeps the user's no-manual-tool-name UX: natural Korean requests should drive `start_video_workflow` and one-step `continue_video_workflow`, while low-level `run_powershell` and `control_flow_desktop` are reserved for diagnosis, repair, and Flow-specific execution.
+
+## 2026-05-08 agentic plan review v2 incorporation
+
+- Reviewed `lmstudio-agentic-mcp-plan-review-v2.md` and updated `lmstudio-agentic-mcp-plan.md`.
+- Added the approval-loop fix to the plan: `run_powershell` should gain a `force_approve` or equivalent override flag so commands blocked by the policy interceptor can run after explicit user approval instead of being blocked repeatedly.
+- Clarified that `force_approve=True` is not a universal bypass. Highest-risk actions such as secret/token extraction, payment/purchase actions, disk formatting, and account permission changes can still require stricter handling.
+- Added Windows screen-lock / inactive-desktop detection as a P0 Flow desktop preflight requirement. If the desktop is locked or foreground window access is unavailable, `control_flow_desktop` should not click and should ask the user to unlock and foreground Flow.
+- Strengthened the agentic prompt to counter the small-model refusal pattern: Gemma4 should treat `control_flow_desktop` and `run_powershell` as its local operator hands instead of saying GUI or shell work is impossible.
+- Changed the planned `diagnose_runtime` enhancement from loose text to a lightweight machine-readable JSON block with keys such as `agentic_mode`, `powershell_access`, `flow_window_ready`, `desktop_locked`, and `recommended_next_tool`.
