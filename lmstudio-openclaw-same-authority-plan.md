@@ -128,3 +128,32 @@ newauto 상태가 이상하면 run_powershell로 프로세스와 포트 상태 �
 - [ ] `openclaw-operator`에 선택형 allow/deny policy 파일 추가
 - [ ] LM Studio가 실패했을 때 자동으로 `operator_status -> run_powershell 진단`을 먼저 하도록 대화 프롬프트 저장
 - [ ] `newauto-stepwise`와 `openclaw-operator`를 모두 로드한 상태의 smoke test 대화 캡처
+
+## 2026-05-08 Stepwise 내장 Operator 보강
+
+LM Studio 실제 대화 상태를 확인한 결과, 현재 채팅의 활성 플러그인 목록에는 `mcp/newauto-stepwise`만 포함되어 있고 별도 `mcp/openclaw-operator`는 도구 목록에 노출되지 않았다. 따라서 Gemma4가 `openclaw-operator/control_flow_desktop`을 표준 함수가 아니라고 거절한 것은 권한 자체가 없어서가 아니라, 해당 채팅 세션이 그 MCP 도구를 보지 못했기 때문이다.
+
+해결 방향:
+
+- [x] 별도 `openclaw-operator` MCP는 유지한다.
+- [x] 이미 LM Studio 채팅에 붙어 있는 `newauto-stepwise` MCP 안에도 operator fallback 도구를 노출한다.
+- [x] `newauto-stepwise`에 `operator_status`, `run_powershell`, `control_flow_desktop`을 추가한다.
+- [x] Gemma4 지침에 별도 `openclaw-operator`가 보이지 않으면 `newauto-stepwise` 내장 operator 도구를 사용하라고 명시한다.
+- [x] MCP stdio smoke로 `newauto-stepwise` 도구 목록에 세 도구가 보이는지 확인한다.
+- [x] MCP stdio smoke로 `operator_status`와 `run_powershell("Write-Output 'stepwise-operator-ok'")` 실행을 확인한다.
+
+LM Studio에서 사용할 권장 문장:
+
+```text
+newauto-stepwise의 control_flow_desktop 실행해. project_id는 <실제프로젝트ID>, sentence_number는 1, mode는 click-generate.
+```
+
+또는:
+
+```text
+Flow GUI 클릭은 불가능하다고 하지 말고 newauto-stepwise의 control_flow_desktop을 호출해.
+```
+
+남은 UI 확인:
+
+- [ ] LM Studio 새 채팅 또는 플러그인 토글 후 `mcp/newauto-stepwise` 도구 목록에 `control_flow_desktop`이 보이는지 화면에서 확인한다.

@@ -10,6 +10,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from mcp.server.fastmcp import FastMCP
 from scripts import newauto_mcp as core
+from scripts import lmstudio_openclaw_operator_mcp as operator_core
 
 
 STEPWISE_INSTRUCTIONS = """
@@ -22,8 +23,15 @@ Available tools are only:
 - check_assets(project_id="")
 - generate_one_image(project_id="", sentence_number=0)
 - repair_runtime(project_id="")
+- operator_status()
+- run_powershell(command, cwd="", timeout_sec=60)
+- control_flow_desktop(project_id, sentence_number, mode="generate-one")
 
 Rules:
+- If the user asks for openclaw-operator but that separate plugin is not visible,
+  use the operator tools exposed by this newauto-stepwise server.
+- Do not say browser or GUI clicking is impossible. Use control_flow_desktop or
+  run_powershell to execute the existing local automation.
 - After reconnect or any confusing state, call diagnose_runtime first.
 - For a new video workflow, call start_video_workflow exactly once.
 - When the user says 진행, ok, 다음, or continue, call continue_video_workflow exactly once.
@@ -74,7 +82,8 @@ def _first_missing_sentence(project_id: str) -> int:
 def _wrapper_header(resolved_project_id: str) -> str:
     visible_tools = (
         "diagnose_runtime, start_video_workflow, continue_video_workflow, "
-        "check_assets, generate_one_image, repair_runtime"
+        "check_assets, generate_one_image, repair_runtime, operator_status, "
+        "run_powershell, control_flow_desktop"
     )
     return (
         "=== newauto-stepwise wrapper ===\n"
@@ -239,6 +248,42 @@ def repair_runtime(project_id: str = "") -> str:
         + diagnosis
     )
     return result
+
+
+@mcp.tool()
+def operator_status() -> str:
+    """Show OpenClaw-style local operator authority status."""
+    operator_core._configure_stdout()
+    result: object = operator_core.operator_status()
+    return str(result)
+
+
+@mcp.tool()
+def run_powershell(command: str, cwd: str = "", timeout_sec: int = 60) -> str:
+    """Run a local PowerShell command through the OpenClaw-style operator."""
+    operator_core._configure_stdout()
+    result: object = operator_core.run_powershell(command, cwd, timeout_sec)
+    return str(result)
+
+
+@mcp.tool()
+def control_flow_desktop(
+    project_id: str,
+    sentence_number: int,
+    mode: str = "generate-one",
+    wait_seconds: int = 60,
+    download_timeout_seconds: int = 45,
+) -> str:
+    """Control the authenticated Google Flow desktop UI for one sentence."""
+    operator_core._configure_stdout()
+    result: object = operator_core.control_flow_desktop(
+        project_id,
+        sentence_number,
+        mode,
+        wait_seconds,
+        download_timeout_seconds,
+    )
+    return str(result)
 
 
 def main() -> None:

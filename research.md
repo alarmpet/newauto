@@ -3354,3 +3354,14 @@ Follow-up:
   - `download-attach`
   - `generate-one`
 - This makes the intended answer to Flow/GUI tasks: "use `control_flow_desktop` or `run_powershell`," not "impossible."
+
+## 2026-05-08 newauto-stepwise operator fallback
+
+- After adding the separate `openclaw-operator` MCP, LM Studio still answered that `openclaw-operator/control_flow_desktop` was unavailable.
+- Diagnosis showed the active LM Studio conversation only had `mcp/newauto-stepwise` in its plugin list, while the separate `mcp/openclaw-operator` server was registered but not exposed to that chat's tool list.
+- To make the fix robust for the current chat, `scripts/newauto_stepwise_mcp.py` now imports the operator core and exposes three fallback operator tools directly through the already-visible `newauto-stepwise` MCP:
+  - `operator_status`
+  - `run_powershell`
+  - `control_flow_desktop`
+- The Gemma-facing stepwise instructions now explicitly say that if the separate operator plugin is not visible, it must use the operator tools exposed by `newauto-stepwise`, and must not claim Flow/GUI clicking is impossible.
+- Verification used the official MCP client stdio path against `scripts/newauto_stepwise_mcp.py`; `tools/list` returned the three operator tools, `operator_status` returned the OpenClaw-style local authority status, and `run_powershell("Write-Output 'stepwise-operator-ok'")` succeeded.
