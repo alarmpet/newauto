@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ctypes
 import json
 import subprocess
 import time
@@ -29,8 +30,40 @@ class WindowLike(Protocol):
     def activate(self) -> None:
         ...
 
+    def restore(self) -> None:
+        ...
+
+    def maximize(self) -> None:
+        ...
+
+
+def _desktop_state_payload() -> dict[str, object]:
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = int(user32.GetForegroundWindow())
+    except (AttributeError, OSError, ValueError) as exc:
+        return {
+            "desktop_locked": "undetermined",
+            "foreground_hwnd": 0,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "desktop_locked": hwnd == 0,
+        "foreground_hwnd": hwnd,
+    }
+
+
+def _ensure_desktop_unlocked() -> None:
+    state = _desktop_state_payload()
+    if state.get("desktop_locked") is True:
+        raise RuntimeError(
+            "desktop_locked=true. 화면 잠금이 감지되어 GUI 클릭이 불가능합니다. "
+            "화면 잠금을 해제하고 Flow 창을 전면에 둔 뒤 진행이라고 말해주세요."
+        )
+
 
 def _activate_flow_window() -> WindowLike:
+    _ensure_desktop_unlocked()
     candidates: list[WindowLike] = []
     for window in gw.getAllWindows():
         candidate = cast(WindowLike, window)
@@ -50,6 +83,14 @@ def _activate_flow_window() -> WindowLike:
         reverse=True,
     )
     selected = candidates[0]
+    try:
+        selected.restore()
+    except Exception:
+        pass
+    try:
+        selected.maximize()
+    except Exception:
+        pass
     try:
         selected.activate()
     except Exception:
@@ -129,6 +170,17 @@ def _ensure_project_prompt_view() -> None:
     if "/edit/" in url or "/scene/" in url:
         pyautogui.hotkey("alt", "left")
         time.sleep(1.8)
+
+
+def _ensure_flow_url() -> str:
+    url = _current_browser_url()
+    lower_url = url.lower()
+    if "labs.google" not in lower_url and "flow" not in lower_url:
+        raise RuntimeError(
+            "Flow browser window is active, but the current URL does not look like Google Flow. "
+            f"current_url={url}"
+        )
+    return url
 
 
 def _enter_prompt_text(text: str) -> None:
@@ -244,6 +296,7 @@ def click_generate(project_id: str, sentence_number: int) -> dict[str, object]:
     pyautogui.press("esc")
     time.sleep(0.2)
     _ensure_project_prompt_view()
+    url = _ensure_flow_url()
     before = _screenshot(project_id, sentence_number, "before_generate")
     pyautogui.click(window.left + int(window.width * 0.44), window.top + window.height - 90)
     time.sleep(0.2)
@@ -258,6 +311,7 @@ def click_generate(project_id: str, sentence_number: int) -> dict[str, object]:
         "project_id": project_id,
         "sentence_number": sentence_number,
         "window_title": title,
+        "current_url": url,
         "downloads_before": sorted(previous_names),
         "screenshots": [str(before), str(after)],
     }
@@ -277,6 +331,7 @@ def download_and_attach(
     previous_names.update(_recent_download_names())
     pyautogui.press("esc")
     time.sleep(0.3)
+    url = _ensure_flow_url()
     before = _screenshot(project_id, sentence_number, "before_download")
     try:
         asset_path = _download_from_current_flow_view(window, previous_names)
@@ -295,6 +350,7 @@ def download_and_attach(
             "project_id": project_id,
             "sentence_number": sentence_number,
             "window_title": title,
+            "current_url": url,
             "downloaded": str(asset_path),
             "pending_attach": str(pending_path),
             "error": f"attach failed: {exc}",
@@ -306,6 +362,7 @@ def download_and_attach(
         "project_id": project_id,
         "sentence_number": sentence_number,
         "window_title": title,
+        "current_url": url,
         "downloaded": str(asset_path),
         "attached": attached,
         "screenshots": [str(before), str(after)],

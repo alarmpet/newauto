@@ -331,13 +331,13 @@ Gemma4의 기대 행동:
 
 P0 구현:
 
-- [ ] `run_powershell(command, cwd="", timeout_sec=60, force_approve=False)` 형태로 승인 플래그 추가
-- [ ] `run_powershell` command policy interceptor 추가
-- [ ] destructive command 차단 시 `force_approve=true` 재호출 안내 반환
-- [ ] `diagnose_runtime`에 agentic 권한 메타데이터 JSON 블록 통합
-- [ ] Flow desktop control 실행 전 화면 잠금/foreground window 감지 추가
-- [ ] Flow desktop control 실행 전 창 포커스/최대화/URL/스크린샷 검증 강화
-- [ ] `newauto-stepwise` 지침 문자열을 30k 컨텍스트용 정상 UTF-8 한국어/영어 prompt로 정리
+- [x] `run_powershell(command, cwd="", timeout_sec=60, force_approve=False)` 형태로 승인 플래그 추가
+- [x] `run_powershell` command policy interceptor 추가
+- [x] destructive command 차단 시 `force_approve=true` 재호출 안내 반환
+- [x] `diagnose_runtime`에 agentic 권한 메타데이터 JSON 블록 통합
+- [x] Flow desktop control 실행 전 화면 잠금/foreground window 감지 추가
+- [x] Flow desktop control 실행 전 창 포커스/최대화/URL/스크린샷 검증 강화
+- [x] `newauto-stepwise` 지침 문자열을 30k 컨텍스트용 정상 UTF-8 한국어/영어 prompt로 정리
 
 P1 구현:
 

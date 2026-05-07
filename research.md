@@ -3397,3 +3397,16 @@ Follow-up:
 - Added Windows screen-lock / inactive-desktop detection as a P0 Flow desktop preflight requirement. If the desktop is locked or foreground window access is unavailable, `control_flow_desktop` should not click and should ask the user to unlock and foreground Flow.
 - Strengthened the agentic prompt to counter the small-model refusal pattern: Gemma4 should treat `control_flow_desktop` and `run_powershell` as its local operator hands instead of saying GUI or shell work is impossible.
 - Changed the planned `diagnose_runtime` enhancement from loose text to a lightweight machine-readable JSON block with keys such as `agentic_mode`, `powershell_access`, `flow_window_ready`, `desktop_locked`, and `recommended_next_tool`.
+
+## 2026-05-08 agentic P0 implementation
+
+- Implemented the P0 items from `lmstudio-agentic-mcp-plan.md`.
+- `scripts/lmstudio_openclaw_operator_mcp.py` now adds:
+  - `run_powershell(..., force_approve=False)`,
+  - a command policy interceptor for destructive commands,
+  - `approval_required` messaging that instructs Gemma4 to ask the user and re-run with `force_approve=true`,
+  - hard blocking for credential/token/cookie/password extraction, payment/purchase markers, disk/account high-risk commands,
+  - desktop foreground state metadata.
+- `scripts/newauto_stepwise_mcp.py` was rewritten with clean UTF-8 agentic instructions, exposes the `force_approve` parameter through its operator fallback, and prepends a JSON `agentic_metadata_json` block to `diagnose_runtime`.
+- `scripts/flow_desktop_control.py` now checks foreground desktop state before GUI clicks, restores/maximizes/activates the Flow window, validates the current URL looks like Flow, and keeps screenshot traces around generate/download actions.
+- Verified the actual MCP stdio path: `tools/list` exposes `run_powershell.force_approve`, a safe PowerShell command executes, a destructive command is blocked with `approval_required`, and `diagnose_runtime` includes `agentic_metadata_json`.

@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 import time
+import ctypes
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -15,6 +17,11 @@ DEFAULT_CWD = ROOT_DIR
 LOG_DIR = ROOT_DIR / "storage" / "operator_logs"
 MAX_OUTPUT_CHARS = 24000
 MAX_READ_CHARS = 120000
+APPROVAL_MESSAGE = (
+    "approval_required: this command matches a sensitive local action. "
+    "Ask the user for explicit approval, then re-run the exact same command "
+    "with force_approve=true."
+)
 
 INSTRUCTIONS = """
 You are the OpenClaw-style local operator MCP for LM Studio + Gemma4.
@@ -39,7 +46,9 @@ Rules:
 - Keep commands scoped and explain the result in Korean.
 - Do not print secret values such as tokens, cookies, API keys, or credentials.
 - If you read a config file that contains secrets, summarize the structure only.
-- Destructive operations require a direct user request naming the target.
+- Destructive operations require a direct user request naming the target. If
+  run_powershell returns approval_required, ask the user and then re-run the
+  same command with force_approve=true after explicit approval.
 """
 
 mcp = FastMCP(
@@ -98,6 +107,87 @@ def _redact(text: str) -> str:
     return "\n".join(redacted_lines)
 
 
+def _desktop_state_payload() -> dict[str, object]:
+    if os.name != "nt":
+        return {"desktop_locked": "undetermined", "foreground_hwnd": 0, "platform": os.name}
+    try:
+        user32 = ctypes.windll.user32
+        hwnd = int(user32.GetForegroundWindow())
+    except (AttributeError, OSError, ValueError) as exc:
+        return {
+            "desktop_locked": "undetermined",
+            "foreground_hwnd": 0,
+            "platform": os.name,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+    return {
+        "desktop_locked": hwnd == 0,
+        "foreground_hwnd": hwnd,
+        "platform": os.name,
+    }
+
+
+def _desktop_locked_text() -> str:
+    payload = _desktop_state_payload()
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True)
+
+
+def _command_policy(command: str, force_approve: bool) -> tuple[bool, str, str]:
+    normalized = command.strip()
+    lower = normalized.lower()
+    if not normalized:
+        return False, "empty_command", "blocked: command is empty."
+
+    secret_markers = (
+        "get-credential",
+        "credential",
+        "get-storedcredential",
+        "cookie",
+        "authorization",
+        "bearer",
+        "password",
+        "token",
+        "secret",
+        "apikey",
+        "api_key",
+    )
+    high_risk_markers = (
+        "format-volume",
+        "diskpart",
+        "cipher /w",
+        "net user",
+        "set-adaccountpassword",
+        "remove-aduser",
+    )
+    payment_markers = ("checkout", "purchase", "payment", "billing")
+    destructive_patterns = (
+        r"\bremove-item\b",
+        r"\bdel\b",
+        r"\berase\b",
+        r"\brmdir\b",
+        r"\brd\b",
+        r"\bgit\s+reset\b",
+        r"\bgit\s+clean\b",
+        r"\bgit\s+checkout\s+--\b",
+        r"\bgit\s+push\b.*\s--force\b",
+        r"\bmove-item\b",
+    )
+
+    if any(marker in lower for marker in high_risk_markers):
+        return False, "blocked_high_risk", "blocked: high-risk system/account/disk command is not allowed through force_approve."
+    if any(marker in lower for marker in payment_markers):
+        return False, "blocked_payment", "blocked: payment, purchase, or billing actions require manual user control."
+    if any(marker in lower for marker in secret_markers):
+        return False, "blocked_secret", "blocked: commands that expose credentials, tokens, cookies, or passwords are not allowed."
+
+    if any(re.search(pattern, lower) for pattern in destructive_patterns):
+        if force_approve:
+            return True, "approved_sensitive", "allowed after explicit force_approve."
+        return False, "approval_required", APPROVAL_MESSAGE
+
+    return True, "allowed", "allowed."
+
+
 def _append_log(entry: dict[str, object]) -> Path:
     LOG_DIR.mkdir(parents=True, exist_ok=True)
     path = LOG_DIR / f"operator-{time.strftime('%Y-%m-%d')}.jsonl"
@@ -106,9 +196,26 @@ def _append_log(entry: dict[str, object]) -> Path:
     return path
 
 
-def _run(command: str, cwd: str, timeout_sec: int) -> tuple[int | None, str, str, Path]:
+def _run(command: str, cwd: str, timeout_sec: int, force_approve: bool = False) -> tuple[int | None, str, str, Path]:
     resolved_cwd = _resolve_cwd(cwd)
     start = time.time()
+    allowed, policy_code, policy_message = _command_policy(command, force_approve)
+    if not allowed:
+        log_path = _append_log(
+            {
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                "tool": "run_powershell",
+                "cwd": str(resolved_cwd),
+                "command": command,
+                "timeout_sec": _clamp_timeout(timeout_sec),
+                "elapsed_sec": round(time.time() - start, 3),
+                "exit_code": None,
+                "policy_code": policy_code,
+                "force_approve": force_approve,
+                "blocked": True,
+            }
+        )
+        return None, "", policy_message, log_path
     try:
         completed = subprocess.run(
             [
@@ -148,6 +255,9 @@ def _run(command: str, cwd: str, timeout_sec: int) -> tuple[int | None, str, str
             "timeout_sec": _clamp_timeout(timeout_sec),
             "elapsed_sec": round(time.time() - start, 3),
             "exit_code": exit_code,
+            "policy_code": policy_code,
+            "force_approve": force_approve,
+            "blocked": False,
             "stdout_chars": len(stdout),
             "stderr_chars": len(stderr),
         }
@@ -168,20 +278,22 @@ def operator_status() -> str:
         "authority: OpenClaw-style local full operator via MCP\n"
         "tools: run_powershell, read_text_file, write_text_file, list_directory, open_target, "
         "control_flow_desktop, recent_operator_logs\n"
-        "secret_policy: secret-like lines are redacted in read_text_file and recent logs"
+        "secret_policy: secret-like lines are redacted in read_text_file and recent logs\n"
+        f"desktop_state: {_desktop_locked_text()}"
     )
 
 
 @mcp.tool()
-def run_powershell(command: str, cwd: str = "", timeout_sec: int = 60) -> str:
+def run_powershell(command: str, cwd: str = "", timeout_sec: int = 60, force_approve: bool = False) -> str:
     """Run a local PowerShell command with broad OpenClaw-style authority."""
     _configure_stdout()
-    exit_code, stdout, stderr, log_path = _run(command, cwd, timeout_sec)
+    exit_code, stdout, stderr, log_path = _run(command, cwd, timeout_sec, force_approve)
     output = _truncate(stdout)
     error = _truncate(stderr)
     return (
         "=== run_powershell result ===\n"
         f"exit_code: {exit_code if exit_code is not None else 'timeout/error'}\n"
+        f"force_approve: {force_approve}\n"
         f"log: {log_path}\n"
         "\n--- stdout ---\n"
         f"{output if output.strip() else '(empty)'}\n"
@@ -299,6 +411,13 @@ def control_flow_desktop(
         return f"control_flow_desktop error: mode must be one of {sorted(allowed_modes)}"
     if sentence_number < 1:
         return "control_flow_desktop error: sentence_number must be >= 1"
+    desktop_state = _desktop_state_payload()
+    if desktop_state.get("desktop_locked") is True:
+        return (
+            "control_flow_desktop blocked: desktop_locked=true. "
+            "화면 잠금이 감지되어 GUI 클릭이 불가능합니다. 화면 잠금을 해제하고 Flow 창을 전면에 둔 뒤 진행이라고 말해주세요.\n"
+            f"desktop_state: {json.dumps(desktop_state, ensure_ascii=False, sort_keys=True)}"
+        )
     script_path = ROOT_DIR / "scripts" / "flow_desktop_control.py"
     command = (
         f"& {json.dumps(str(sys.executable))} {json.dumps(str(script_path))} "
@@ -314,6 +433,7 @@ def control_flow_desktop(
         f"sentence_number: {sentence_number}\n"
         f"mode: {selected_mode}\n"
         f"exit_code: {exit_code if exit_code is not None else 'timeout/error'}\n"
+        f"desktop_state: {json.dumps(desktop_state, ensure_ascii=False, sort_keys=True)}\n"
         f"log: {log_path}\n"
         "\n--- stdout ---\n"
         f"{_truncate(stdout) if stdout.strip() else '(empty)'}\n"

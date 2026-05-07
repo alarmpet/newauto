@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import sys
+import json
 import subprocess
+import sys
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -9,14 +10,20 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from mcp.server.fastmcp import FastMCP
-from scripts import newauto_mcp as core
 from scripts import lmstudio_openclaw_operator_mcp as operator_core
+from scripts import newauto_mcp as core
 
 
 STEPWISE_INSTRUCTIONS = """
-You are the minimal newauto-stepwise MCP server for LM Studio + Gemma4.
+You are not a text-only AI. You are a local system operator with two local
+hands: control_flow_desktop for GUI/Flow work and run_powershell for shell,
+filesystem, git, server, and repair work.
 
-Available tools are only:
+The user should not need to know MCP tool names. Interpret the user's natural
+Korean request, choose the right local tool yourself, and report only the
+completed step, current state, and any user action required.
+
+Available tools:
 - diagnose_runtime(project_id="")
 - start_video_workflow(keyword_or_url, title="", target_minutes=1, tone="설명형")
 - continue_video_workflow(project_id="")
@@ -24,28 +31,30 @@ Available tools are only:
 - generate_one_image(project_id="", sentence_number=0)
 - repair_runtime(project_id="")
 - operator_status()
-- run_powershell(command, cwd="", timeout_sec=60)
+- run_powershell(command, cwd="", timeout_sec=60, force_approve=false)
 - control_flow_desktop(project_id, sentence_number, mode="generate-one")
 
 Rules:
-- If the user asks for openclaw-operator but that separate plugin is not visible,
-  use the operator tools exposed by this newauto-stepwise server.
-- Do not say browser or GUI clicking is impossible. Use control_flow_desktop or
-  run_powershell to execute the existing local automation.
-- After reconnect or any confusing state, call diagnose_runtime first.
-- For a new video workflow, call start_video_workflow exactly once.
-- When the user says 진행, ok, 다음, or continue, call continue_video_workflow exactly once.
-- Never call more than one workflow-advancing tool for one user approval.
-- Never mention or invent legacy tool names such as start_hpsl_flow_workflow,
-  finish_hpsl_flow_workflow, make_hpsl_flow_short_video, open_flow, or
-  continue_stepwise_hpsl_video_workflow. They are intentionally not available here.
-- If a tool call appears to fail or timeout, call diagnose_runtime next and compare
-  the saved project state before explaining anything.
-- If diagnose_runtime shows an error, stale state, or mismatch, call repair_runtime once.
-- Never explain a timeout as image generation overload, network overload, or server
-  overload unless the tool output explicitly says that.
-- Reply in concise Korean. After a successful step, report the completed step and
-  ask the user to answer 진행, ok, or 다음 before continuing.
+- For a new HPSL/Flow/video workflow, call start_video_workflow exactly once.
+- When the user says 진행, ok, 다음, or continue, call continue_video_workflow
+  exactly once. Never advance more than one workflow step for one approval.
+- If a tool appears to fail or timeout, do not guess. Call diagnose_runtime and
+  compare the saved project state before explaining anything.
+- If diagnose_runtime shows stale state, locks, worker problems, or a mismatch,
+  call repair_runtime once.
+- If the separate openclaw-operator plugin is not visible, use the operator
+  fallback tools exposed by this newauto-stepwise server.
+- Do not say browser clicking, GUI control, file work, or shell execution is
+  impossible. Use control_flow_desktop or run_powershell.
+- If run_powershell returns approval_required, ask the user for explicit
+  approval. If the user approves, re-run the same command with force_approve=true.
+- Use control_flow_desktop for Flow GUI work. If login, CAPTCHA, account
+  permission, or desktop lock is required, tell the user exactly what to do.
+- Scripts must be Korean. Flow image prompts must be English.
+- HPSL means Hook-Point-Story-Lesson: 훅-포인트-스토리-교훈.
+- Never print secrets, tokens, cookies, passwords, or authorization values.
+- Reply in concise Korean after each successful step and ask the user to answer
+  진행, ok, or 다음 before continuing.
 """
 
 
@@ -93,13 +102,63 @@ def _wrapper_header(resolved_project_id: str) -> str:
     )
 
 
+def _agentic_metadata(project_id: str) -> dict[str, object]:
+    next_step = ""
+    if project_id.strip():
+        try:
+            state = core._load_stepwise_state(project_id)
+            next_step = str(state.get("next_step") or "")
+        except Exception:
+            next_step = ""
+    desktop_state = operator_core._desktop_state_payload()
+    flow_windows: object = []
+    try:
+        flow_windows = core._flow_window_lines()
+    except Exception as exc:
+        flow_windows = [f"error: {type(exc).__name__}: {exc}"]
+    flow_ready = "undetermined"
+    if isinstance(flow_windows, list):
+        flow_ready = "true" if len(flow_windows) > 0 else "false"
+    recommended = "start_video_workflow"
+    if next_step:
+        recommended = "continue_video_workflow"
+    if desktop_state.get("desktop_locked") is True:
+        recommended = "ask_user"
+    return {
+        "agentic_mode": "enabled",
+        "context_target": 30000,
+        "powershell_access": "unrestricted_with_policy_interceptor",
+        "filesystem_access": "read_write_via_operator",
+        "desktop_control": "flow_desktop_control",
+        "operator_fallback": "available_in_newauto_stepwise",
+        "visible_tools": [
+            "diagnose_runtime",
+            "start_video_workflow",
+            "continue_video_workflow",
+            "check_assets",
+            "generate_one_image",
+            "repair_runtime",
+            "operator_status",
+            "run_powershell",
+            "control_flow_desktop",
+        ],
+        "latest_project_id": project_id,
+        "next_step": next_step,
+        "flow_window_ready": flow_ready,
+        "desktop_locked": desktop_state.get("desktop_locked", "undetermined"),
+        "foreground_hwnd": desktop_state.get("foreground_hwnd", 0),
+        "recommended_next_tool": recommended,
+    }
+
+
 @mcp.tool()
 def diagnose_runtime(project_id: str = "") -> str:
     """Check MCP identity, API health, latest workflow state, and asset coverage."""
     core._configure_stdout()
     pid = _resolve_project_id(project_id)
     diagnosis = core.diagnose_newauto_runtime(pid)
-    return f"{_wrapper_header(pid)}\n\n{diagnosis}"
+    metadata = json.dumps(_agentic_metadata(pid), ensure_ascii=False, indent=2, sort_keys=True)
+    return f"{_wrapper_header(pid)}\n\n=== agentic_metadata_json ===\n{metadata}\n\n{diagnosis}"
 
 
 @mcp.tool()
@@ -129,8 +188,8 @@ def continue_video_workflow(project_id: str = "") -> str:
     if not pid:
         return (
             f"{_wrapper_header(pid)}\n\n"
-            "진행할 프로젝트를 찾지 못했어. 먼저 diagnose_runtime으로 상태를 확인하거나 "
-            "start_video_workflow로 새 워크플로우를 시작해."
+            "진행할 프로젝트를 찾지 못했습니다. 먼저 diagnose_runtime으로 상태를 확인하거나 "
+            "start_video_workflow로 새 워크플로우를 시작하세요."
         )
     message = core.continue_stepwise_hpsl_video_workflow(pid)
     return f"{_wrapper_header(pid)}\n\n{message}"
@@ -142,10 +201,7 @@ def check_assets(project_id: str = "") -> str:
     core._configure_stdout()
     pid = _resolve_project_id(project_id)
     if not pid:
-        return (
-            f"{_wrapper_header(pid)}\n\n"
-            "확인할 프로젝트를 찾지 못했어. 먼저 diagnose_runtime으로 상태를 확인해."
-        )
+        return f"{_wrapper_header(pid)}\n\n확인할 프로젝트를 찾지 못했습니다. 먼저 diagnose_runtime으로 상태를 확인하세요."
     message = core.flow_asset_coverage(pid)
     return f"{_wrapper_header(pid)}\n\n{message}"
 
@@ -156,10 +212,7 @@ def generate_one_image(project_id: str = "", sentence_number: int = 0) -> str:
     core._configure_stdout()
     pid = _resolve_project_id(project_id)
     if not pid:
-        return (
-            f"{_wrapper_header(pid)}\n\n"
-            "이미지를 생성할 프로젝트를 찾지 못했어. 먼저 diagnose_runtime으로 상태를 확인해."
-        )
+        return f"{_wrapper_header(pid)}\n\n이미지를 생성할 프로젝트를 찾지 못했습니다. 먼저 diagnose_runtime으로 상태를 확인하세요."
     target_sentence = sentence_number if sentence_number > 0 else _first_missing_sentence(pid)
     message = core.flow_generate_one_sentence(pid, target_sentence)
     return f"{_wrapper_header(pid)}\n\n{message}"
@@ -233,7 +286,7 @@ def repair_runtime(project_id: str = "") -> str:
     pid = _resolve_project_id(project_id)
     actions: list[str] = []
     if not pid:
-        return f"{_wrapper_header(pid)}\n\n복구할 프로젝트를 찾지 못했어. 먼저 diagnose_runtime을 실행해."
+        return f"{_wrapper_header(pid)}\n\n복구할 프로젝트를 찾지 못했습니다. 먼저 diagnose_runtime을 실행하세요."
     try:
         _cleanup_source_worker_lock(actions)
         _repair_stepwise_state(pid, actions)
@@ -259,10 +312,10 @@ def operator_status() -> str:
 
 
 @mcp.tool()
-def run_powershell(command: str, cwd: str = "", timeout_sec: int = 60) -> str:
+def run_powershell(command: str, cwd: str = "", timeout_sec: int = 60, force_approve: bool = False) -> str:
     """Run a local PowerShell command through the OpenClaw-style operator."""
     operator_core._configure_stdout()
-    result: object = operator_core.run_powershell(command, cwd, timeout_sec)
+    result: object = operator_core.run_powershell(command, cwd, timeout_sec, force_approve)
     return str(result)
 
 
