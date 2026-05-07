@@ -3254,3 +3254,12 @@ Follow-up:
 - The wrapper still reuses `scripts.newauto_mcp` internally, so no workflow logic is copied or forked.
 - Added explicit instructions that project_id can be empty and diagnosis must fall back to `storage/stepwise_workflows/latest.json`.
 - Strengthened MCP instructions to forbid hallucinated timeout causes and require `diagnose_runtime` after apparent tool failures.
+
+## 2026-05-07 newauto-stepwise MCP implementation
+
+- Implemented `scripts/newauto_stepwise_mcp.py` as the minimal LM Studio MCP surface for Gemma4.
+- The wrapper exposes only five short tools: `diagnose_runtime`, `start_video_workflow`, `continue_video_workflow`, `check_assets`, and `generate_one_image`.
+- The wrapper imports and reuses `scripts.newauto_mcp` for all real workflow behavior. This keeps one source of truth for source collection, HPSL generation, Flow prompt generation, Flow desktop control, TTS, and render state transitions.
+- Empty `project_id` is resolved through the latest stepwise workflow state, so LM Studio can recover after reconnect by calling `diagnose_runtime` without remembering the project id.
+- Legacy MCP names are intentionally hidden from this server. The operational model is now: reconnect -> diagnose -> start once -> one `continue_video_workflow` per user approval.
+- Verification passed with `py_compile`, `mypy` over `scripts/newauto_stepwise_mcp.py` and `scripts/newauto_mcp.py`, an `Any`/`unknown` scan, `diagnose_runtime("")`, and `check_assets("ddfa3647f80b")`.

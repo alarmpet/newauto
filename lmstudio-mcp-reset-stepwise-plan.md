@@ -216,16 +216,59 @@ continue_stepwise_hpsl_video_workflow project_id=ddfa3647f80b
 
 ## 6. 작업 체크리스트
 
-- [ ] `scripts/newauto_stepwise_mcp.py` 생성
-- [ ] `run-newauto-stepwise-mcp.cmd` 생성
-- [ ] 최소 MCP wrapper 4개 구현
-- [ ] instructions에서 legacy 도구 미노출/미사용 강제
-- [ ] 직접 Python smoke: diagnose/start/continue import 호출
-- [ ] `py_compile` 실행
-- [ ] `mypy` 실행, `Any`/`unknown` 추가 금지
-- [ ] `research.md`에 아키텍처 변경 기록
-- [ ] `timeline.md`에 커밋 시간과 요약 기록
-- [ ] git commit
+- [x] `scripts/newauto_stepwise_mcp.py` 생성
+- [x] `run-newauto-stepwise-mcp.cmd` 생성
+- [x] 최소 MCP wrapper 5개 구현
+- [x] instructions에서 legacy 도구 미노출/미사용 강제
+- [x] 직접 Python smoke: diagnose/check_assets import 호출
+- [x] `py_compile` 실행
+- [x] `mypy` 실행, `Any`/`unknown` 추가 금지
+- [x] `research.md`에 아키텍처 변경 기록
+- [x] `timeline.md`에 커밋 시간과 요약 기록
+- [x] git commit
+
+## 8. 구현 결과
+
+추가된 실행 단위:
+
+```text
+C:\Users\petbl\newauto\scripts\newauto_stepwise_mcp.py
+C:\Users\petbl\newauto\run-newauto-stepwise-mcp.cmd
+```
+
+LM Studio에 노출되는 도구 이름:
+
+```text
+diagnose_runtime
+start_video_workflow
+continue_video_workflow
+check_assets
+generate_one_image
+```
+
+구현 세부사항:
+
+- wrapper는 기존 `scripts.newauto_mcp` 구현을 재사용하고, 워크플로우 로직을 복사하지 않는다.
+- `project_id=""`이면 `storage/stepwise_workflows/latest.json`에서 최신 프로젝트를 자동 해석한다.
+- `diagnose_runtime`은 wrapper identity, 노출 도구 목록, resolved project id를 기존 진단 결과 앞에 붙인다.
+- `check_assets`와 `generate_one_image`도 빈 `project_id`를 받을 수 있다.
+- `generate_one_image`에서 `sentence_number <= 0`이면 첫 번째 missing sentence를 선택한다.
+- instructions는 legacy 도구명 언급/사용 금지, approval당 1회 continue, timeout 원인 추정 금지, 실패 후 diagnose 우선 원칙을 명시한다.
+
+검증:
+
+```text
+py_compile: PASS
+mypy: PASS (C:\Users\petbl\MakeLens\.venv\Scripts\mypy.exe 사용)
+Any/unknown scan: PASS
+diagnose_runtime("") smoke: PASS
+check_assets("ddfa3647f80b") smoke: PASS, coverage 0/6
+```
+
+주의:
+
+- workflow를 실제로 전진시키는 `continue_video_workflow` smoke는 현재 프로젝트의 Flow 생성 클릭을 발생시킬 수 있어 이번 구현 검증에서는 실행하지 않았다.
+- LM Studio에는 기존 MCP를 제거/비활성화한 뒤 `newauto-stepwise` 하나만 등록해야 Gemma4가 legacy 도구를 다시 고르지 않는다.
 
 ## 7. 사용자 안내 문구 초안
 
