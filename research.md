@@ -3292,3 +3292,18 @@ Follow-up:
   - collected article text can look mojibake in PowerShell JSON output; direct Python DB reads confirmed project `91ef204fe625` now stores normal Korean text.
 - Added mojibake repair helpers to `scripts/source_collect_job.py` before sources/fact notes are persisted, and broadened per-result skip handling.
 - Verified project `91ef204fe625`: source collection succeeded, HPSL script generation completed with normal Korean text, and `continue_video_workflow` advanced `script_generate_wait -> flow_prompts`.
+
+## 2026-05-08 LM Studio controlled self-repair tool
+
+- User request: give LM Studio + Gemma4 enough authority to recover when the workflow breaks, without exposing arbitrary local shell or unrestricted filesystem control.
+- Implemented a constrained `repair_runtime(project_id="")` tool in the minimal `newauto-stepwise` MCP wrapper.
+- The new tool intentionally performs only known-safe newauto repairs:
+  - resolves the latest project when LM Studio forgets the project id,
+  - removes a stale `source_draft_worker.lock` only when the recorded PID is no longer alive,
+  - advances stale saved state from source wait to script generation when sources are already present,
+  - advances stale script wait to Flow prompts when draft sentences already exist,
+  - ensures the source draft worker is running for queued/running source-draft states,
+  - returns a fresh `diagnose_runtime` report after repair.
+- Updated Gemma4-facing MCP instructions so the expected recovery path after a failure is `diagnose_runtime -> repair_runtime once -> continue_video_workflow`, instead of inventing causes such as network overload.
+- This is deliberately not the same as Codex-level PC permission. LM Studio can now fix the common workflow state/lock problems itself, but still cannot run arbitrary PowerShell, edit code, delete files, or access unrelated local data.
+- Verified direct repair smoke on project `91ef204fe625`: the lock was live, no state repair was required, and the project is currently at `flow_prompts` with source collection and draft generation complete.

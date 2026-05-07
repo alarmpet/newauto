@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import subprocess
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -20,6 +21,7 @@ Available tools are only:
 - continue_video_workflow(project_id="")
 - check_assets(project_id="")
 - generate_one_image(project_id="", sentence_number=0)
+- repair_runtime(project_id="")
 
 Rules:
 - After reconnect or any confusing state, call diagnose_runtime first.
@@ -31,6 +33,7 @@ Rules:
   continue_stepwise_hpsl_video_workflow. They are intentionally not available here.
 - If a tool call appears to fail or timeout, call diagnose_runtime next and compare
   the saved project state before explaining anything.
+- If diagnose_runtime shows an error, stale state, or mismatch, call repair_runtime once.
 - Never explain a timeout as image generation overload, network overload, or server
   overload unless the tool output explicitly says that.
 - Reply in concise Korean. After a successful step, report the completed step and
@@ -71,7 +74,7 @@ def _first_missing_sentence(project_id: str) -> int:
 def _wrapper_header(resolved_project_id: str) -> str:
     visible_tools = (
         "diagnose_runtime, start_video_workflow, continue_video_workflow, "
-        "check_assets, generate_one_image"
+        "check_assets, generate_one_image, repair_runtime"
     )
     return (
         "=== newauto-stepwise wrapper ===\n"
@@ -151,6 +154,90 @@ def generate_one_image(project_id: str = "", sentence_number: int = 0) -> str:
     target_sentence = sentence_number if sentence_number > 0 else _first_missing_sentence(pid)
     message = core.flow_generate_one_sentence(pid, target_sentence)
     return f"{_wrapper_header(pid)}\n\n{message}"
+
+
+def _pid_exists(pid: int) -> bool:
+    if pid <= 0:
+        return False
+    completed = subprocess.run(
+        ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+        capture_output=True,
+        check=False,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    return f'"{pid}"' in completed.stdout
+
+
+def _cleanup_source_worker_lock(actions: list[str]) -> None:
+    lock_path = core.SOURCE_DRAFT_WORKER_LOCK
+    if not lock_path.exists():
+        return
+    try:
+        worker_pid = int(lock_path.read_text(encoding="utf-8").strip() or "0")
+    except ValueError:
+        worker_pid = 0
+    if worker_pid and _pid_exists(worker_pid):
+        actions.append(f"source_draft_worker.lock is live: pid={worker_pid}")
+        return
+    lock_path.unlink(missing_ok=True)
+    actions.append(f"removed stale source_draft_worker.lock: pid={worker_pid or 'invalid'}")
+
+
+def _repair_stepwise_state(pid: str, actions: list[str]) -> None:
+    state = core._load_stepwise_state(pid)
+    next_step = str(state.get("next_step") or "")
+    project = core._json_request("GET", f"/api/projects/{pid}", timeout=15)
+    source_state = str(project.get("source_draft_state") or "")
+    source_count, _, _ = core._project_counts(project)
+    draft_count = core._draft_sentence_count(project)
+
+    if next_step in {"source_collect", "source_collect_wait"} and source_state == "done" and source_count > 0:
+        core._set_stepwise_fields(state, {"next_step": "script_generate"})
+        actions.append(f"advanced stale source step to script_generate: sources={source_count}")
+        return
+    if next_step == "script_generate_wait" and source_state == "done" and draft_count > 0:
+        core._set_stepwise_fields(state, {"next_step": "flow_prompts"})
+        actions.append(f"advanced completed script step to flow_prompts: draft_sentences={draft_count}")
+        return
+    if next_step == "script_generate" and source_state in {"queued", "running"}:
+        core._ensure_source_draft_worker(timeout_sec=5)
+        actions.append(f"ensured source draft worker for state={source_state}")
+        return
+    if next_step == "script_generate_wait" and source_state in {"queued", "running"}:
+        core._ensure_source_draft_worker(timeout_sec=5)
+        actions.append(f"ensured source draft worker while waiting: state={source_state}")
+        return
+    actions.append(
+        "no stepwise state repair needed: "
+        f"next_step={next_step or '-'}, source_state={source_state or '-'}, "
+        f"sources={source_count}, draft_sentences={draft_count}"
+    )
+
+
+@mcp.tool()
+def repair_runtime(project_id: str = "") -> str:
+    """Repair common local newauto/LM Studio workflow issues without arbitrary shell access."""
+    core._configure_stdout()
+    pid = _resolve_project_id(project_id)
+    actions: list[str] = []
+    if not pid:
+        return f"{_wrapper_header(pid)}\n\n복구할 프로젝트를 찾지 못했어. 먼저 diagnose_runtime을 실행해."
+    try:
+        _cleanup_source_worker_lock(actions)
+        _repair_stepwise_state(pid, actions)
+    except Exception as exc:
+        actions.append(f"repair_error: {type(exc).__name__}: {exc}")
+    diagnosis = str(core.diagnose_newauto_runtime(pid))
+    result: str = (
+        f"{_wrapper_header(pid)}\n\n"
+        "=== repair_runtime actions ===\n"
+        + "\n".join(f"- {action}" for action in actions)
+        + "\n\n"
+        + diagnosis
+    )
+    return result
 
 
 def main() -> None:
