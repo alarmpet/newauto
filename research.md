@@ -3263,3 +3263,13 @@ Follow-up:
 - Empty `project_id` is resolved through the latest stepwise workflow state, so LM Studio can recover after reconnect by calling `diagnose_runtime` without remembering the project id.
 - Legacy MCP names are intentionally hidden from this server. The operational model is now: reconnect -> diagnose -> start once -> one `continue_video_workflow` per user approval.
 - Verification passed with `py_compile`, `mypy` over `scripts/newauto_stepwise_mcp.py` and `scripts/newauto_mcp.py`, an `Any`/`unknown` scan, `diagnose_runtime("")`, and `check_assets("ddfa3647f80b")`.
+
+## 2026-05-07 source collection MCP timeout split
+
+- Diagnosed the first `newauto-stepwise` timeout after LM Studio reconnect. The actual project state was `0f9126fae3c6` at `next_step=source_collect`, not script or image generation.
+- Root cause: the `source_collect` retry path still called `/api/projects/{pid}/source/keyword/collect` synchronously with a 180 second HTTP timeout. LM Studio disconnected the MCP transport before that request returned, then Gemma4 guessed an incorrect overload explanation.
+- Updated `scripts/newauto_mcp.py` so source collection follows the same approval-gated start/wait pattern as script/TTS/render:
+  - `start_stepwise_hpsl_video_workflow` now launches source collection in a detached background Python process and saves `next_step=source_collect_wait`.
+  - legacy `source_collect` recovery now starts the detached job and immediately returns.
+  - `source_collect_wait` checks project state once, advances to `script_generate` only when sources are ready, reports running progress without blocking, and resets to `source_collect` on explicit error.
+- Verified project `0f9126fae3c6`: direct `continue_video_workflow` returned immediately, background source collection completed with 3 sources and 3 warnings, and the next direct continue advanced `source_collect_wait -> script_generate`.

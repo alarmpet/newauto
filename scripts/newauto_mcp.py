@@ -31,6 +31,7 @@ STEPWISE_DIR = ROOT_DIR / "storage" / "stepwise_workflows"
 STEPWISE_LATEST_PATH = STEPWISE_DIR / "latest.json"
 SOURCE_DRAFT_WORKER_LOCK = ROOT_DIR / "storage" / "source_draft_worker.lock"
 SOURCE_DRAFT_WORKER_LOG = ROOT_DIR / "storage" / "logs" / "source_draft_worker.log"
+SOURCE_COLLECT_LOG = ROOT_DIR / "storage" / "logs" / "source_collect_mcp.log"
 RUNTIME_DIAGNOSTICS_DIR = ROOT_DIR / "storage" / "runtime_diagnostics"
 RUNTIME_DIAGNOSTICS_LATEST = RUNTIME_DIAGNOSTICS_DIR / "latest.json"
 
@@ -371,6 +372,76 @@ def _prepare_sources_for_project(pid: str, request: str) -> str:
             return f"URL blocked, fallback keyword: {fallback_keyword} (blocked URL: {source_url}; reason: {exc})"
     _json_request("POST", f"/api/projects/{pid}/source/keyword/collect", form={"keyword": clean_request}, timeout=180)
     return f"keyword: {clean_request}"
+
+
+def _source_collect_command(pid: str, request: str) -> list[str]:
+    clean_request = request.strip()
+    if _is_url(clean_request):
+        source_url = _first_url(clean_request)
+        endpoint = f"/api/projects/{pid}/source/url/analyze"
+        form = {"url": source_url}
+    else:
+        endpoint = f"/api/projects/{pid}/source/keyword/collect"
+        form = {"keyword": clean_request}
+    inline_code = (
+        "import sys, urllib.parse, urllib.request\n"
+        "base_url, endpoint, encoded_form = sys.argv[1:4]\n"
+        "data = encoded_form.encode('utf-8')\n"
+        "request = urllib.request.Request(\n"
+        "    base_url + endpoint,\n"
+        "    data=data,\n"
+        "    headers={'Content-Type': 'application/x-www-form-urlencoded'},\n"
+        "    method='POST',\n"
+        ")\n"
+        "with urllib.request.urlopen(request, timeout=240) as response:\n"
+        "    response.read()\n"
+    )
+    return [
+        sys.executable,
+        "-c",
+        inline_code,
+        BASE_URL,
+        endpoint,
+        urllib.parse.urlencode(form),
+    ]
+
+
+def _enqueue_source_collection(pid: str, request: str) -> str:
+    clean_request = request.strip()
+    if not clean_request:
+        raise NewautoError("source collection request is empty.")
+    SOURCE_COLLECT_LOG.parent.mkdir(parents=True, exist_ok=True)
+    log_handle = SOURCE_COLLECT_LOG.open("a", encoding="utf-8")
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "utf-8"
+    subprocess.Popen(
+        _source_collect_command(pid, clean_request),
+        cwd=str(ROOT_DIR),
+        stdout=log_handle,
+        stderr=subprocess.STDOUT,
+        stdin=subprocess.DEVNULL,
+        env=env,
+        creationflags=(
+            subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            if sys.platform.startswith("win")
+            else 0
+        ),
+    )
+    log_handle.close()
+    if _is_url(clean_request):
+        return f"URL collection queued: {_first_url(clean_request)}"
+    return f"keyword collection queued: {clean_request}"
+
+
+def _check_source_collection_done(pid: str) -> dict[str, object] | None:
+    project = _json_request("GET", f"/api/projects/{pid}", timeout=15)
+    source_state = str(project.get("source_draft_state") or "")
+    source_count, _, _ = _project_counts(project)
+    if source_state == "done" and source_count > 0:
+        return project
+    if source_state == "error":
+        raise NewautoError(str(project.get("source_draft_error") or "source collection failed"))
+    return None
 
 
 def _task_status(pid: str, task_key: str) -> dict[str, object]:
@@ -910,33 +981,7 @@ def start_stepwise_hpsl_video_workflow(
     pid = str(created.get("id") or "")
     if not pid:
         raise NewautoError("newauto project creation did not return an id.")
-    try:
-        source_mode = _prepare_sources_for_project(pid, clean_request)
-    except NewautoError as exc:
-        failed_state: dict[str, object] = {
-            "project_id": pid,
-            "request": clean_request,
-            "title": project_title,
-            "target_minutes": max(1, min(8, int(target_minutes or 1))),
-            "tone": tone,
-            "source_mode": "source collection failed",
-            "next_step": "source_collect",
-            "voice_preset": "male-announcer-40s-50s",
-            "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-        }
-        _save_stepwise_state(failed_state)
-        webbrowser.open(_project_url(pid, step=1))
-        return (
-            "1단계 중단: 자료 수집에서 오류가 났지만 워크플로우 상태는 저장했어.\n\n"
-            f"- project_id: {pid}\n"
-            f"- request: {clean_request}\n"
-            f"- reason: {exc}\n"
-            f"- newauto: {_project_url(pid, step=1)}\n\n"
-            "방금 코드는 Brave API가 없어도 DuckDuckGo HTML 검색 fallback을 쓰도록 수정했어. "
-            "MCP/서버를 재시작한 뒤 같은 요청을 다시 보내면 자료 수집부터 다시 시도할 수 있어."
-        )
-    project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
-    source_count, _, warning_count = _project_counts(project)
+    source_mode = _enqueue_source_collection(pid, clean_request)
     state: dict[str, object] = {
         "project_id": pid,
         "request": clean_request,
@@ -944,21 +989,19 @@ def start_stepwise_hpsl_video_workflow(
         "target_minutes": max(1, min(8, int(target_minutes or 1))),
         "tone": tone,
         "source_mode": source_mode,
-        "next_step": "script_generate",
+        "next_step": "source_collect_wait",
         "voice_preset": "male-announcer-40s-50s",
         "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
     }
     _save_stepwise_state(state)
     webbrowser.open(_project_url(pid, step=1))
     return (
-        "1단계 완료: 자료 수집이 끝났어.\n\n"
+        "1단계 시작: 자료 수집을 백그라운드로 시작했어.\n\n"
         f"- project_id: {pid}\n"
         f"- source: {source_mode}\n"
-        f"- collected sources: {source_count}\n"
-        f"- warnings: {warning_count}\n"
         f"- newauto: {_project_url(pid, step=1)}\n\n"
-        "다음 단계: HPSL(훅-포인트-스토리-교훈) 1분 대본 생성.\n"
-        "진행하려면 `진행`, `ok`, `다음`이라고 말해줘. 멈추고 싶으면 그대로 두면 돼."
+        "다음 단계: 자료 수집 완료 여부 확인.\n"
+        "`진행`, `ok`, `다음`이라고 말하면 완료 여부만 확인하고, 끝났을 때 대본 생성 단계로 넘길게."
     )
 
 
@@ -976,23 +1019,46 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
         clean_request = str(state.get("request") or "").strip()
         if not clean_request:
             return "자료 수집을 재시도할 원본 키워드/URL이 상태에 없어. 새 워크플로우로 다시 시작해줘."
-        try:
-            source_mode = _prepare_sources_for_project(pid, clean_request)
-        except NewautoError as exc:
-            return (
-                "1단계 재시도 실패: 아직 자료 수집이 완료되지 않았어.\n\n"
-                f"- project_id: {pid}\n"
-                f"- request: {clean_request}\n"
-                f"- reason: {exc}\n\n"
-                "서버/MCP를 재시작했는지 확인한 뒤 다시 `진행`이라고 말해줘."
-            )
-        project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
-        source_count, _, warning_count = _project_counts(project)
-        _set_stepwise_fields(state, {"next_step": "script_generate", "source_mode": source_mode})
+        source_mode = _enqueue_source_collection(pid, clean_request)
+        _set_stepwise_fields(state, {"next_step": "source_collect_wait", "source_mode": source_mode})
         return (
-            "1단계 완료: 자료 수집 재시도가 성공했어.\n\n"
+            "1단계 재시작: 자료 수집을 백그라운드로 다시 시작했어.\n\n"
             f"- project_id: {pid}\n"
-            f"- source: {source_mode}\n"
+            f"- source: {source_mode}\n\n"
+            "`진행`이라고 말하면 완료 여부만 확인할게."
+        )
+
+    if next_step == "source_collect_wait":
+        try:
+            project = _check_source_collection_done(pid)
+        except NewautoError as exc:
+            _set_stepwise_fields(state, {"next_step": "source_collect"})
+            return (
+                "1단계 확인: 자료 수집이 오류 상태야.\n\n"
+                f"- project_id: {pid}\n"
+                f"- reason: {exc}\n\n"
+                "같은 요청으로 자료 수집을 다시 시작하려면 `진행`이라고 말해줘."
+            )
+        if project is None:
+            project_status = _json_request("GET", f"/api/projects/{pid}", timeout=15)
+            draft_state = str(project_status.get("source_draft_state") or "idle")
+            progress = project_status.get("source_draft_progress")
+            phase = str(project_status.get("source_draft_phase") or "")
+            last_log = str(project_status.get("source_draft_last_log") or "")
+            return (
+                "1단계 진행 중: 자료 수집이 아직 끝나지 않았어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- source_draft_state: {draft_state}\n"
+                f"- progress: {progress}\n"
+                f"- phase: {phase or '-'}\n"
+                f"- last_log: {last_log or '-'}\n\n"
+                "잠시 뒤 `진행`이라고 말하면 다시 확인할게."
+            )
+        source_count, _, warning_count = _project_counts(project)
+        _set_stepwise_fields(state, {"next_step": "script_generate"})
+        return (
+            "1단계 완료: 자료 수집이 성공했어.\n\n"
+            f"- project_id: {pid}\n"
             f"- collected sources: {source_count}\n"
             f"- warnings: {warning_count}\n\n"
             "다음 단계: HPSL(훅-포인트-스토리-교훈) 대본 생성.\n"
