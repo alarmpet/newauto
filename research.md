@@ -3307,3 +3307,14 @@ Follow-up:
 - Updated Gemma4-facing MCP instructions so the expected recovery path after a failure is `diagnose_runtime -> repair_runtime once -> continue_video_workflow`, instead of inventing causes such as network overload.
 - This is deliberately not the same as Codex-level PC permission. LM Studio can now fix the common workflow state/lock problems itself, but still cannot run arbitrary PowerShell, edit code, delete files, or access unrelated local data.
 - Verified direct repair smoke on project `91ef204fe625`: the lock was live, no state repair was required, and the project is currently at `flow_prompts` with source collection and draft generation complete.
+
+## 2026-05-08 MCP stdio subprocess stdin fix
+
+- Reproduced the user's LM Studio failure outside LM Studio with a raw MCP stdio probe: `diagnose_runtime` and `repair_runtime` registered correctly but timed out when called through the MCP protocol.
+- Direct Python function calls were fast, so the failure was isolated to the MCP stdio transport path.
+- Root cause: helper subprocesses such as `git rev-parse`, PowerShell process queries, and `tasklist` inherited the MCP server's stdin pipe. Under stdio transport, a child process can hold or consume the JSON-RPC input stream, causing LM Studio to report `MCP error -32001: Request timed out` even though the Python function itself would normally finish.
+- Fixed `_run_text_command()` in `scripts/newauto_mcp.py` and `_pid_exists()` in `scripts/newauto_stepwise_mcp.py` to pass `stdin=subprocess.DEVNULL` for diagnostic child processes.
+- Verified through the same line-delimited MCP stdio protocol LM Studio uses:
+  - `diagnose_runtime(project_id="4406e02dfa28")` returns normally.
+  - `repair_runtime(project_id="4406e02dfa28")` returns normally.
+  - `continue_video_workflow(project_id="4406e02dfa28")` advanced `script_generate -> script_generate_wait`.

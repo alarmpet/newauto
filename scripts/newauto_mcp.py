@@ -182,6 +182,7 @@ def _run_text_command(command: list[str], *, timeout: int = 5) -> str:
             command,
             cwd=str(ROOT_DIR),
             capture_output=True,
+            stdin=subprocess.DEVNULL,
             text=True,
             timeout=timeout,
             encoding="utf-8",
