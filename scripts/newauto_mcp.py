@@ -27,6 +27,7 @@ DEFAULT_DOWNLOADS_DIR = Path.home() / "Downloads"
 FLOW_ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mov", ".webm"}
 FLOW_BROWSER_SCRIPT = ROOT_DIR / "scripts" / "flow_browser_automation.py"
 FLOW_DESKTOP_SCRIPT = ROOT_DIR / "scripts" / "flow_desktop_control.py"
+SOURCE_COLLECT_SCRIPT = ROOT_DIR / "scripts" / "source_collect_job.py"
 STEPWISE_DIR = ROOT_DIR / "storage" / "stepwise_workflows"
 STEPWISE_LATEST_PATH = STEPWISE_DIR / "latest.json"
 SOURCE_DRAFT_WORKER_LOCK = ROOT_DIR / "storage" / "source_draft_worker.lock"
@@ -378,31 +379,20 @@ def _source_collect_command(pid: str, request: str) -> list[str]:
     clean_request = request.strip()
     if _is_url(clean_request):
         source_url = _first_url(clean_request)
-        endpoint = f"/api/projects/{pid}/source/url/analyze"
-        form = {"url": source_url}
+        mode = "url"
+        query = source_url
     else:
-        endpoint = f"/api/projects/{pid}/source/keyword/collect"
-        form = {"keyword": clean_request}
-    inline_code = (
-        "import sys, urllib.parse, urllib.request\n"
-        "base_url, endpoint, encoded_form = sys.argv[1:4]\n"
-        "data = encoded_form.encode('utf-8')\n"
-        "request = urllib.request.Request(\n"
-        "    base_url + endpoint,\n"
-        "    data=data,\n"
-        "    headers={'Content-Type': 'application/x-www-form-urlencoded'},\n"
-        "    method='POST',\n"
-        ")\n"
-        "with urllib.request.urlopen(request, timeout=240) as response:\n"
-        "    response.read()\n"
-    )
+        mode = "keyword"
+        query = clean_request
     return [
         sys.executable,
-        "-c",
-        inline_code,
-        BASE_URL,
-        endpoint,
-        urllib.parse.urlencode(form),
+        str(SOURCE_COLLECT_SCRIPT),
+        "--project-id",
+        pid,
+        "--mode",
+        mode,
+        "--query",
+        query,
     ]
 
 

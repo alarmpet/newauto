@@ -3273,3 +3273,11 @@ Follow-up:
   - legacy `source_collect` recovery now starts the detached job and immediately returns.
   - `source_collect_wait` checks project state once, advances to `script_generate` only when sources are ready, reports running progress without blocking, and resets to `source_collect` on explicit error.
 - Verified project `0f9126fae3c6`: direct `continue_video_workflow` returned immediately, background source collection completed with 3 sources and 3 warnings, and the next direct continue advanced `source_collect_wait -> script_generate`.
+
+## 2026-05-07 source collection direct job recovery
+
+- The next LM Studio run created project `6a6b70ae0535` and still hit source collection failure. The detached job had been calling the same HTTP endpoint, and the API-side stale source-draft watchdog could flip the project to error while the long keyword collection request was in flight.
+- Added `scripts/source_collect_job.py` so the MCP background source collection path updates the project DB directly instead of calling `/source/keyword/collect` or `/source/url/analyze` over HTTP.
+- `scripts/newauto_mcp.py` now launches that script with `--project-id`, `--mode`, and `--query`, keeping the MCP return fast while avoiding HTTP transport/watchdog collisions.
+- Verified project `6a6b70ae0535`: restarted source collection, collected 3 sources and 3 warnings through the direct job, then advanced `source_collect_wait -> script_generate`.
+- Full dependency-following mypy is currently blocked by pre-existing `app/services/subtitle.py` literal-return errors in the dirty worktree; changed MCP/source-collect files pass `mypy --follow-imports=skip`.
