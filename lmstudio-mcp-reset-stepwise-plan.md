@@ -260,3 +260,162 @@ C:\Users\petbl\newauto\run-newauto-stepwise-mcp.cmd
 ```
 
 각 `진행`은 반드시 `continue_stepwise_hpsl_video_workflow` 한 번만 호출해야 한다.
+
+---
+
+## 8. Review 반영 업데이트 (2026-05-07)
+
+검토 문서 `lmstudio-mcp-reset-stepwise-plan-review.md`의 핵심 제안은 타당하다. 특히 Gemma4 E4B는 작은 로컬 모델이라 긴 tool 이름과 legacy tool 후보가 많을수록 잘못된 tool 선택과 timeout 후 임의 해석이 늘어난다. 따라서 최소 MCP는 기존 긴 이름을 그대로 노출하지 않고, 더 짧고 직관적인 wrapper 이름을 사용한다.
+
+### 8.1 최종 노출 도구명 변경
+
+기존 계획의 노출 도구명:
+
+```text
+diagnose_newauto_runtime
+start_stepwise_hpsl_video_workflow
+continue_stepwise_hpsl_video_workflow
+flow_asset_coverage
+flow_generate_one_sentence (optional)
+```
+
+리뷰 반영 후 최종 노출 도구명:
+
+```text
+1. diagnose_runtime(project_id="")
+2. start_video_workflow(keyword_or_url, title="", target_minutes=1, tone="설명형")
+3. continue_video_workflow(project_id="")
+4. check_assets(project_id="")
+5. generate_one_image(project_id="", sentence_number=0)  # optional/debug only
+```
+
+내부 구현은 기존 검증된 함수를 재사용한다.
+
+```text
+diagnose_runtime -> scripts.newauto_mcp.diagnose_newauto_runtime
+start_video_workflow -> scripts.newauto_mcp.start_stepwise_hpsl_video_workflow
+continue_video_workflow -> scripts.newauto_mcp.continue_stepwise_hpsl_video_workflow
+check_assets -> scripts.newauto_mcp.flow_asset_coverage
+generate_one_image -> scripts.newauto_mcp.flow_generate_one_sentence
+```
+
+### 8.2 diagnose_runtime 동작 명시
+
+`diagnose_runtime(project_id="")`는 project_id가 없어도 반드시 최신 stepwise 상태를 찾아야 한다.
+
+기대 동작:
+
+```text
+- project_id가 있으면 해당 state 파일을 본다.
+- project_id가 없으면 storage/stepwise_workflows/latest.json을 본다.
+- latest도 없으면 MCP/runtime identity만 반환한다.
+- 항상 git commit, MCP pid, Python executable, 9001 API pid, next_step, asset coverage를 반환한다.
+```
+
+기존 `diagnose_newauto_runtime`이 이미 latest fallback을 지원하므로 새 wrapper docstring에 이 동작을 명시한다.
+
+### 8.3 강화된 MCP instructions
+
+새 `newauto-stepwise` MCP instructions에는 아래 문장을 반드시 넣는다.
+
+```text
+You have only five tools. Do not invent or mention unavailable legacy tools.
+After reconnect, call diagnose_runtime first.
+For a new video, call start_video_workflow once.
+When the user says 진행, ok, 다음, or continue, call continue_video_workflow exactly once.
+Never call more than one workflow tool for one user approval.
+Never explain a tool timeout as image generation overload, network overload, or server overload unless the tool output explicitly says so.
+If a tool call appears to fail or timeout, call diagnose_runtime next and compare project state before answering.
+Respond in concise Korean.
+End each successful step by telling the user the current completed step and asking for 진행/ok/다음.
+```
+
+### 8.4 구현 가이드 업데이트
+
+`newauto_stepwise_mcp.py`는 새 로직을 복사하지 않고 wrapper만 둔다.
+
+```python
+from mcp.server.fastmcp import FastMCP
+from scripts import newauto_mcp as core
+
+mcp = FastMCP(name="newauto-stepwise", instructions=STEPWISE_INSTRUCTIONS)
+
+@mcp.tool()
+def diagnose_runtime(project_id: str = "") -> str:
+    """Check current MCP/API/runtime identity and latest project state. Use this first after reconnect or after any timeout."""
+    return core.diagnose_newauto_runtime(project_id)
+
+@mcp.tool()
+def start_video_workflow(keyword_or_url: str, title: str = "", target_minutes: int = 1, tone: str = "설명형") -> str:
+    """Start one new HPSL/Flow shorts workflow. Use once for a new user request."""
+    return core.start_stepwise_hpsl_video_workflow(keyword_or_url, title, target_minutes, tone)
+
+@mcp.tool()
+def continue_video_workflow(project_id: str = "") -> str:
+    """Advance exactly one saved workflow step after the user says 진행/ok/다음."""
+    return core.continue_stepwise_hpsl_video_workflow(project_id)
+
+@mcp.tool()
+def check_assets(project_id: str = "") -> str:
+    """Check Flow image/video asset coverage for the current or given project."""
+    return core.flow_asset_coverage(project_id)
+```
+
+`generate_one_image`는 debug option으로만 넣고, 기본 instructions에서는 사용하지 않게 한다. 필요하면 사용자가 "1번 이미지만 직접 생성"처럼 명시했을 때만 호출한다.
+
+### 8.5 체크리스트 수정
+
+기존 체크리스트를 다음처럼 보정한다.
+
+- [ ] `scripts/newauto_stepwise_mcp.py` 생성
+- [ ] `run-newauto-stepwise-mcp.cmd` 생성
+- [ ] `diagnose_runtime` wrapper 구현
+- [ ] `start_video_workflow` wrapper 구현
+- [ ] `continue_video_workflow` wrapper 구현
+- [ ] `check_assets` wrapper 구현
+- [ ] optional `generate_one_image` wrapper 구현 여부 결정
+- [ ] legacy/compatibility tool 미노출 확인
+- [ ] instructions에 timeout 임의 해석 금지 추가
+- [ ] `project_id=""`일 때 latest workflow fallback 확인
+- [ ] 직접 Python smoke: `diagnose_runtime`, `check_assets`, `continue_video_workflow` 호출
+- [ ] `py_compile` 실행
+- [ ] `mypy` 실행, `Any`/`unknown` 추가 금지
+- [ ] `research.md`에 리뷰 반영 기록
+- [ ] `timeline.md`에 커밋 시간과 요약 기록
+- [ ] git commit
+
+### 8.6 LM Studio 사용자 안내 문구 업데이트
+
+LM Studio에 등록할 MCP:
+
+```text
+Name:
+newauto-stepwise
+
+Command:
+C:\Users\petbl\newauto\run-newauto-stepwise-mcp.cmd
+```
+
+초기화 후 첫 메시지:
+
+```text
+diagnose_runtime 실행해서 현재 MCP 연결과 최근 프로젝트 상태 확인해줘.
+```
+
+새 작업 시작:
+
+```text
+start_video_workflow로 시작해. 키워드: 비트코인, 2026-05-06 이후 자료 수집해서 HPSL(훅-포인트-스토리-교훈) 1분 쇼츠 대본 만들고 Flow 프롬프트 생성 후 이미지 생성까지 단계별로 진행해줘.
+```
+
+다음 단계:
+
+```text
+진행
+```
+
+Gemma4가 해야 하는 실제 tool 선택:
+
+```text
+진행/ok/다음 -> continue_video_workflow exactly once
+```

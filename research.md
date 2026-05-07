@@ -3241,3 +3241,16 @@ Follow-up:
 - The plan proposes a separate `newauto-stepwise` MCP server that exposes only the few tools Gemma4 needs: runtime diagnosis, stepwise start, stepwise continue, asset coverage, and optionally one-sentence Flow generation.
 - The plan intentionally hides legacy/compatibility tools such as `start_hpsl_flow_workflow`, `finish_hpsl_flow_workflow`, and one-shot wrappers so Gemma4 cannot choose stale or overly broad tool paths.
 - It also defines the manual LM Studio cleanup sequence: remove existing MCP servers, register only `run-newauto-stepwise-mcp.cmd`, run `diagnose_newauto_runtime` first, then advance with one `continue_stepwise_hpsl_video_workflow` call per user approval.
+
+## 2026-05-07 LM Studio MCP reset plan review incorporation
+
+- Reviewed `lmstudio-mcp-reset-stepwise-plan-review.md` and updated `lmstudio-mcp-reset-stepwise-plan.md` accordingly.
+- The plan now requires short Gemma4-friendly tool names in the minimal MCP wrapper:
+  - `diagnose_runtime`
+  - `start_video_workflow`
+  - `continue_video_workflow`
+  - `check_assets`
+  - optional/debug `generate_one_image`
+- The wrapper still reuses `scripts.newauto_mcp` internally, so no workflow logic is copied or forked.
+- Added explicit instructions that project_id can be empty and diagnosis must fall back to `storage/stepwise_workflows/latest.json`.
+- Strengthened MCP instructions to forbid hallucinated timeout causes and require `diagnose_runtime` after apparent tool failures.
