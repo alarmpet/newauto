@@ -90,6 +90,7 @@ def _mcp_instructions() -> str:
         "After Flow prompts are generated, use continue_stepwise_hpsl_video_workflow. In flow_generate it will click "
         "Generate once through the desktop controller and return quickly. In flow_wait_sentence it will download and "
         "attach the generated asset. open_flow must only open the Flow page and return; do not wait for CDP automation. "
+        "TTS and render are also split into start/wait steps, so keep calling continue_stepwise_hpsl_video_workflow once per user approval instead of waiting for long jobs inside one tool call. "
         "When renamed files like flow_s001_*.png are downloaded, call attach_renamed_flow_downloads only as a fallback. "
         "Use attach_latest_flow_downloads only as a fallback for manual downloads."
     )
@@ -372,17 +373,19 @@ def _prepare_sources_for_project(pid: str, request: str) -> str:
     return f"keyword: {clean_request}"
 
 
-def _poll_task(pid: str, task_key: str, *, timeout_sec: int = 1800) -> dict[str, object]:
-    deadline = time.time() + timeout_sec
-    while time.time() < deadline:
-        project = _json_request("GET", f"/api/projects/{pid}/status", timeout=15)
-        state = str(project.get(f"{task_key}_state") or "")
-        if state == "done":
-            return project
-        if state == "error":
-            raise NewautoError(str(project.get(f"{task_key}_error") or f"{task_key} failed"))
-        time.sleep(3.0)
-    raise NewautoError(f"Timed out waiting for {task_key}.")
+def _task_status(pid: str, task_key: str) -> dict[str, object]:
+    project = _json_request("GET", f"/api/projects/{pid}/status", timeout=15)
+    task_state = str(project.get(f"{task_key}_state") or "")
+    if task_state == "error":
+        raise NewautoError(str(project.get(f"{task_key}_error") or f"{task_key} failed"))
+    return project
+
+
+def _check_task_done(pid: str, task_key: str) -> dict[str, object] | None:
+    project = _task_status(pid, task_key)
+    if str(project.get(f"{task_key}_state") or "") == "done":
+        return project
+    return None
 
 
 def _brief_prompt_queue(manifest: dict[str, object], *, limit: int = 5, include_prompts: bool = False) -> str:
@@ -850,27 +853,30 @@ def _check_hpsl_script_done(pid: str) -> dict[str, object] | None:
     return None
 
 
-def _start_tts_and_wait(pid: str, voice_preset: str) -> dict[str, object]:
+def _enqueue_tts(pid: str, voice_preset: str) -> dict[str, object]:
     project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
-    if str(project.get("tts_state") or "") != "done":
-        _json_request(
-            "POST",
-            f"/api/projects/{pid}/tts",
-            payload={
-                "voice_preset": voice_preset,
-                "tts_profile": {
-                    "mode": "design",
-                    "synthesis_mode": "full_passage",
-                    "language": "ko",
-                },
+    if str(project.get("tts_state") or "") in {"queued", "running", "done"}:
+        return project
+    _json_request(
+        "POST",
+        f"/api/projects/{pid}/tts",
+        payload={
+            "voice_preset": voice_preset,
+            "tts_profile": {
+                "mode": "design",
+                "synthesis_mode": "full_passage",
+                "language": "ko",
             },
-            timeout=30,
-        )
-        return _poll_task(pid, "tts", timeout_sec=1800)
-    return project
+        },
+        timeout=30,
+    )
+    return _task_status(pid, "tts")
 
 
-def _render_and_wait(pid: str) -> dict[str, object]:
+def _enqueue_render(pid: str) -> dict[str, object]:
+    project = _json_request("GET", f"/api/projects/{pid}/status", timeout=30)
+    if str(project.get("render_state") or "") in {"queued", "running", "done"}:
+        return project
     _json_request("POST", f"/api/projects/{pid}/scene-plan/build", timeout=60)
     _json_request("POST", f"/api/projects/{pid}/render-plan/build", timeout=60)
     preflight = _json_request("GET", f"/api/projects/{pid}/preflight", timeout=60)
@@ -883,7 +889,7 @@ def _render_and_wait(pid: str) -> dict[str, object]:
                     failed.append(f"{check.get('key')}: {check.get('message')}")
         raise NewautoError("Preflight failed: " + "; ".join(failed[:8]))
     _json_request("POST", f"/api/projects/{pid}/render", timeout=30)
-    return _poll_task(pid, "render", timeout_sec=7200)
+    return _task_status(pid, "render")
 
 
 @mcp.tool()
@@ -1407,24 +1413,126 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
 
     if next_step == "tts":
         voice_preset = str(state.get("voice_preset") or "male-announcer-40s-50s")
-        project = _start_tts_and_wait(pid, voice_preset)
+        completed_project = _check_task_done(pid, "tts")
+        if completed_project is not None:
+            _set_next_step(state, "render")
+            return (
+                "6단계 완료: OmniVoice 음성 생성이 이미 끝나 있었어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- voice_preset: {completed_project.get('voice_preset') or voice_preset}\n"
+                f"- tts_state: {completed_project.get('tts_state')} {completed_project.get('tts_progress')}%\n\n"
+                "다음 단계: 싱크/자막/렌더링.\n"
+                "`진행`이라고 말하면 최종 렌더만 시작할게."
+            )
+        project = _enqueue_tts(pid, voice_preset)
+        _set_stepwise_fields(
+            state,
+            {
+                "next_step": "tts_wait",
+                "tts_started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            },
+        )
+        return (
+            "6단계 시작: OmniVoice 음성 생성을 큐에 등록했어.\n\n"
+            f"- project_id: {pid}\n"
+            f"- voice_preset: {project.get('voice_preset') or voice_preset}\n"
+            f"- tts_state: {project.get('tts_state')} {project.get('tts_progress')}%\n\n"
+            "음성 생성은 백그라운드 worker가 진행해. 잠시 뒤 `진행`이라고 말하면 완료 여부만 확인할게."
+        )
+
+    if next_step == "tts_wait":
+        try:
+            tts_project = _check_task_done(pid, "tts")
+        except NewautoError as exc:
+            return (
+                "6단계 실패: OmniVoice 음성 생성 worker가 오류를 반환했어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- reason: {exc}\n\n"
+                "원인을 확인한 뒤 `진행`이라고 말하면 같은 단계에서 다시 확인할게."
+            )
+        if tts_project is None:
+            project_peek = _task_status(pid, "tts")
+            return (
+                "6단계 대기 중: OmniVoice 음성 생성이 아직 끝나지 않았어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- tts_state: {project_peek.get('tts_state')}\n"
+                f"- tts_progress: {project_peek.get('tts_progress')}%\n"
+                f"- tts_error: {project_peek.get('tts_error') or 'none'}\n\n"
+                "조금 뒤 `진행`이라고 말하면 같은 단계에서 다시 확인할게."
+            )
+        voice_preset = str(state.get("voice_preset") or "male-announcer-40s-50s")
         _set_next_step(state, "render")
         return (
             "6단계 완료: OmniVoice 음성 생성이 끝났어.\n\n"
             f"- project_id: {pid}\n"
-            f"- voice_preset: {project.get('voice_preset') or voice_preset}\n"
-            f"- tts_state: {project.get('tts_state')} {project.get('tts_progress')}%\n\n"
+            f"- voice_preset: {tts_project.get('voice_preset') or voice_preset}\n"
+            f"- tts_state: {tts_project.get('tts_state')} {tts_project.get('tts_progress')}%\n\n"
             "다음 단계: 싱크/자막/렌더링.\n"
-            "`진행`이라고 말하면 최종 렌더만 실행할게."
+            "`진행`이라고 말하면 최종 렌더만 시작할게."
         )
 
     if next_step == "render":
-        project = _render_and_wait(pid)
+        completed_project = _check_task_done(pid, "render")
+        if completed_project is not None:
+            _set_next_step(state, "done")
+            return (
+                "7단계 완료: 최종 렌더링이 이미 끝나 있었어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- render_state: {completed_project.get('render_state')} {completed_project.get('render_progress')}%\n"
+                f"- output: {BASE_URL}/api/projects/{pid}/output\n"
+                f"- newauto: {_project_url(pid, step=4)}"
+            )
+        try:
+            project = _enqueue_render(pid)
+        except NewautoError as exc:
+            return (
+                "7단계 시작 실패: 렌더링 전 점검에서 막혔어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- reason: {exc}\n"
+                f"- newauto: {_project_url(pid, step=4)}"
+            )
+        _set_stepwise_fields(
+            state,
+            {
+                "next_step": "render_wait",
+                "render_started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            },
+        )
+        return (
+            "7단계 시작: 싱크/자막/최종 렌더링을 큐에 등록했어.\n\n"
+            f"- project_id: {pid}\n"
+            f"- render_state: {project.get('render_state')} {project.get('render_progress')}%\n"
+            f"- render_phase: {project.get('render_phase') or 'queued'}\n\n"
+            "렌더링은 백그라운드 worker가 진행해. 잠시 뒤 `진행`이라고 말하면 완료 여부만 확인할게."
+        )
+
+    if next_step == "render_wait":
+        try:
+            render_project = _check_task_done(pid, "render")
+        except NewautoError as exc:
+            return (
+                "7단계 실패: 최종 렌더링 worker가 오류를 반환했어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- reason: {exc}\n"
+                f"- newauto: {_project_url(pid, step=4)}"
+            )
+        if render_project is None:
+            project_peek = _task_status(pid, "render")
+            return (
+                "7단계 대기 중: 최종 렌더링이 아직 끝나지 않았어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- render_state: {project_peek.get('render_state')}\n"
+                f"- render_progress: {project_peek.get('render_progress')}%\n"
+                f"- render_phase: {project_peek.get('render_phase') or 'n/a'}\n"
+                f"- render_detail: {project_peek.get('render_progress_detail') or 'n/a'}\n"
+                f"- render_error: {project_peek.get('render_error') or project_peek.get('render_last_log') or 'none'}\n\n"
+                "조금 뒤 `진행`이라고 말하면 같은 단계에서 다시 확인할게."
+            )
         _set_next_step(state, "done")
         return (
             "7단계 완료: 최종 렌더링이 끝났어.\n\n"
             f"- project_id: {pid}\n"
-            f"- render_state: {project.get('render_state')} {project.get('render_progress')}%\n"
+            f"- render_state: {render_project.get('render_state')} {render_project.get('render_progress')}%\n"
             f"- output: {BASE_URL}/api/projects/{pid}/output\n"
             f"- newauto: {_project_url(pid, step=4)}"
         )
@@ -1988,7 +2096,7 @@ def attach_renamed_flow_downloads(
 
 @mcp.tool()
 def continue_after_flow_assets(project_id: str, voice_preset: str = "male-announcer-40s-50s") -> str:
-    """After the user attached Flow image/video assets in newauto, start TTS, build plans, preflight, and start render."""
+    """After Flow assets are attached, resume the approval-gated TTS/render workflow without long polling."""
     _configure_stdout()
     _ensure_server()
     pid = project_id.strip()
@@ -2007,47 +2115,19 @@ def continue_after_flow_assets(project_id: str, voice_preset: str = "male-announ
             "빠진 문장 행에서 `Flow 결과 파일 첨부`를 눌러 파일을 붙인 뒤 다시 말해줘."
         )
 
-    if str(project.get("tts_state") or "") != "done":
-        _json_request(
-            "POST",
-            f"/api/projects/{pid}/tts",
-            payload={
-                "voice_preset": voice_preset,
-                "tts_profile": {
-                    "mode": "design",
-                    "synthesis_mode": "full_passage",
-                    "language": "ko",
-                },
-            },
-            timeout=30,
-        )
-        _poll_task(pid, "tts", timeout_sec=1800)
-
-    _json_request("POST", f"/api/projects/{pid}/scene-plan/build", timeout=60)
-    _json_request("POST", f"/api/projects/{pid}/render-plan/build", timeout=60)
-    preflight = _json_request("GET", f"/api/projects/{pid}/preflight", timeout=60)
-    if preflight.get("ok") is not True:
-        checks = preflight.get("checks")
-        failed: list[str] = []
-        if isinstance(checks, list):
-            for check in checks:
-                if isinstance(check, dict) and check.get("ok") is not True:
-                    failed.append(f"- {check.get('key')}: {check.get('message')}")
-        webbrowser.open(_project_url(pid, step=4))
-        return (
-            "Preflight에서 막혔어. 렌더를 시작하지 않았고, 해결해야 할 항목은 아래야.\n"
-            + "\n".join(failed[:10])
-            + f"\n\nnewauto: {_project_url(pid, step=4)}"
-        )
-
-    _json_request("POST", f"/api/projects/{pid}/render", timeout=30)
-    _poll_task(pid, "render", timeout_sec=7200)
-    return (
-        "렌더까지 완료됐어.\n"
-        f"- project_id: {pid}\n"
-        f"- output: {BASE_URL}/api/projects/{pid}/output\n"
-        f"- newauto: {_project_url(pid, step=4)}"
-    )
+    next_step = "render" if str(project.get("tts_state") or "") == "done" else "tts"
+    state = {
+        "project_id": pid,
+        "request": str(project.get("title") or ""),
+        "target_minutes": 1,
+        "voice_preset": voice_preset,
+        "next_step": next_step,
+        "source_mode": "existing project",
+        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+    _save_stepwise_state(state)
+    return _continue_stepwise_hpsl_video_workflow_impl(pid)
 
 
 def main() -> None:

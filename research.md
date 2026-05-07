@@ -3212,3 +3212,16 @@ Follow-up:
   - `script_generate_wait`: inspect `/api/projects/{pid}` once, advance to `flow_prompts` only when a non-empty draft is done, otherwise return the current worker state without treating it as failure.
 - Strengthened MCP instructions so date-filter requests such as `2026-05-06 이후` on `2026-05-07` are passed to the workflow tool instead of being refused in chat as future data.
 - Left TTS/render long-polling as a follow-up because the direct user-reported failure was `script_generate`; the same start/wait split remains the recommended next architectural change.
+
+## 2026-05-07 TTS/render MCP wait split
+
+- Completed the follow-up from the HPSL script timeout plan by removing long TTS/render waits from the LM Studio MCP stepwise path.
+- Added one-shot task status helpers in `scripts/newauto_mcp.py`:
+  - `_task_status(pid, task_key)` returns `/api/projects/{pid}/status` once and raises only on explicit error states.
+  - `_check_task_done(pid, task_key)` advances only when the task is already `done`.
+- Split the final workflow stages:
+  - `tts`: queues OmniVoice and saves `next_step=tts_wait`.
+  - `tts_wait`: reports `tts_state`, progress, and error text without blocking.
+  - `render`: builds scene/render plans, runs preflight, queues render, and saves `next_step=render_wait`.
+  - `render_wait`: reports render phase/progress/detail without blocking and advances to `done` only on completion.
+- Updated the compatibility tool `continue_after_flow_assets()` so it creates/resumes stepwise state and runs a single next step instead of waiting through TTS and render inside one MCP call.

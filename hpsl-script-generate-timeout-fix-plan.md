@@ -337,3 +337,43 @@ continue_stepwise_hpsl_video_workflow
     -> if queued/running: return current status and keep same step
     -> if error: return worker error and keep recovery guidance
 ```
+
+---
+
+## 2026-05-07 TTS/Render Wait Split Completion
+
+### Additional Completed Checklist
+
+- [x] Removed long `_poll_task()` waiting from the LM Studio MCP stepwise path.
+- [x] Added `_task_status()` and `_check_task_done()` for one-shot status checks.
+- [x] Added `_enqueue_tts()` and changed `tts` to enqueue quickly.
+- [x] Added `tts_wait` to report TTS progress or advance to render.
+- [x] Added `_enqueue_render()` and changed `render` to enqueue quickly after preflight.
+- [x] Added `render_wait` to report render progress or finish the workflow.
+- [x] Changed `continue_after_flow_assets()` so it resumes the stepwise workflow instead of waiting through TTS and render in one tool call.
+
+### Updated End-State Flow
+
+```text
+tts
+  -> queue OmniVoice TTS
+  -> next_step=tts_wait
+  -> return immediately
+
+tts_wait
+  -> check /status once
+  -> done: next_step=render
+  -> queued/running: return progress and keep same step
+
+render
+  -> build scene/render plans
+  -> run preflight
+  -> queue render
+  -> next_step=render_wait
+  -> return immediately
+
+render_wait
+  -> check /status once
+  -> done: next_step=done
+  -> queued/running: return progress and keep same step
+```
