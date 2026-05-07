@@ -3202,3 +3202,13 @@ Follow-up:
 - `_run_flow_desktop_control`에 typed failure code를 추가해 Flow 창 없음, 다운로드 미준비, attach 실패, subprocess timeout을 구분한다.
 - `run-newauto-9001.cmd`에 port guard를 추가해 `9001`이 이미 점유된 상태에서 새 서버가 조용히 중복 실행되는 것을 막았다.
 - 직접 검증 결과, 현재 `9001` listener는 Python 3.10 PID `20036`이고 `resolve_omnivoice_python.ps1`는 `omnivoice_env\Scripts\python.exe`를 반환한다. LM Studio에서 새 진단 tool을 확인한 뒤 `9001` runtime 재시작 여부를 결정해야 한다.
+
+## 2026-05-07 HPSL script generation timeout split
+
+- Reviewed `hpsl-script-generate-timeout-fix-plan.md`, `scripts/newauto_mcp.py`, `research.md`, and `timeline.md` against the latest LM Studio timeout symptoms.
+- Confirmed that the remaining `script_generate` failure was the same synchronous wait pattern previously fixed for Flow: MCP queued the worker and then blocked inside `_poll_project(pid, timeout_sec=240)`.
+- Updated `scripts/newauto_mcp.py` so HPSL generation now has two approval-gated stages:
+  - `script_generate`: enqueue `/api/projects/{pid}/source/script/generate`, store `next_step=script_generate_wait`, and return immediately.
+  - `script_generate_wait`: inspect `/api/projects/{pid}` once, advance to `flow_prompts` only when a non-empty draft is done, otherwise return the current worker state without treating it as failure.
+- Strengthened MCP instructions so date-filter requests such as `2026-05-06 이후` on `2026-05-07` are passed to the workflow tool instead of being refused in chat as future data.
+- Left TTS/render long-polling as a follow-up because the direct user-reported failure was `script_generate`; the same start/wait split remains the recommended next architectural change.

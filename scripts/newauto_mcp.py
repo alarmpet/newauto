@@ -61,6 +61,7 @@ def _mcp_instructions() -> str:
         f"Dates on or before {today.isoformat()} are not future dates. "
         f"If the user asks for information since/after {yesterday.isoformat()} or {today.isoformat()}, treat that as a valid current/past-date research filter and call the workflow tool; never refuse it as future data. "
         "If a date filter appears in Korean such as '이후', keep it inside the keyword_or_url request string so source collection can search with that date context. "
+        "When the user gives a date such as '2026-05-06 이후' on 2026-05-07, do not explain date limitations in chat; pass the complete natural-language request to start_stepwise_hpsl_video_workflow. "
         "Use these tools when the user wants to create a YouTube video workflow in newauto, "
         "collect source material from a URL or keyword, generate an HPSL Korean script, "
         "create sentence-level Google Flow prompts, open Flow/newauto for the user, "
@@ -822,7 +823,7 @@ def _draft_sentence_count(project: dict[str, object]) -> int:
     return len([line for line in draft.splitlines() if line.strip()])
 
 
-def _queue_hpsl_script(pid: str, state: dict[str, object]) -> dict[str, object]:
+def _enqueue_hpsl_script(pid: str, state: dict[str, object]) -> None:
     _ensure_source_draft_worker()
     _json_request(
         "POST",
@@ -837,7 +838,16 @@ def _queue_hpsl_script(pid: str, state: dict[str, object]) -> dict[str, object]:
         },
         timeout=30,
     )
-    return _poll_project(pid, timeout_sec=240)
+
+
+def _check_hpsl_script_done(pid: str) -> dict[str, object] | None:
+    project = _json_request("GET", f"/api/projects/{pid}", timeout=15)
+    draft_state = str(project.get("source_draft_state") or "")
+    if draft_state == "done" and _draft_sentence_count(project) > 0:
+        return project
+    if draft_state == "error":
+        raise NewautoError(str(project.get("source_draft_error") or "source draft generation failed"))
+    return None
 
 
 def _start_tts_and_wait(pid: str, voice_preset: str) -> dict[str, object]:
@@ -984,9 +994,65 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
         )
 
     if next_step == "script_generate":
-        project = _queue_hpsl_script(pid, state)
-        source_count, _, warning_count = _project_counts(project)
-        draft_sentence_count = _draft_sentence_count(project)
+        completed_project = _check_hpsl_script_done(pid)
+        if completed_project is not None:
+            source_count, _, warning_count = _project_counts(completed_project)
+            draft_sentence_count = _draft_sentence_count(completed_project)
+            _set_next_step(state, "flow_prompts")
+            return (
+                "2단계 완료: HPSL(훅-포인트-스토리-교훈) 대본 생성이 이미 끝나 있었어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- sources used: {source_count}\n"
+                f"- draft sentences: {draft_sentence_count}\n"
+                f"- warnings: {warning_count}\n"
+                f"- newauto: {_project_url(pid, step=1)}\n\n"
+                "다음 단계: 대본 적용 + 문장별 Flow 프롬프트 생성.\n"
+                "`진행`이라고 말하면 다음 단계만 실행할게."
+            )
+        project = _json_request("GET", f"/api/projects/{pid}", timeout=15)
+        draft_state = str(project.get("source_draft_state") or "")
+        if draft_state not in {"queued", "running"}:
+            _enqueue_hpsl_script(pid, state)
+        _set_stepwise_fields(
+            state,
+            {
+                "next_step": "script_generate_wait",
+                "script_generate_started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+            },
+        )
+        return (
+            "2단계 시작: HPSL(훅-포인트-스토리-교훈) 대본 생성을 큐에 등록했어.\n\n"
+            f"- project_id: {pid}\n"
+            f"- source_draft_state: {draft_state or 'queued'}\n"
+            f"- newauto: {_project_url(pid, step=1)}\n\n"
+            "생성은 백그라운드 worker가 진행해. 10~30초 뒤 `진행`이라고 말하면 완료 여부만 확인할게."
+        )
+
+    if next_step == "script_generate_wait":
+        try:
+            wait_project = _check_hpsl_script_done(pid)
+        except NewautoError as exc:
+            return (
+                "2단계 실패: HPSL 대본 생성 worker가 오류를 반환했어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- reason: {exc}\n\n"
+                "서버/MCP를 재시작한 뒤 다시 `진행`이라고 말하면 같은 단계에서 복구를 시도할 수 있어."
+            )
+        if wait_project is None:
+            project_peek = _json_request("GET", f"/api/projects/{pid}", timeout=15)
+            draft_state = str(project_peek.get("source_draft_state") or "idle")
+            draft_phase = str(project_peek.get("source_draft_phase") or "")
+            draft_error = str(project_peek.get("source_draft_error") or "")
+            return (
+                "2단계 대기 중: HPSL 대본 생성이 아직 끝나지 않았어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- source_draft_state: {draft_state}\n"
+                f"- source_draft_phase: {draft_phase or 'n/a'}\n"
+                f"- source_draft_error: {draft_error or 'none'}\n\n"
+                "조금 뒤 `진행`이라고 말하면 같은 단계에서 다시 확인할게."
+            )
+        source_count, _, warning_count = _project_counts(wait_project)
+        draft_sentence_count = _draft_sentence_count(wait_project)
         _set_next_step(state, "flow_prompts")
         return (
             "2단계 완료: HPSL(훅-포인트-스토리-교훈) 대본 생성이 끝났어.\n\n"
