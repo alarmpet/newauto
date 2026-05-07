@@ -3378,3 +3378,13 @@ Follow-up:
 - The updated plan explicitly separates user UX from implementation details: users speak natural Korean requests, while Gemma4 internally selects `start_video_workflow`, `continue_video_workflow`, `diagnose_runtime`, `repair_runtime`, `run_powershell`, and `control_flow_desktop`.
 - The plan accepts the user's no-sandbox preference while preserving minimal safety boundaries for login/auth/CAPTCHA/payment/destructive operations and secret redaction.
 - 30k context is treated as room for stronger operating instructions and richer state summaries, not permission to return huge logs, full HTML, or whole databases to Gemma4.
+
+## 2026-05-08 agentic plan review incorporation
+
+- Reviewed `lmstudio-agentic-mcp-plan-review.md` and incorporated its main architecture warnings into `lmstudio-agentic-mcp-plan.md`.
+- The plan now states that giving Gemma4 Codex/OpenClaw-like authority does not mean exposing every low-level tool directly to the 4B model. The preferred design is wide backend authority with a narrow high-level model-facing surface.
+- Added a Codex-to-LM Studio authority mapping covering local files, PowerShell, repo exploration, git, process/server diagnosis, browser/Flow control, workflow repair, and document updates.
+- Added P0 work for a backend command policy interceptor in `run_powershell`. This is not meant to reintroduce a sandbox; it is an explicit-intent guard for destructive commands, credential/token exposure, account changes, disk formatting, and payment/purchase actions.
+- Replaced the proposed `agent_mode_status()` tool with the review's recommendation: extend `diagnose_runtime()` with agentic metadata such as power access, filesystem access, desktop control readiness, operator fallback availability, latest project id, next step, and Flow window readiness.
+- Added a Flow desktop preflight requirement before coordinate clicks: detect/focus/maximize the browser window, validate URL/title where possible, save screenshots, and stop for user intervention if the UI is not ready.
+- The plan keeps the user's no-manual-tool-name UX: natural Korean requests should drive `start_video_workflow` and one-step `continue_video_workflow`, while low-level `run_powershell` and `control_flow_desktop` are reserved for diagnosis, repair, and Flow-specific execution.
