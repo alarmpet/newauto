@@ -3318,3 +3318,28 @@ Follow-up:
   - `diagnose_runtime(project_id="4406e02dfa28")` returns normally.
   - `repair_runtime(project_id="4406e02dfa28")` returns normally.
   - `continue_video_workflow(project_id="4406e02dfa28")` advanced `script_generate -> script_generate_wait`.
+
+## 2026-05-08 LM Studio OpenClaw-style operator authority
+
+- User requested the same kind of local authority for LM Studio + Gemma4 that OpenClaw had.
+- Reviewed `.openclaw` authority configuration:
+  - OpenClaw agents use `sandbox.mode=off`.
+  - Main/music bot agents use `tools.profile=full`.
+  - The gateway is loopback-local with token auth.
+  - Telegram input is allowlist-scoped.
+  - Local capabilities/plugins and native commands are enabled.
+- Implemented `scripts/lmstudio_openclaw_operator_mcp.py`, a separate `openclaw-operator` MCP server for LM Studio.
+- The operator exposes broad local capabilities through explicit tools:
+  - `run_powershell`
+  - `read_text_file`
+  - `write_text_file`
+  - `list_directory`
+  - `open_target`
+  - `recent_operator_logs`
+  - `operator_status`
+- Added `run-lmstudio-openclaw-operator-mcp.cmd` and registered it in LM Studio `mcp.json` as `openclaw-operator`.
+- Added `mcp/openclaw-operator:*` to LM Studio `skipToolConfirmationPatterns` to match the user's OpenClaw-style full-authority intent.
+- Added a plan document, `lmstudio-openclaw-same-authority-plan.md`, documenting the mapping from OpenClaw permissions to LM Studio MCP tools and the remaining limitations.
+- Important boundary: Gemma4 still cannot magically gain Codex's in-process tools. It now receives equivalent broad local authority by calling the MCP operator tools.
+- Security note: `.openclaw` contains plaintext token-like values. Do not reproduce those values in docs or final messages; recommend rotating them separately.
+- Verification: `py_compile`, `mypy --follow-imports=skip`, and `Any/unknown` scan passed. Raw MCP stdio smoke verified `operator_status` and `run_powershell("Write-Output 'operator-smoke-ok'")`.
