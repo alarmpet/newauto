@@ -3192,3 +3192,13 @@ Follow-up:
 - `9001`의 Python 3.10 listener를 무조건 오류로 단정하지 않고, `scripts/resolve_omnivoice_python.ps1`가 선택하는 intended Python과 비교해 runtime drift 여부를 판정하도록 계획을 수정했다.
 - `flow_desktop_control.py`의 잔여 리스크도 계획에 추가했다: `Ctrl+L` URL 확인 후 focus 복귀, `Alt+Left` 후 Flow reload 대기, DPI/browser chrome 높이에 따른 상대 좌표 드리프트.
 - MCP transport timeout과 desktop subprocess timeout을 분리했다. 다운로드가 준비되지 않은 경우 긴 대기로 LM Studio transport timeout을 유발하기보다 `FLOW_DOWNLOAD_NOT_READY` 같은 빠른 상태 반환을 우선하도록 보정했다.
+
+## 2026-05-07 LM Studio MCP runtime diagnosis implementation
+
+- `scripts/newauto_mcp.py`에 `diagnose_newauto_runtime` MCP tool을 추가했다. LM Studio 내부에서 MCP script path, file hash, git commit, MCP PID, Python executable, `9001` API PID/command line, resolved OmniVoice Python, Flow backend/mode, stepwise state, asset coverage를 직접 볼 수 있다.
+- 런타임 스냅샷을 `storage/runtime_diagnostics/latest.json`에 저장하도록 했다.
+- `continue_stepwise_hpsl_video_workflow`를 내부 구현 함수와 MCP wrapper로 분리해 모든 응답 끝에 `mcp_commit`, `mcp_pid`, `api_pid_9001`, step before/after debug footer를 붙인다.
+- 진단용 단일 단계 MCP tools를 추가했다: `flow_asset_coverage`, `flow_generate_one_sentence`, `flow_download_one_sentence`.
+- `_run_flow_desktop_control`에 typed failure code를 추가해 Flow 창 없음, 다운로드 미준비, attach 실패, subprocess timeout을 구분한다.
+- `run-newauto-9001.cmd`에 port guard를 추가해 `9001`이 이미 점유된 상태에서 새 서버가 조용히 중복 실행되는 것을 막았다.
+- 직접 검증 결과, 현재 `9001` listener는 Python 3.10 PID `20036`이고 `resolve_omnivoice_python.ps1`는 `omnivoice_env\Scripts\python.exe`를 반환한다. LM Studio에서 새 진단 tool을 확인한 뒤 `9001` runtime 재시작 여부를 결정해야 한다.

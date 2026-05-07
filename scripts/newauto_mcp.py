@@ -11,6 +11,7 @@ import urllib.parse
 import urllib.request
 import webbrowser
 from datetime import date
+from hashlib import md5
 from pathlib import Path
 from typing import Literal, cast
 
@@ -30,6 +31,8 @@ STEPWISE_DIR = ROOT_DIR / "storage" / "stepwise_workflows"
 STEPWISE_LATEST_PATH = STEPWISE_DIR / "latest.json"
 SOURCE_DRAFT_WORKER_LOCK = ROOT_DIR / "storage" / "source_draft_worker.lock"
 SOURCE_DRAFT_WORKER_LOG = ROOT_DIR / "storage" / "logs" / "source_draft_worker.log"
+RUNTIME_DIAGNOSTICS_DIR = ROOT_DIR / "storage" / "runtime_diagnostics"
+RUNTIME_DIAGNOSTICS_LATEST = RUNTIME_DIAGNOSTICS_DIR / "latest.json"
 
 FlowAutomationBackend = Literal["uivision", "playwright", "assisted"]
 FlowMode = Literal["uivision", "playwright"]
@@ -167,6 +170,101 @@ def _health_ok() -> bool:
     except NewautoError:
         return False
     return payload.get("ok") is True
+
+
+def _run_text_command(command: list[str], *, timeout: int = 5) -> str:
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"error: {exc}"
+    output = (completed.stdout or completed.stderr).strip()
+    return output or f"exit={completed.returncode}"
+
+
+def _git_commit(short: bool = True) -> str:
+    args = ["git", "rev-parse"]
+    if short:
+        args.append("--short")
+    args.append("HEAD")
+    result = _run_text_command(args, timeout=5)
+    if result.startswith("error:") or result.startswith("exit="):
+        return result
+    return result.splitlines()[0].strip()
+
+
+def _mcp_file_hash() -> str:
+    return md5(Path(__file__).read_bytes()).hexdigest()[:8]
+
+
+def _powershell(script: str, *, timeout: int = 5) -> str:
+    return _run_text_command(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+        timeout=timeout,
+    )
+
+
+def _port_owner_pid(port: int) -> str:
+    script = (
+        f"$p=(Get-NetTCPConnection -LocalPort {port} -State Listen -ErrorAction SilentlyContinue "
+        "| Select-Object -First 1 -ExpandProperty OwningProcess); "
+        "if ($p) { [string]$p }"
+    )
+    result = _powershell(script)
+    return result.strip() or "none"
+
+
+def _process_command_line(pid: str) -> str:
+    if not pid.strip() or pid == "none":
+        return ""
+    script = (
+        f"$p=Get-CimInstance Win32_Process -Filter \"ProcessId={pid}\" -ErrorAction SilentlyContinue; "
+        "if ($p) { $p.CommandLine }"
+    )
+    return _powershell(script, timeout=5)
+
+
+def _resolved_omnivoice_python() -> str:
+    script_path = ROOT_DIR / "scripts" / "resolve_omnivoice_python.ps1"
+    if not script_path.exists():
+        return f"missing: {script_path}"
+    return _run_text_command(
+        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", str(script_path)],
+        timeout=10,
+    )
+
+
+def _mcp_process_lines() -> list[str]:
+    script = (
+        "Get-CimInstance Win32_Process | "
+        "Where-Object { $_.CommandLine -match 'newauto_mcp.py|run-newauto-mcp' } | "
+        "ForEach-Object { \"$($_.ProcessId)|$($_.Name)|$($_.CommandLine)\" }"
+    )
+    output = _powershell(script, timeout=8)
+    if not output or output.startswith("error:") or output.startswith("exit="):
+        return []
+    return [line.strip() for line in output.splitlines() if line.strip()]
+
+
+def _flow_window_lines() -> list[str]:
+    try:
+        import pygetwindow as gw
+    except Exception as exc:
+        return [f"pygetwindow unavailable: {exc}"]
+    lines: list[str] = []
+    for window in gw.getAllWindows():
+        title = str(window.title)
+        if "Flow" not in title:
+            continue
+        lines.append(f"{title}|{window.left},{window.top},{window.width},{window.height}")
+    return lines
 
 
 def _start_newauto_server() -> None:
@@ -314,6 +412,90 @@ def _project_sentence_asset_status(project: dict[str, object]) -> tuple[int, int
     return sentence_count, len(mapped_indexes), missing
 
 
+def _project_coverage_text(project_id: str) -> str:
+    if not project_id.strip():
+        return "project_id not provided"
+    try:
+        project = _json_request("GET", f"/api/projects/{project_id}", timeout=10)
+        sentence_count, attached_count, missing = _project_sentence_asset_status(project)
+    except NewautoError as exc:
+        return f"error: {exc}"
+    return f"{attached_count}/{sentence_count} missing={missing}"
+
+
+def _stepwise_next_step(project_id: str) -> str:
+    try:
+        state = _load_stepwise_state(project_id)
+    except Exception as exc:
+        return f"error: {exc}"
+    return str(state.get("next_step") or "")
+
+
+def _runtime_snapshot(project_id: str = "") -> dict[str, object]:
+    pid_9001 = _port_owner_pid(9001)
+    pid_1234 = _port_owner_pid(1234)
+    pid_9223 = _port_owner_pid(9223)
+    stepwise_state: dict[str, object] = {}
+    if project_id.strip():
+        try:
+            stepwise_state = _load_stepwise_state(project_id)
+        except Exception as exc:
+            stepwise_state = {"error": str(exc)}
+    coverage = _project_coverage_text(project_id) if project_id.strip() else "project_id not provided"
+    snapshot: dict[str, object] = {
+        "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "project_id": project_id,
+        "mcp_script": str(Path(__file__).resolve()),
+        "mcp_file_hash": _mcp_file_hash(),
+        "git_commit": _git_commit(short=False),
+        "git_commit_short": _git_commit(short=True),
+        "mcp_pid": os.getpid(),
+        "python_executable": sys.executable,
+        "cwd": str(ROOT_DIR),
+        "base_url": BASE_URL,
+        "flow_automation_backend": _flow_backend(),
+        "flow_mode": _flow_mode(),
+        "api_server_ok": _health_ok(),
+        "api_server_pid_9001": pid_9001,
+        "api_server_command_9001": _process_command_line(pid_9001),
+        "resolved_omnivoice_python": _resolved_omnivoice_python(),
+        "lmstudio_server_pid_1234": pid_1234,
+        "flow_cdp_pid_9223": pid_9223,
+        "mcp_processes": _mcp_process_lines(),
+        "flow_windows": _flow_window_lines(),
+        "stepwise_state": stepwise_state,
+        "stepwise_next_step": str(stepwise_state.get("next_step") or ""),
+        "asset_coverage": coverage,
+    }
+    RUNTIME_DIAGNOSTICS_DIR.mkdir(parents=True, exist_ok=True)
+    RUNTIME_DIAGNOSTICS_LATEST.write_text(json.dumps(snapshot, ensure_ascii=False, indent=2), encoding="utf-8")
+    return snapshot
+
+
+def _debug_footer(next_step_before: str = "", next_step_after: str = "") -> str:
+    api_pid = _port_owner_pid(9001)
+    lines = [
+        "---",
+        f"mcp_commit: {_git_commit(short=True)}",
+        f"mcp_pid: {os.getpid()}",
+        f"api_pid_9001: {api_pid}",
+    ]
+    if next_step_before or next_step_after:
+        lines.append(f"step: {next_step_before or '?'} -> {next_step_after or '?'}")
+    return "\n".join(lines)
+
+
+def _append_debug_footer(message: str, *, project_id: str = "", next_step_before: str = "") -> str:
+    next_step_after = ""
+    if project_id.strip():
+        try:
+            state = _load_stepwise_state(project_id)
+            next_step_after = str(state.get("next_step") or "")
+        except Exception:
+            next_step_after = ""
+    return f"{message}\n\n{_debug_footer(next_step_before, next_step_after)}"
+
+
 def _mapped_sentence_indexes(mappings: object) -> set[int]:
     mapped_indexes: set[int] = set()
     if not isinstance(mappings, list):
@@ -438,15 +620,23 @@ def _run_flow_desktop_control(
     ]
     if downloads_before is not None:
         command.extend(["--downloads-before-json", json.dumps(downloads_before, ensure_ascii=False)])
-    completed = subprocess.run(
-        command,
-        cwd=str(ROOT_DIR),
-        capture_output=True,
-        text=True,
-        timeout=35 if mode == "click-generate" else max(90, download_timeout_seconds + 35),
-        encoding="utf-8",
-        errors="replace",
-    )
+    subprocess_timeout = 35 if mode == "click-generate" else max(90, download_timeout_seconds + 35)
+    try:
+        completed = subprocess.run(
+            command,
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=subprocess_timeout,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except subprocess.TimeoutExpired as exc:
+        code = "FLOW_GENERATE_CLICK_TIMEOUT" if mode == "click-generate" else "MCP_TRANSPORT_TIMEOUT_SUSPECTED"
+        raise NewautoError(
+            f"{code}: Flow desktop control exceeded {subprocess_timeout}s. "
+            f"stdout={str(exc.stdout or '')[:300]} stderr={str(exc.stderr or '')[:300]}"
+        ) from exc
     if completed.stdout.strip():
         try:
             payload = json.loads(completed.stdout.strip())
@@ -457,9 +647,19 @@ def _run_flow_desktop_control(
             if completed.returncode == 0 or parsed_payload.get("ok") is False:
                 return parsed_payload
     if completed.returncode != 0:
+        combined_error = completed.stderr.strip() or completed.stdout.strip() or str(completed.returncode)
+        if "Flow browser window was not found" in combined_error:
+            code = "FLOW_WINDOW_NOT_FOUND"
+        elif "No completed new Flow download" in combined_error:
+            code = "FLOW_DOWNLOAD_NOT_READY"
+        elif "attach failed" in combined_error:
+            code = "FLOW_ATTACH_FAILED"
+        elif mode == "click-generate":
+            code = "FLOW_GENERATE_CLICK_FAILED"
+        else:
+            code = "FLOW_DESKTOP_CONTROL_FAILED"
         raise NewautoError(
-            "Flow desktop control failed: "
-            f"{completed.stderr.strip() or completed.stdout.strip() or completed.returncode}"
+            f"{code}: Flow desktop control failed: {combined_error}"
         )
     try:
         payload = json.loads(completed.stdout.strip())
@@ -746,8 +946,7 @@ def start_stepwise_hpsl_video_workflow(
     )
 
 
-@mcp.tool()
-def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
+def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
     """Run exactly one next step in the approval-gated HPSL Flow video workflow, then stop and ask for approval."""
     _configure_stdout()
     _ensure_server()
@@ -1173,6 +1372,130 @@ def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
         )
 
     raise NewautoError(f"Unknown stepwise next_step: {next_step}")
+
+
+@mcp.tool()
+def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
+    """Run exactly one next step in the approval-gated HPSL Flow video workflow, then stop and ask for approval."""
+    state: dict[str, object] = {}
+    pid = project_id.strip()
+    next_step_before = ""
+    try:
+        state = _load_stepwise_state(project_id)
+        pid = str(state.get("project_id") or pid)
+        next_step_before = str(state.get("next_step") or "")
+    except Exception:
+        next_step_before = ""
+    message = _continue_stepwise_hpsl_video_workflow_impl(project_id)
+    return _append_debug_footer(message, project_id=pid, next_step_before=next_step_before)
+
+
+@mcp.tool()
+def diagnose_newauto_runtime(project_id: str = "") -> str:
+    """Return MCP runtime identity, API server owner, stepwise state, and asset coverage for LM Studio debugging."""
+    _configure_stdout()
+    pid = project_id.strip()
+    snapshot = _runtime_snapshot(pid)
+    return (
+        "=== newauto MCP Runtime Diagnosis ===\n"
+        f"mcp_script: {snapshot.get('mcp_script')}\n"
+        f"mcp_file_hash: {snapshot.get('mcp_file_hash')}\n"
+        f"git_commit: {snapshot.get('git_commit_short')}\n"
+        f"mcp_pid: {snapshot.get('mcp_pid')}\n"
+        f"python_executable: {snapshot.get('python_executable')}\n"
+        f"cwd: {snapshot.get('cwd')}\n"
+        f"BASE_URL: {snapshot.get('base_url')}\n"
+        f"FLOW_AUTOMATION_BACKEND: {snapshot.get('flow_automation_backend')}\n"
+        f"FLOW_MODE: {snapshot.get('flow_mode')}\n"
+        f"api_server_ok: {snapshot.get('api_server_ok')}\n"
+        f"api_server_pid_9001: {snapshot.get('api_server_pid_9001')}\n"
+        f"api_server_command_9001: {snapshot.get('api_server_command_9001')}\n"
+        f"resolved_omnivoice_python: {snapshot.get('resolved_omnivoice_python')}\n"
+        f"mcp_processes: {snapshot.get('mcp_processes')}\n"
+        f"flow_windows: {snapshot.get('flow_windows')}\n"
+        f"stepwise_next_step: {snapshot.get('stepwise_next_step')}\n"
+        f"asset_coverage: {snapshot.get('asset_coverage')}\n"
+        f"diagnostic_json: {RUNTIME_DIAGNOSTICS_LATEST}"
+    )
+
+
+@mcp.tool()
+def flow_asset_coverage(project_id: str) -> str:
+    """Return sentence asset coverage for a project without advancing the workflow."""
+    _configure_stdout()
+    _ensure_server()
+    pid = project_id.strip()
+    project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
+    sentence_count, attached_count, missing = _project_sentence_asset_status(project)
+    return _append_debug_footer(
+        (
+            "Flow asset coverage\n\n"
+            f"- project_id: {pid}\n"
+            f"- coverage: {attached_count}/{sentence_count}\n"
+            f"- missing: {missing if missing else 'none'}"
+        ),
+        project_id=pid,
+    )
+
+
+@mcp.tool()
+def flow_generate_one_sentence(project_id: str, sentence_number: int) -> str:
+    """Diagnostic-only: click Generate for one Flow sentence prompt without waiting for download."""
+    _configure_stdout()
+    _ensure_server()
+    pid = project_id.strip()
+    target_sentence = max(1, int(sentence_number or 1))
+    result = _run_flow_desktop_control(pid, target_sentence, mode="click-generate")
+    return _append_debug_footer(
+        (
+            "Flow one-sentence Generate click completed.\n\n"
+            f"- project_id: {pid}\n"
+            f"- sentence: {target_sentence}\n"
+            f"- window_title: {result.get('window_title')}\n"
+            f"- screenshots: {result.get('screenshots')}\n\n"
+            "Flow 결과 이미지가 보이면 `flow_download_one_sentence`로 다운로드/attach만 테스트해."
+        ),
+        project_id=pid,
+    )
+
+
+@mcp.tool()
+def flow_download_one_sentence(project_id: str, sentence_number: int) -> str:
+    """Diagnostic-only: download and attach one currently visible/generated Flow result for a sentence."""
+    _configure_stdout()
+    _ensure_server()
+    pid = project_id.strip()
+    target_sentence = max(1, int(sentence_number or 1))
+    result = _run_flow_desktop_control(
+        pid,
+        target_sentence,
+        mode="download-attach",
+        downloads_before=[],
+        download_timeout_seconds=45,
+    )
+    if result.get("ok") is not True:
+        return _append_debug_footer(
+            (
+                "Flow one-sentence download/attach did not complete.\n\n"
+                f"- project_id: {pid}\n"
+                f"- sentence: {target_sentence}\n"
+                f"- downloaded: {result.get('downloaded')}\n"
+                f"- pending_attach: {result.get('pending_attach')}\n"
+                f"- error: {result.get('error')}"
+            ),
+            project_id=pid,
+        )
+    return _append_debug_footer(
+        (
+            "Flow one-sentence download/attach completed.\n\n"
+            f"- project_id: {pid}\n"
+            f"- sentence: {target_sentence}\n"
+            f"- downloaded: {result.get('downloaded')}\n"
+            f"- attached: {result.get('attached')}\n"
+            f"- screenshots: {result.get('screenshots')}"
+        ),
+        project_id=pid,
+    )
 
 
 @mcp.tool()

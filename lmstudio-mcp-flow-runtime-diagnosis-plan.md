@@ -185,7 +185,7 @@ This should not block runtime stabilization, but it should block final productio
 
 ## Phase 0 - Freeze and snapshot current runtime
 
-Status: pending
+Status: completed in code
 
 Tasks:
 
@@ -226,7 +226,7 @@ It must include:
 
 ## Phase 1 - Make MCP version visible inside LM Studio
 
-Status: pending
+Status: completed in code
 
 Add a new MCP tool:
 
@@ -269,7 +269,7 @@ If LM Studio cannot call this or returns an older commit, the MCP server is stal
 
 ## Phase 2 - Add explicit MCP health marker to every workflow response
 
-Status: pending
+Status: completed in code
 
 Every stepwise response should include a compact debug footer:
 
@@ -286,7 +286,7 @@ This prevents Gemma4 from inventing generic failure messages without exposing th
 
 ## Phase 3 - Restart and pin the runtime
 
-Status: pending
+Status: partially completed in code
 
 The runtime should have one blessed launch path:
 
@@ -315,7 +315,7 @@ Restart order:
 
 ## Phase 4 - Replace generic timeout with exact failure types
 
-Status: pending
+Status: partially completed in code
 
 Introduce typed failure codes in MCP responses:
 
@@ -345,7 +345,7 @@ Example:
 
 ## Phase 5 - Add single-step smoke tools
 
-Status: pending
+Status: completed in code
 
 Add MCP tools for direct controlled testing:
 
@@ -575,6 +575,52 @@ asset_coverage == 2/6 missing=[3,4,5,6]
 ```
 
 If any line fails, the next action is runtime restart/config repair, not another `continue_stepwise_hpsl_video_workflow` call.
+
+## 4.4 Implementation Update - 2026-05-07
+
+- [x] Added `diagnose_newauto_runtime(project_id="")`.
+- [x] Added `storage/runtime_diagnostics/latest.json` snapshot output.
+- [x] Added runtime identity fields:
+  - MCP script path
+  - MCP file hash
+  - git commit
+  - MCP PID
+  - Python executable
+  - API server PID and command line for `9001`
+  - resolved OmniVoice Python
+  - Flow mode/backend
+  - stepwise state
+  - project asset coverage
+- [x] Wrapped `continue_stepwise_hpsl_video_workflow` so every response gets a debug footer.
+- [x] Added diagnostic smoke tools:
+  - `flow_asset_coverage`
+  - `flow_generate_one_sentence`
+  - `flow_download_one_sentence`
+- [x] Added initial failure codes around desktop control:
+  - `FLOW_GENERATE_CLICK_TIMEOUT`
+  - `MCP_TRANSPORT_TIMEOUT_SUSPECTED`
+  - `FLOW_WINDOW_NOT_FOUND`
+  - `FLOW_DOWNLOAD_NOT_READY`
+  - `FLOW_ATTACH_FAILED`
+  - `FLOW_GENERATE_CLICK_FAILED`
+  - `FLOW_DESKTOP_CONTROL_FAILED`
+- [x] Added `run-newauto-9001.cmd` port guard so a second server does not silently start when `9001` is already owned.
+- [x] Verified direct call through the LM Studio MCP Python environment:
+
+```text
+diagnose_newauto_runtime("ad246c22458f")
+git_commit: e7c5487 before this implementation commit
+stepwise_next_step: flow_generate
+asset_coverage: 2/6 missing=[3, 4, 5, 6]
+api_server_pid_9001: 20036
+resolved_omnivoice_python: C:\Users\petbl\newauto\omnivoice_env\Scripts\python.exe
+```
+
+Remaining after implementation:
+
+- [ ] Restart LM Studio MCP so `diagnose_newauto_runtime` appears in the LM Studio tool list.
+- [ ] Re-run `diagnose_newauto_runtime` inside LM Studio and confirm the new commit hash.
+- [ ] Decide whether to stop PID `20036` and restart `9001` through `run-newauto-9001.cmd`, because current `api_server_command_9001` differs from `resolved_omnivoice_python`.
 
 ## 5. Expected User-Facing Behavior After Fix
 
