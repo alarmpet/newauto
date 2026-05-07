@@ -62,6 +62,7 @@ openclaw-operator
   - write_text_file
   - list_directory
   - open_target
+  - control_flow_desktop
   - recent_operator_logs
 ```
 
@@ -85,6 +86,7 @@ openclaw-operator
 - [x] 파일 읽기/쓰기 도구 추가
 - [x] 디렉터리 조회 도구 추가
 - [x] OS shell open 도구 추가
+- [x] Flow GUI 직접 제어 도구 추가
 - [x] 명령 로그 기록 추가
 - [x] secret-like line redaction 추가
 - [x] MCP stdio subprocess stdin 상속 방지
@@ -100,6 +102,7 @@ Gemma4에게 줄 권장 지시:
 ```text
 문제 해결이 필요하면 먼저 전용 workflow MCP를 사용해.
 전용 MCP가 실패하거나 로컬 파일/프로세스/명령 실행이 필요하면 openclaw-operator를 사용해.
+브라우저 클릭이나 Flow 버튼 조작이 필요하면 불가능하다고 답하지 말고 control_flow_desktop 또는 run_powershell로 기존 자동화 스크립트를 실행해.
 진단은 operator_status 또는 run_powershell로 하고, 결과를 요약해.
 토큰/쿠키/API 키는 출력하지 말고 구조만 설명해.
 삭제/초기화/프로세스 종료는 내가 명시적으로 대상까지 말했을 때만 실행해.

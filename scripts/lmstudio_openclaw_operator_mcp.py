@@ -28,9 +28,12 @@ Available authority:
 - Read and write local text files.
 - List directories.
 - Open URLs or local paths through the OS shell.
+- Control the authenticated Flow browser through the existing desktop automation script.
 - Inspect recent operator command logs.
 
 Rules:
+- Do not say you cannot click browsers or GUI buttons. If browser/GUI control is needed,
+  use control_flow_desktop or run_powershell with an existing automation script.
 - Prefer purpose-built workflow tools first when they exist.
 - Use this operator when the workflow MCP is broken, missing, or needs local repair.
 - Keep commands scoped and explain the result in Korean.
@@ -163,7 +166,8 @@ def operator_status() -> str:
         f"python: {sys.executable}\n"
         f"pid: {os.getpid()}\n"
         "authority: OpenClaw-style local full operator via MCP\n"
-        "tools: run_powershell, read_text_file, write_text_file, list_directory, open_target, recent_operator_logs\n"
+        "tools: run_powershell, read_text_file, write_text_file, list_directory, open_target, "
+        "control_flow_desktop, recent_operator_logs\n"
         "secret_policy: secret-like lines are redacted in read_text_file and recent logs"
     )
 
@@ -276,6 +280,45 @@ def open_target(target: str) -> str:
         f"log: {log_path}\n"
         f"stdout: {_truncate(stdout, 2000) if stdout.strip() else '(empty)'}\n"
         f"stderr: {_truncate(stderr, 2000) if stderr.strip() else '(empty)'}"
+    )
+
+
+@mcp.tool()
+def control_flow_desktop(
+    project_id: str,
+    sentence_number: int,
+    mode: str = "generate-one",
+    wait_seconds: int = 60,
+    download_timeout_seconds: int = 45,
+) -> str:
+    """Control the authenticated Google Flow desktop UI for one sentence."""
+    _configure_stdout()
+    allowed_modes = {"generate-one", "click-generate", "download-attach"}
+    selected_mode = mode.strip()
+    if selected_mode not in allowed_modes:
+        return f"control_flow_desktop error: mode must be one of {sorted(allowed_modes)}"
+    if sentence_number < 1:
+        return "control_flow_desktop error: sentence_number must be >= 1"
+    script_path = ROOT_DIR / "scripts" / "flow_desktop_control.py"
+    command = (
+        f"& {json.dumps(str(sys.executable))} {json.dumps(str(script_path))} "
+        f"{json.dumps(project_id)} --sentence {sentence_number} "
+        f"--mode {json.dumps(selected_mode)} "
+        f"--wait-seconds {wait_seconds} "
+        f"--download-timeout-seconds {download_timeout_seconds}"
+    )
+    exit_code, stdout, stderr, log_path = _run(command, str(ROOT_DIR), max(wait_seconds + download_timeout_seconds + 30, 60))
+    return (
+        "=== control_flow_desktop result ===\n"
+        f"project_id: {project_id}\n"
+        f"sentence_number: {sentence_number}\n"
+        f"mode: {selected_mode}\n"
+        f"exit_code: {exit_code if exit_code is not None else 'timeout/error'}\n"
+        f"log: {log_path}\n"
+        "\n--- stdout ---\n"
+        f"{_truncate(stdout) if stdout.strip() else '(empty)'}\n"
+        "\n--- stderr ---\n"
+        f"{_truncate(stderr) if stderr.strip() else '(empty)'}"
     )
 
 

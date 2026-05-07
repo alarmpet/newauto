@@ -3343,3 +3343,14 @@ Follow-up:
 - Important boundary: Gemma4 still cannot magically gain Codex's in-process tools. It now receives equivalent broad local authority by calling the MCP operator tools.
 - Security note: `.openclaw` contains plaintext token-like values. Do not reproduce those values in docs or final messages; recommend rotating them separately.
 - Verification: `py_compile`, `mypy --follow-imports=skip`, and `Any/unknown` scan passed. Raw MCP stdio smoke verified `operator_status` and `run_powershell("Write-Output 'operator-smoke-ok'")`.
+
+## 2026-05-08 Flow GUI control authority clarification
+
+- User correctly pointed out that OpenClaw-equivalent authority should not lead Gemma4 to answer "I cannot click GUI buttons."
+- Clarified the operator MCP instructions: Gemma4 must not stop at a capability disclaimer when browser/GUI work is needed; it should call the operator tools.
+- Added `control_flow_desktop(project_id, sentence_number, mode, wait_seconds, download_timeout_seconds)` to `openclaw-operator`.
+- The new tool wraps the existing `scripts/flow_desktop_control.py` script and exposes direct Flow UI actions through MCP:
+  - `click-generate`
+  - `download-attach`
+  - `generate-one`
+- This makes the intended answer to Flow/GUI tasks: "use `control_flow_desktop` or `run_powershell`," not "impossible."
