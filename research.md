@@ -3234,3 +3234,10 @@ Follow-up:
 - Added explicit `/api/system/diagnostics` in `app/routers/system.py` for user-triggered full runtime refreshes.
 - Left the frontend System Health button unchanged for this commit because `app/static/app.js` already has a large pre-existing dirty diff; the optional follow-up is to route that manual button to `/api/system/diagnostics` in a dedicated frontend patch.
 - This complements the previous HPSL/Flow/TTS/render start-wait splits: MCP readiness, operator polling, and long workflow stages now avoid avoidable synchronous waits in the common path.
+
+## 2026-05-07 LM Studio MCP reset + minimal stepwise reconnect plan
+
+- Created `lmstudio-mcp-reset-stepwise-plan.md` to address the remaining LM Studio-side instability after the workflow itself was split into short stages.
+- The plan proposes a separate `newauto-stepwise` MCP server that exposes only the few tools Gemma4 needs: runtime diagnosis, stepwise start, stepwise continue, asset coverage, and optionally one-sentence Flow generation.
+- The plan intentionally hides legacy/compatibility tools such as `start_hpsl_flow_workflow`, `finish_hpsl_flow_workflow`, and one-shot wrappers so Gemma4 cannot choose stale or overly broad tool paths.
+- It also defines the manual LM Studio cleanup sequence: remove existing MCP servers, register only `run-newauto-stepwise-mcp.cmd`, run `diagnose_newauto_runtime` first, then advance with one `continue_stepwise_hpsl_video_workflow` call per user approval.
