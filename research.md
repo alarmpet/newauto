@@ -3365,3 +3365,16 @@ Follow-up:
   - `control_flow_desktop`
 - The Gemma-facing stepwise instructions now explicitly say that if the separate operator plugin is not visible, it must use the operator tools exposed by `newauto-stepwise`, and must not claim Flow/GUI clicking is impossible.
 - Verification used the official MCP client stdio path against `scripts/newauto_stepwise_mcp.py`; `tools/list` returned the three operator tools, `operator_status` returned the OpenClaw-style local authority status, and `run_powershell("Write-Output 'stepwise-operator-ok'")` succeeded.
+
+## 2026-05-08 LM Studio 30k context agentic control plan update
+
+- User clarified the target UX: LM Studio + Gemma4 should feel like Codex/OpenClaw/Claude Computer Use with no manual MCP tool-name handling, no sandbox friction, and a planned 30,000 context length.
+- Reviewed `lmstudio-agentic-mcp-plan.md` against the current codebase, workflow, `research.md`, and `timeline.md`.
+- Replaced the old plan's proposed new `newauto_agentic_mcp.py` direction with the current architecture:
+  - `newauto-stepwise` is the Agentic Control Hub visible to LM Studio.
+  - `openclaw-operator` remains available as a separate full-authority MCP.
+  - operator fallback tools are embedded into `newauto-stepwise` for chats where the separate operator plugin is not exposed.
+  - Flow automation should prefer `control_flow_desktop` and `flow_desktop_control.py` over broad Playwright/CDP plans because that path has been verified against the authenticated Flow UI.
+- The updated plan explicitly separates user UX from implementation details: users speak natural Korean requests, while Gemma4 internally selects `start_video_workflow`, `continue_video_workflow`, `diagnose_runtime`, `repair_runtime`, `run_powershell`, and `control_flow_desktop`.
+- The plan accepts the user's no-sandbox preference while preserving minimal safety boundaries for login/auth/CAPTCHA/payment/destructive operations and secret redaction.
+- 30k context is treated as room for stronger operating instructions and richer state summaries, not permission to return huge logs, full HTML, or whole databases to Gemma4.
