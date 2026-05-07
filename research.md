@@ -3225,3 +3225,12 @@ Follow-up:
   - `render`: builds scene/render plans, runs preflight, queues render, and saves `next_step=render_wait`.
   - `render_wait`: reports render phase/progress/detail without blocking and advances to `done` only on completion.
 - Updated the compatibility tool `continue_after_flow_assets()` so it creates/resumes stepwise state and runs a single next step instead of waiting through TTS and render inside one MCP call.
+
+## 2026-05-07 MCP health timeout hardening
+
+- Reviewed `mcp-health-timeout-fix-plan.md` against current code and recent MCP workflow changes.
+- Corrected the root-cause model: LM Studio MCP readiness already calls the lightweight root `/health`; the heavy endpoint is `/api/system/health` and `/api/system/operator`, which previously called `get_omnivoice_runtime_status()` on every request.
+- Changed `app/services/system_health.py` so normal health/operator reads use a cached OmniVoice runtime status and avoid repeated OmniVoice/PyTorch/CUDA subprocess probes.
+- Added explicit `/api/system/diagnostics` in `app/routers/system.py` for user-triggered full runtime refreshes.
+- Left the frontend System Health button unchanged for this commit because `app/static/app.js` already has a large pre-existing dirty diff; the optional follow-up is to route that manual button to `/api/system/diagnostics` in a dedicated frontend patch.
+- This complements the previous HPSL/Flow/TTS/render start-wait splits: MCP readiness, operator polling, and long workflow stages now avoid avoidable synchronous waits in the common path.
