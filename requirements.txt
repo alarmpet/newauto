@@ -10,6 +10,8 @@ ffmpeg-python
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
+pyautogui
+pygetwindow
 # Heavy deps — install separately with matching CUDA build:
 #   pip install torch torchaudio --index-url https://download.pytorch.org/whl/cu121
 #   pip install omnivoice

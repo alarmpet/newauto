@@ -3419,3 +3419,11 @@ Follow-up:
 - `search_web` uses DuckDuckGo's HTML page through the local network connection and does not call OpenAI, Anthropic, Brave, Google Search, or any paid search API.
 - The Gemma-facing instructions now say that web search, latest information checks, documentation lookup, and research requests must call `search_web` first instead of claiming search is impossible.
 - This keeps the tool surface small while fixing the main user-facing failure: natural Korean requests such as "Ui.Vision에 대해 자세히 검색해봐" now have an obvious MCP action.
+
+## 2026-05-08 Flow desktop dependency repair
+
+- Reproduced the user's `control_flow_desktop` failure as a Python-environment mismatch.
+- System Python `C:\Python313\python.exe` had `pyautogui`, but the LM Studio MCP command runs `C:\Users\petbl\local-rag\.venv\Scripts\python.exe`.
+- Installed `pyautogui` into the actual MCP runtime venv and verified the import from that interpreter.
+- Added `pyautogui` and `pygetwindow` to `requirements.txt` because `scripts/flow_desktop_control.py` imports both directly.
+- This means future runtime rebuilds should keep the Flow GUI control dependency instead of falling back into `ModuleNotFoundError`.
