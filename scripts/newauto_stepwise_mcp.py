@@ -3,6 +3,9 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import urllib.parse
+import urllib.request
+from html.parser import HTMLParser
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -30,6 +33,7 @@ Available tools:
 - check_assets(project_id="")
 - generate_one_image(project_id="", sentence_number=0)
 - repair_runtime(project_id="")
+- search_web(query, max_results=5)
 - operator_status()
 - run_powershell(command, cwd="", timeout_sec=60, force_approve=false)
 - control_flow_desktop(project_id, sentence_number, mode="generate-one")
@@ -42,6 +46,8 @@ Rules:
   compare the saved project state before explaining anything.
 - If diagnose_runtime shows stale state, locks, worker problems, or a mismatch,
   call repair_runtime once.
+- If the user asks to search the web, look up information, find docs, or research
+  a topic, call search_web first. Do not say real-time search is impossible.
 - If the separate openclaw-operator plugin is not visible, use the operator
   fallback tools exposed by this newauto-stepwise server.
 - Do not say browser clicking, GUI control, file work, or shell execution is
@@ -91,7 +97,7 @@ def _first_missing_sentence(project_id: str) -> int:
 def _wrapper_header(resolved_project_id: str) -> str:
     visible_tools = (
         "diagnose_runtime, start_video_workflow, continue_video_workflow, "
-        "check_assets, generate_one_image, repair_runtime, operator_status, "
+        "check_assets, generate_one_image, repair_runtime, search_web, operator_status, "
         "run_powershell, control_flow_desktop"
     )
     return (
@@ -138,6 +144,7 @@ def _agentic_metadata(project_id: str) -> dict[str, object]:
             "check_assets",
             "generate_one_image",
             "repair_runtime",
+            "search_web",
             "operator_status",
             "run_powershell",
             "control_flow_desktop",
@@ -301,6 +308,147 @@ def repair_runtime(project_id: str = "") -> str:
         + diagnosis
     )
     return result
+
+
+def _normalize_duckduckgo_href(href: str) -> str:
+    candidate = href.strip()
+    if candidate.startswith("//"):
+        candidate = "https:" + candidate
+    parsed = urllib.parse.urlparse(candidate)
+    query = urllib.parse.parse_qs(parsed.query)
+    redirected = query.get("uddg")
+    if redirected:
+        return redirected[0]
+    return candidate
+
+
+class _DuckDuckGoResultParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__()
+        self.results: list[dict[str, str]] = []
+        self._capture_title = False
+        self._current_href = ""
+        self._current_text: list[str] = []
+        self._capture_snippet = False
+        self._snippet_text: list[str] = []
+        self._snippet_index = -1
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr_map = {key: value or "" for key, value in attrs}
+        class_name = attr_map.get("class", "")
+        if tag == "a" and "result__a" in class_name:
+            self._capture_title = True
+            self._current_href = attr_map.get("href", "")
+            self._current_text = []
+            return
+        if "result__snippet" in class_name:
+            self._capture_snippet = True
+            self._snippet_text = []
+            self._snippet_index = len(self.results) - 1
+
+    def handle_data(self, data: str) -> None:
+        if self._capture_title:
+            self._current_text.append(data)
+        if self._capture_snippet:
+            self._snippet_text.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        if self._capture_title and tag == "a":
+            title = " ".join("".join(self._current_text).split())
+            url = _normalize_duckduckgo_href(self._current_href)
+            if title and url:
+                self.results.append({"title": title, "url": url, "snippet": ""})
+            self._capture_title = False
+            self._current_href = ""
+            self._current_text = []
+            return
+        if self._capture_snippet and tag in {"a", "div"}:
+            snippet = " ".join("".join(self._snippet_text).split())
+            if snippet and 0 <= self._snippet_index < len(self.results):
+                self.results[self._snippet_index]["snippet"] = snippet
+            self._capture_snippet = False
+            self._snippet_text = []
+            self._snippet_index = -1
+
+
+def _dedupe_results(results: list[dict[str, str]], limit: int) -> list[dict[str, str]]:
+    seen_urls: set[str] = set()
+    deduped: list[dict[str, str]] = []
+    for result in results:
+        url = result.get("url", "").strip()
+        title = result.get("title", "").strip()
+        if not url or not title or url in seen_urls:
+            continue
+        if not url.startswith(("http://", "https://")):
+            continue
+        seen_urls.add(url)
+        deduped.append(
+            {
+                "title": title,
+                "url": url,
+                "snippet": result.get("snippet", "").strip(),
+            }
+        )
+        if len(deduped) >= limit:
+            break
+    return deduped
+
+
+@mcp.tool()
+def search_web(query: str, max_results: int = 5) -> str:
+    """Search the public web through DuckDuckGo HTML without paid external APIs."""
+    core._configure_stdout()
+    cleaned_query = query.strip()
+    if not cleaned_query:
+        return "검색어가 비어 있습니다. 사용자가 찾으려는 주제를 query에 넣어 다시 호출하세요."
+    limit = max(1, min(int(max_results), 8))
+    search_url = "https://duckduckgo.com/html/?" + urllib.parse.urlencode({"q": cleaned_query})
+    request = urllib.request.Request(
+        search_url,
+        headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/124.0 Safari/537.36"
+            )
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=25) as response:
+            page = response.read().decode("utf-8", errors="replace")
+    except Exception as exc:
+        return (
+            "search_web failed\n"
+            f"query: {cleaned_query}\n"
+            f"error: {type(exc).__name__}: {exc}\n"
+            "다른 검색어로 다시 시도하거나 run_powershell로 직접 URL 접근을 점검하세요."
+        )
+
+    parser = _DuckDuckGoResultParser()
+    parser.feed(page)
+    results = _dedupe_results(parser.results, limit)
+    if not results:
+        return (
+            "search_web returned no parsed results\n"
+            f"query: {cleaned_query}\n"
+            f"search_url: {search_url}\n"
+            "검색 페이지가 차단되었거나 결과 구조가 바뀌었을 수 있습니다."
+        )
+
+    lines = [
+        "=== search_web results ===",
+        f"query: {cleaned_query}",
+        f"search_url: {search_url}",
+        "instruction: Use these URLs as sources. Prefer official docs when present.",
+        "",
+    ]
+    for index, result in enumerate(results, start=1):
+        lines.append(f"{index}. {result['title']}")
+        lines.append(f"   url: {result['url']}")
+        snippet = result.get("snippet", "")
+        if snippet:
+            lines.append(f"   snippet: {snippet[:500]}")
+    return "\n".join(lines)
 
 
 @mcp.tool()

@@ -3410,3 +3410,12 @@ Follow-up:
 - `scripts/newauto_stepwise_mcp.py` was rewritten with clean UTF-8 agentic instructions, exposes the `force_approve` parameter through its operator fallback, and prepends a JSON `agentic_metadata_json` block to `diagnose_runtime`.
 - `scripts/flow_desktop_control.py` now checks foreground desktop state before GUI clicks, restores/maximizes/activates the Flow window, validates the current URL looks like Flow, and keeps screenshot traces around generate/download actions.
 - Verified the actual MCP stdio path: `tools/list` exposes `run_powershell.force_approve`, a safe PowerShell command executes, a destructive command is blocked with `approval_required`, and `diagnose_runtime` includes `agentic_metadata_json`.
+
+## 2026-05-08 newauto-stepwise web search tool
+
+- Diagnosed the LM Studio response "I cannot search in real time" after the MCP reset.
+- The selected LM Studio conversation only exposed `mcp/newauto-stepwise`, and that server had workflow/operator tools but no explicit search tool.
+- Relying on `run_powershell` for web research is too implicit for Gemma4 E4B, so `scripts/newauto_stepwise_mcp.py` now exposes a high-level `search_web(query, max_results=5)` tool.
+- `search_web` uses DuckDuckGo's HTML page through the local network connection and does not call OpenAI, Anthropic, Brave, Google Search, or any paid search API.
+- The Gemma-facing instructions now say that web search, latest information checks, documentation lookup, and research requests must call `search_web` first instead of claiming search is impossible.
+- This keeps the tool surface small while fixing the main user-facing failure: natural Korean requests such as "Ui.Vision에 대해 자세히 검색해봐" now have an obvious MCP action.

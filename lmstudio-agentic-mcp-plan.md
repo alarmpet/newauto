@@ -37,6 +37,7 @@ Codex의 내부 도구 자체를 Gemma4에 그대로 줄 수는 없다. 대신 �
 | 서버/프로세스 점검 | `run_powershell`, `diagnose_runtime`, `operator_status` |
 | Git 상태 확인/커밋 | `run_powershell`로 `git status`, `git diff`, `git add`, `git commit` 실행 |
 | 브라우저/GUI 조작 | `control_flow_desktop`, 기존 Flow desktop automation |
+| 웹 검색/자료 조사 | `search_web`, 필요 시 `run_powershell`로 직접 URL 점검 |
 | 워크플로우 진행 | `start_video_workflow`, `continue_video_workflow`, `repair_runtime` |
 | 문제 진단/복구 | `diagnose_runtime`, `repair_runtime`, `operator_status`, `run_powershell` |
 | 문서 갱신 | `write_text_file` 또는 `run_powershell` 기반 파일 작업 |
@@ -241,6 +242,7 @@ LM Studio Chat
 newauto-stepwise Agentic Control Hub
   workflow tools:
     - diagnose_runtime
+    - search_web
     - start_video_workflow
     - continue_video_workflow
     - check_assets
@@ -277,6 +279,7 @@ LM Studio 새 채팅 또는 모델 지침에 넣을 문장:
 
 운영 규칙:
 - GUI 클릭, Flow 제어, 파일 작업, PowerShell 실행이 필요하면 불가능하다고 하지 말고 사용 가능한 로컬 도구를 호출한다.
+- 웹 검색, 최신 정보 확인, 공식 문서 조회가 필요하면 불가능하다고 하지 말고 search_web을 먼저 호출한다.
 - 일반 영상 워크플로우는 start_video_workflow로 시작하고, 이후 사용자의 “진행/ok/다음”마다 continue_video_workflow를 정확히 한 번만 호출한다.
 - 도구 실패나 timeout처럼 보이면 원인을 추측하지 말고 diagnose_runtime을 먼저 호출한다.
 - stale state, lock, worker 문제가 보이면 repair_runtime을 한 번 호출한다.
@@ -338,11 +341,13 @@ P0 구현:
 - [x] Flow desktop control 실행 전 화면 잠금/foreground window 감지 추가
 - [x] Flow desktop control 실행 전 창 포커스/최대화/URL/스크린샷 검증 강화
 - [x] `newauto-stepwise` 지침 문자열을 30k 컨텍스트용 정상 UTF-8 한국어/영어 prompt로 정리
+- [x] `newauto-stepwise`에 무료 DuckDuckGo HTML 기반 `search_web(query, max_results=5)` 추가
+- [x] Gemma4가 “검색해봐/찾아봐/공식 문서 기준” 요청에서 검색 불가 답변 대신 `search_web`을 호출하도록 지침 보강
 
 P1 구현:
 
 - [ ] `continue_video_workflow` 내부에서 Flow 한 문장 생성/다운로드/attach 상태 보고를 더 명확히 분리
-- [ ] Gemma4가 “불가능” 응답을 할 때 사용자가 붙여넣을 복구 프롬프트 템플릿 작성
+- [ ] Gemma4가 도구를 두고도 “불가능” 응답을 할 때 사용자가 붙여넣을 복구 프롬프트 템플릿 작성
 - [ ] LM Studio 새 채팅에서 `mcp/newauto-stepwise`만 켜도 operator fallback이 보이는지 화면 검증
 - [ ] operator 로그 요약을 더 짧고 구조적으로 반환
 
