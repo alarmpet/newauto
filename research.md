@@ -3427,3 +3427,10 @@ Follow-up:
 - Installed `pyautogui` into the actual MCP runtime venv and verified the import from that interpreter.
 - Added `pyautogui` and `pygetwindow` to `requirements.txt` because `scripts/flow_desktop_control.py` imports both directly.
 - This means future runtime rebuilds should keep the Flow GUI control dependency instead of falling back into `ModuleNotFoundError`.
+
+[2026-05-12T02:46:17+09:00] OpenRouter reviewer model migration implemented.
+
+- Changed the local OpenRouter subagent harness default from `openai/gpt-oss-20b:free` to `qwen/qwen3-32b:free`, with one-shot fallback to `deepseek/deepseek-chat-v3-0324:free`.
+- Added model-chain resolution, fallback-aware request handling, mode-specific `max_tokens`, and attempt-level budget logging for recent OpenRouter calls.
+- Updated `.clinerules`, `prompts/model_profiles.md`, and `run-newauto-stepwise-mcp.cmd` so Cline/LM Studio instructions match the harness runtime policy.
+- Kept OpenRouter advisory-only: no credentials, full files, full logs, browser profiles, or `openrouter.txt` content may be sent; local verification remains required before applying recommendations.
