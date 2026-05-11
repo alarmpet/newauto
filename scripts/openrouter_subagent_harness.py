@@ -19,8 +19,8 @@ OPENROUTER_KEY_FILE = ROOT_DIR / "openrouter.txt"
 BUDGET_PATH = ROOT_DIR / "storage" / "agent_memory" / "openrouter_budget.json"
 API_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODELS_URL = "https://openrouter.ai/api/v1/models"
-DEFAULT_FREE_MODEL = "qwen/qwen3-32b:free"
-DEFAULT_FALLBACK_FREE_MODEL = "deepseek/deepseek-chat-v3-0324:free"
+DEFAULT_FREE_MODEL = "google/gemma-4-31b-it:free"
+DEFAULT_FALLBACK_FREE_MODEL = "google/gemma-4-26b-a4b-it:free"
 DEFAULT_LAST_RESORT_FREE_MODEL = "openai/gpt-oss-20b:free"
 
 SECRET_RE = re.compile(

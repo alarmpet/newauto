@@ -69,9 +69,9 @@ This file defines model roles for the `newauto` agentic stack. A model can be ad
   - Fallback: first non-comment line of `C:\Users\petbl\newauto\openrouter.txt`
 - Model policy:
   - Use `:free` models only.
-  - Primary reviewer/debug/planner/code_patch model: `qwen/qwen3-32b:free`.
-  - Preferred fallback model: `deepseek/deepseek-chat-v3-0324:free`.
-  - Last-resort fallback model: `openai/gpt-oss-20b:free`, kept because it is currently the only verified available free endpoint in this account/routing state.
+  - Primary reviewer/debug/planner/code_patch model: `google/gemma-4-31b-it:free`.
+  - Preferred fallback model: `google/gemma-4-26b-a4b-it:free`.
+  - Last-resort fallback model: `openai/gpt-oss-20b:free`, kept as a safety net when the preferred Google Gemma free endpoints are rate-limited.
   - Configure mode-specific models with `OPENROUTER_MODEL_REVIEWER`, `OPENROUTER_MODEL_PLANNER`, `OPENROUTER_MODEL_DEBUGGER`, and `OPENROUTER_MODEL_CODER`.
   - Configure fallback with `OPENROUTER_FALLBACK_MODEL` only if the default DeepSeek fallback should change.
   - Configure last-resort fallback with `OPENROUTER_LAST_RESORT_MODEL` only if the verified available free endpoint changes.

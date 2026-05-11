@@ -72,7 +72,7 @@
 - Only use the JSON action packet between the `openrouter subagent response` boundary markers.
 - Verify locally before applying any OpenRouter recommendation.
 - Use `:free` OpenRouter models only. The `$10+ credits` free-model budget is 1000 requests/day and 20 RPM. Do not call it for trivial queries.
-- If no OpenRouter model env var is configured, the harness defaults to `qwen/qwen3-32b:free`, may fall back to `deepseek/deepseek-chat-v3-0324:free`, and keeps `openai/gpt-oss-20b:free` as the last-resort free fallback when the preferred free endpoints are unavailable.
+- If no OpenRouter model env var is configured, the harness defaults to `google/gemma-4-31b-it:free`, may fall back to `google/gemma-4-26b-a4b-it:free`, and keeps `openai/gpt-oss-20b:free` as the last-resort free fallback when the preferred free endpoints are unavailable.
 - Never read or send `openrouter.txt`, API keys, tokens, cookies, browser profiles, credential files, full files, or full logs to OpenRouter.
 - Override with `--model <id>:free` only after checking `--list-models`.
 

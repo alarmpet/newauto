@@ -3437,3 +3437,5 @@ Follow-up:
 - Verification: `py_compile`, `mypy`, dry-run, and non-free model rejection passed. Live OpenRouter calls reached fallback logic, but both requested free models returned `No endpoints found` for this account/routing state; `--list-models` only surfaced `openai/gpt-oss-20b:free` among the checked IDs.
 - Follow-up adjustment: kept `openai/gpt-oss-20b:free` as the last-resort fallback after Qwen and DeepSeek, because it is the currently verified available free endpoint.
 - Live retry after the adjustment reached the last-resort `openai/gpt-oss-20b:free` model, but that upstream provider returned a temporary rate-limit response. Added `user_id` redaction for OpenRouter error details.
+- Updated the preferred free chain to Google Gemma models after confirming OpenRouter IDs: `google/gemma-4-31b-it:free` first, `google/gemma-4-26b-a4b-it:free` second, and `openai/gpt-oss-20b:free` last resort.
+- Verification: `--list-models` now shows both Gemma free models plus gpt-oss. Live smoke hit a temporary rate-limit on Gemma 31B, then successfully completed through Gemma 26B A4B with zero reported cost.
