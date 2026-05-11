@@ -21,11 +21,13 @@ API_URL = "https://openrouter.ai/api/v1/chat/completions"
 MODELS_URL = "https://openrouter.ai/api/v1/models"
 DEFAULT_FREE_MODEL = "qwen/qwen3-32b:free"
 DEFAULT_FALLBACK_FREE_MODEL = "deepseek/deepseek-chat-v3-0324:free"
+DEFAULT_LAST_RESORT_FREE_MODEL = "openai/gpt-oss-20b:free"
 
 SECRET_RE = re.compile(
     r"(?i)(token|password|passwd|secret|api[_-]?key|authorization|bearer|cookie)\s*[:=]\s*[^,\s\"']+"
 )
 RAW_KEY_RE = re.compile(r"sk-or-[A-Za-z0-9_-]+")
+USER_ID_RE = re.compile(r'(?i)("?user_id"?\s*:\s*)"?[^,}"\s]+"?')
 DENY_PATH_PARTS = {
     ".env",
     "openrouter.txt",
@@ -96,7 +98,8 @@ def _now_epoch() -> float:
 
 def _redact_text(value: str) -> str:
     value = SECRET_RE.sub(lambda match: f"{match.group(1)}=[REDACTED]", value)
-    return RAW_KEY_RE.sub("sk-or-[REDACTED]", value)
+    value = RAW_KEY_RE.sub("sk-or-[REDACTED]", value)
+    return USER_ID_RE.sub(lambda match: f"{match.group(1)}\"[REDACTED]\"", value)
 
 
 def redact(value: object) -> object:
@@ -237,6 +240,8 @@ def resolve_model_chain(mode: str, explicit_model: str = "") -> list[str]:
         primary,
         os.environ.get("OPENROUTER_FALLBACK_MODEL", ""),
         DEFAULT_FALLBACK_FREE_MODEL,
+        os.environ.get("OPENROUTER_LAST_RESORT_MODEL", ""),
+        DEFAULT_LAST_RESORT_FREE_MODEL,
     ]
     chain: list[str] = []
     seen: set[str] = set()

@@ -3434,3 +3434,6 @@ Follow-up:
 - Added model-chain resolution, fallback-aware request handling, mode-specific `max_tokens`, and attempt-level budget logging for recent OpenRouter calls.
 - Updated `.clinerules`, `prompts/model_profiles.md`, and `run-newauto-stepwise-mcp.cmd` so Cline/LM Studio instructions match the harness runtime policy.
 - Kept OpenRouter advisory-only: no credentials, full files, full logs, browser profiles, or `openrouter.txt` content may be sent; local verification remains required before applying recommendations.
+- Verification: `py_compile`, `mypy`, dry-run, and non-free model rejection passed. Live OpenRouter calls reached fallback logic, but both requested free models returned `No endpoints found` for this account/routing state; `--list-models` only surfaced `openai/gpt-oss-20b:free` among the checked IDs.
+- Follow-up adjustment: kept `openai/gpt-oss-20b:free` as the last-resort fallback after Qwen and DeepSeek, because it is the currently verified available free endpoint.
+- Live retry after the adjustment reached the last-resort `openai/gpt-oss-20b:free` model, but that upstream provider returned a temporary rate-limit response. Added `user_id` redaction for OpenRouter error details.

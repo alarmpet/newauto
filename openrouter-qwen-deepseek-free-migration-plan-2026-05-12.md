@@ -13,9 +13,13 @@ qwen/qwen3-32b:free
 
 Fallback:
 deepseek/deepseek-chat-v3-0324:free
+
+Last resort:
+openai/gpt-oss-20b:free
 ```
 
 로컬 기본 operator는 계속 LM Studio의 `google/gemma-4-e4b`를 사용한다. OpenRouter는 메인 실행 모델이 아니라, 복잡한 원인 분석, 리뷰, 긴 로그 판단에만 쓰는 advisory subagent다.
+`openai/gpt-oss-20b:free`는 제거하지 않고 마지막 fallback으로 유지한다. 현재 `--list-models`에서 실제 확인된 free endpoint가 이 모델뿐이기 때문이다.
 
 Antigravity 리뷰의 핵심 지적은 타당하다. 기존 계획은 방향은 맞지만 실제 코드와 문서가 아직 따라오지 않았다. 따라서 이번 계획은 모델명 교체뿐 아니라 fallback chain, budget attempt 기록, `.clinerules` 갱신, timeout/max token 정책, CLI 출력 버그 정리까지 포함한다.
 
@@ -27,6 +31,7 @@ Antigravity 리뷰의 핵심 지적은 타당하다. 기존 계획은 방향은 
 - [x] P2 Budget attempt 기록 개선
 - [x] P2 `.clinerules`, `prompts/model_profiles.md`, `run-newauto-stepwise-mcp.cmd` 갱신
 - [x] P3 CLI 출력과 토큰 정책 정리
+- [x] 사용 가능한 `openai/gpt-oss-20b:free` last-resort fallback 유지
 - [x] 검증 명령 실행
 - [x] `research.md` 및 `timeline.md` 업데이트
 - [x] 커밋
@@ -37,6 +42,8 @@ Antigravity 리뷰의 핵심 지적은 타당하다. 기존 계획은 방향은 
 - 실제 OpenRouter smoke에서 Qwen primary와 DeepSeek fallback 모두 현재 계정/라우팅 기준 `No endpoints found`를 반환했다.
 - fallback wrapper 자체는 Qwen 실패 후 DeepSeek를 1회 시도하는 것으로 확인됐다.
 - `--list-models`에서는 현재 `openai/gpt-oss-20b:free`만 검색되어, Qwen/DeepSeek free endpoint 사용 가능 여부는 OpenRouter 계정/라우팅 상태 확인이 필요하다.
+- last-resort fallback 추가 후 live smoke는 `openai/gpt-oss-20b:free`까지 도달했지만, 해당 upstream provider가 temporary rate-limit을 반환했다.
+- OpenRouter error detail의 `user_id`는 redaction 대상에 추가했다.
 
 ## 1. 현재 상태
 
@@ -94,16 +101,17 @@ Antigravity 리뷰에서 즉시 반영할 항목:
 ```python
 DEFAULT_FREE_MODEL = "qwen/qwen3-32b:free"
 DEFAULT_FALLBACK_FREE_MODEL = "deepseek/deepseek-chat-v3-0324:free"
+DEFAULT_LAST_RESORT_FREE_MODEL = "openai/gpt-oss-20b:free"
 ```
 
 모드별 모델:
 
-| Mode | Primary | Fallback |
-|---|---|---|
-| `review` | `qwen/qwen3-32b:free` | `deepseek/deepseek-chat-v3-0324:free` |
-| `debug` | `qwen/qwen3-32b:free` | `deepseek/deepseek-chat-v3-0324:free` |
-| `plan` | `qwen/qwen3-32b:free` | `deepseek/deepseek-chat-v3-0324:free` |
-| `code_patch` | `qwen/qwen3-32b:free` | `deepseek/deepseek-chat-v3-0324:free` |
+| Mode | Primary | Fallback | Last Resort |
+|---|---|---|---|
+| `review` | `qwen/qwen3-32b:free` | `deepseek/deepseek-chat-v3-0324:free` | `openai/gpt-oss-20b:free` |
+| `debug` | `qwen/qwen3-32b:free` | `deepseek/deepseek-chat-v3-0324:free` | `openai/gpt-oss-20b:free` |
+| `plan` | `qwen/qwen3-32b:free` | `deepseek/deepseek-chat-v3-0324:free` | `openai/gpt-oss-20b:free` |
+| `code_patch` | `qwen/qwen3-32b:free` | `deepseek/deepseek-chat-v3-0324:free` | `openai/gpt-oss-20b:free` |
 
 모드별 max tokens:
 
@@ -149,7 +157,10 @@ Select-String -Path .\scripts\openrouter_subagent_harness.py -Pattern "DEFAULT_F
 2. OPENROUTER_MODEL_<MODE>
 3. OPENROUTER_MODEL
 4. DEFAULT_FREE_MODEL
-5. DEFAULT_FALLBACK_FREE_MODEL
+5. OPENROUTER_FALLBACK_MODEL
+6. DEFAULT_FALLBACK_FREE_MODEL
+7. OPENROUTER_LAST_RESORT_MODEL
+8. DEFAULT_LAST_RESORT_FREE_MODEL
 ```
 
 규칙:
@@ -166,7 +177,8 @@ Dry-run 출력에는 다음을 포함한다.
   "model": "qwen/qwen3-32b:free",
   "model_chain": [
     "qwen/qwen3-32b:free",
-    "deepseek/deepseek-chat-v3-0324:free"
+    "deepseek/deepseek-chat-v3-0324:free",
+    "openai/gpt-oss-20b:free"
   ]
 }
 ```
@@ -267,7 +279,7 @@ record_attempt(mode, model, ok, error_class)
 `.clinerules` 반영 문구:
 
 ```text
-If no OpenRouter model env var is configured, the harness defaults to qwen/qwen3-32b:free and may fall back once to deepseek/deepseek-chat-v3-0324:free.
+If no OpenRouter model env var is configured, the harness defaults to qwen/qwen3-32b:free, may fall back to deepseek/deepseek-chat-v3-0324:free, and keeps openai/gpt-oss-20b:free as the last-resort free fallback.
 Never read or send openrouter.txt, API keys, tokens, cookies, browser profiles, credential files, full files, or full logs to OpenRouter.
 ```
 
@@ -279,6 +291,7 @@ set "OPENROUTER_MODEL_PLANNER=qwen/qwen3-32b:free"
 set "OPENROUTER_MODEL_DEBUGGER=qwen/qwen3-32b:free"
 set "OPENROUTER_MODEL_CODER=qwen/qwen3-32b:free"
 set "OPENROUTER_FALLBACK_MODEL=deepseek/deepseek-chat-v3-0324:free"
+set "OPENROUTER_LAST_RESORT_MODEL=openai/gpt-oss-20b:free"
 ```
 
 API key는 cmd에 넣지 않는다. 기존처럼 `OPENROUTER_API_KEY` 또는 `openrouter.txt` first line fallback을 사용한다.
@@ -340,7 +353,7 @@ Select-String -Path .\scripts\openrouter_subagent_harness.py -Pattern "DEFAULT_F
 
 - `DEFAULT_FREE_MODEL = "qwen/qwen3-32b:free"`
 - `DEFAULT_FALLBACK_FREE_MODEL = "deepseek/deepseek-chat-v3-0324:free"`
-- `gpt-oss`는 legacy 문서 외 실행 기본값에 남지 않음
+- `openai/gpt-oss-20b:free`는 last-resort fallback으로 남음
 
 2. Dry-run primary/fallback chain:
 
@@ -417,6 +430,7 @@ Select-String -Path .\.clinerules -Pattern "gpt-oss|qwen/qwen3-32b|deepseek/deep
 
 - `scripts/openrouter_subagent_harness.py` 기본 모델이 `qwen/qwen3-32b:free`로 바뀐다.
 - fallback 모델이 `deepseek/deepseek-chat-v3-0324:free`로 등록된다.
+- last-resort fallback 모델이 `openai/gpt-oss-20b:free`로 유지된다.
 - dry-run에서 primary/fallback chain이 확인된다.
 - non-free 모델 거부가 유지된다.
 - fallback 대상 오류에서 DeepSeek로 1회만 넘어간다.
