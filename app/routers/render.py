@@ -1,19 +1,26 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException
+from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from .. import db
 from ..config import VOICE_SAMPLE_TEXT
 from ..services import preflight as preflight_svc
+from ..services.operator_summary import build_operator_summary
+from ..services.render_report import load_render_report
 from ..services import tts as tts_svc
+from ..services.visual_relevance import attach_visual_relevance, load_final_scene_review
 from ..tts_profiles import build_tts_preset_catalog, canonical_voice_preset, normalize_tts_profile
 from ..types import (
+    FinalSceneReview,
     PreflightReport,
     ProjectRecord,
     ProjectStatus,
+    RenderReport,
     TtsMode,
     TtsPresetCatalogResponse,
     TtsPreviewResponse,
+    TtsSeedMode,
+    TtsSynthesisMode,
 )
 
 router = APIRouter(prefix="/api/projects", tags=["render"])
@@ -24,6 +31,8 @@ class TtsProfilePayload(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     mode: TtsMode | None = None
+    synthesis_mode: TtsSynthesisMode | None = None
+    seed_mode: TtsSeedMode | None = None
     language: str | None = Field(default=None, pattern=r"^(auto|ko|en)$")
     instruct: str | None = Field(default=None, max_length=200)
     speed: float | None = Field(default=None, ge=0.75, le=1.25)
@@ -38,6 +47,8 @@ class TtsProfilePayload(BaseModel):
         payload: dict[str, object] = {}
         for key in (
             "mode",
+            "synthesis_mode",
+            "seed_mode",
             "language",
             "instruct",
             "speed",
@@ -98,17 +109,17 @@ def get_tts_presets() -> TtsPresetCatalogResponse:
 
 
 @router.post("/{pid}/tts")
-def start_tts(pid: str, bg: BackgroundTasks, payload: TtsRunPayload) -> dict[str, bool]:
+def start_tts(pid: str, payload: TtsRunPayload) -> dict[str, bool]:
     project = _require(pid)
     if not project["sentences"]:
         raise HTTPException(400, "script is empty - save title and script first")
-    if project["tts_state"] == "running":
+    if project["tts_state"] in {"queued", "running"}:
         raise HTTPException(409, "TTS already running")
 
     voice_preset, tts_profile = normalize_tts_profile(
         payload.tts_profile.to_payload() if payload.tts_profile is not None else {},
         payload.voice_preset,
-        project["script"],
+        project["compiled_script"] or project["script"],
     )
     try:
         if payload.preview_lock is not None:
@@ -126,10 +137,13 @@ def start_tts(pid: str, bg: BackgroundTasks, payload: TtsRunPayload) -> dict[str
         pid,
         voice_preset=voice_preset,
         tts_profile=tts_profile,
-        tts_state="running",
+        tts_state="queued",
         tts_progress=0,
+        tts_error="",
+        tts_job_id="",
+        tts_started_at="",
+        tts_heartbeat_at="",
     )
-    bg.add_task(tts_svc.run_tts_job, pid)
     return {"ok": True}
 
 
@@ -144,12 +158,13 @@ def generate_tts_preview(pid: str, payload: TtsPreviewPayload) -> TtsPreviewResp
             sample_text,
             canonical_preset,
             payload.tts_profile.to_payload() if payload.tts_profile is not None else {},
+            owner=f"tts-preview:{pid}",
         )
         tts_svc.save_audio_file(audio, preview_path)
     except ValueError as exc:
         raise HTTPException(400, str(exc)) from exc
     except RuntimeError as exc:
-        raise HTTPException(500, str(exc)) from exc
+        raise HTTPException(409, str(exc)) from exc
     return {
         "preview_url": f"/api/projects/{pid}/tts-preview",
         "sample_text": sample_text,
@@ -203,13 +218,68 @@ def preflight(pid: str) -> PreflightReport:
     return preflight_svc.build_preflight_report(project)
 
 
+@router.get("/{pid}/render-report")
+def get_render_report(pid: str) -> RenderReport:
+    _require(pid)
+    report = load_render_report(pid)
+    if report is None:
+        raise HTTPException(404, "render report not found")
+    return report
+
+
+@router.get("/{pid}/operator-summary")
+def get_operator_summary(pid: str) -> dict[str, object]:
+    project = _require(pid)
+    return build_operator_summary(project)
+
+
+@router.get("/{pid}/final-scene-review")
+def get_final_scene_review(pid: str) -> FinalSceneReview:
+    _require(pid)
+    review = load_final_scene_review(pid)
+    if review is None:
+        raise HTTPException(404, "final scene review not found")
+    return review
+
+
 @router.get("/{pid}/status")
 def status(pid: str) -> ProjectStatus:
-    project = _require(pid)
+    project = attach_visual_relevance(_require(pid))
     return {
         "id": project["id"],
         "tts_state": project["tts_state"],
         "tts_progress": project["tts_progress"],
+        "tts_error": project["tts_error"],
+        "tts_job_id": project["tts_job_id"],
+        "tts_started_at": project["tts_started_at"],
+        "tts_heartbeat_at": project["tts_heartbeat_at"],
+        "body_image_state": project["body_image_state"],
+        "body_image_progress": project["body_image_progress"],
+        "body_image_phase": project["body_image_phase"],
+        "body_image_last_log": project["body_image_last_log"],
+        "body_image_started_at": project["body_image_started_at"],
+        "body_image_heartbeat_at": project["body_image_heartbeat_at"],
+        "body_image_error": project["body_image_error"],
+        "source_draft_state": project["source_draft_state"],
+        "source_draft_progress": project["source_draft_progress"],
+        "source_draft_phase": project["source_draft_phase"],
+        "source_draft_last_log": project["source_draft_last_log"],
+        "source_draft_started_at": project["source_draft_started_at"],
+        "source_draft_heartbeat_at": project["source_draft_heartbeat_at"],
+        "source_draft_error": project["source_draft_error"],
+        "autopilot_state": project["autopilot_state"],
+        "autopilot_progress": project["autopilot_progress"],
+        "autopilot_phase": project["autopilot_phase"],
+        "autopilot_last_log": project["autopilot_last_log"],
+        "autopilot_error": project["autopilot_error"],
+        "autopilot_job_id": project["autopilot_job_id"],
+        "autopilot_started_at": project["autopilot_started_at"],
+        "autopilot_heartbeat_at": project["autopilot_heartbeat_at"],
+        "autopilot_last_error_code": project["autopilot_last_error_code"],
+        "autopilot_debug_summary": project["autopilot_debug_summary"],
+        "autopilot_wait_started_at": project["autopilot_wait_started_at"],
+        "autopilot_retry_count": project["autopilot_retry_count"],
+        "scene_plan": project["scene_plan"],
         "render_state": project["render_state"],
         "render_progress": project["render_progress"],
         "render_phase": project["render_phase"],
@@ -237,4 +307,6 @@ def status(pid: str) -> ProjectStatus:
         "render_formats": project["render_formats"],
         "youtube_schedule_at": project["youtube_schedule_at"],
         "youtube_id": project["youtube_id"],
+        "visual_relevance_rows": project["visual_relevance_rows"],
+        "visual_relevance_summary": project["visual_relevance_summary"],
     }

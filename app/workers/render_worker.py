@@ -5,12 +5,13 @@ from contextlib import suppress
 from pathlib import Path
 
 from .. import db
+from ..config import STORAGE_DIR
 from ..services.render import run_render_job
 from .worker_lock import single_instance_lock
 
 POLL_INTERVAL_SEC = 3.0
 HEARTBEAT_INTERVAL_SEC = 10.0
-WORKER_LOCK_PATH = Path("storage/render_worker.lock")
+WORKER_LOCK_PATH = STORAGE_DIR / "locks" / "render_worker.lock"
 
 
 def _run_job_with_heartbeat(pid: str) -> None:
