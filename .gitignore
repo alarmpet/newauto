@@ -5,6 +5,10 @@ __pycache__/
 node_modules/
 storage/
 omnivoice_env/
+dist/
+src-tauri/target/
 .claude/
 _run_stdout.log
 _run_stderr.log
+openrouter.txt
+.env
