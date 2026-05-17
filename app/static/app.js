@@ -1,13 +1,52 @@
-﻿// @ts-check
+// @ts-check
 
 /**
  * @typedef {"idle" | "queued" | "running" | "done" | "error"} TaskState
+ * @typedef {"idle" | "queued" | "running" | "paused" | "done" | "error" | "canceled"} AutopilotState
  * @typedef {"image" | "video"} MediaKind
  * @typedef {"idle" | "uploading" | "processing" | "done" | "error"} MediaClientPhase
  * @typedef {"top" | "upper" | "middle" | "lower" | "bottom"} SubtitlePosition
  * @typedef {"none" | "fade" | "pop" | "karaoke"} SubtitleEffect
  * @typedef {"auto" | "design" | "clone"} TtsMode
  * @typedef {"landscape" | "shorts"} RenderFormat
+ * @typedef {"standard" | "bible_longform"} ContentMode
+ * @typedef {"upload_only" | "hybrid" | "comfyui_auto" | "flow_assisted" | "flow_auto" | "flow_then_comfyui_fallback"} VisualSourceMode
+ * @typedef {"intro" | "body" | "bible"} Region
+ * @typedef {"" | "url" | "keyword"} SourceDraftInputMode
+ * @typedef {"" | "hook" | "point" | "story" | "lesson"} SourceRegenerateMode
+ * @typedef {"script" | "url" | "keyword"} AutopilotInputMode
+ * @typedef {"pass" | "stale" | "missing"} VisualRelevanceState
+ */
+
+/**
+ * @typedef {{
+ *   sentence_idx: number,
+ *   sentence_hash: string,
+ *   section: string,
+ *   narration: string,
+ *   core_keyword: string,
+ *   visual_keyword: string,
+ *   emotion: string,
+ *   aspect_ratio: string,
+ *   prompt: string,
+ *   negative_prompt: string,
+ *   asset_path: string,
+ *   status: string,
+ *   updated_at: string,
+ *   source: string,
+ * }} FlowPromptEntry
+ */
+
+/**
+ * @typedef {{
+ *   version: number,
+ *   project_id: string,
+ *   generated_at: string,
+ *   aspect_ratio: string,
+ *   mode: string,
+ *   entries: FlowPromptEntry[],
+ *   flow_project_url?: string,
+ * }} FlowPromptManifest
  */
 
 /**
@@ -32,6 +71,7 @@
 /**
  * @typedef {{
  *   mode: TtsMode,
+ *   seed_mode: "fixed" | "per_sentence",
  *   language: string,
  *   instruct: string,
  *   speed: number,
@@ -46,9 +86,249 @@
 
 /**
  * @typedef {{
+ *   idx: number,
+ *   text: string,
+ *   region: Region,
+ * }} RegionalSentence
+ */
+
+/**
+ * @typedef {{
+ *   id: string,
+ *   url: string,
+ *   final_url: string,
+ *   title: string,
+ *   domain: string,
+ *   author: string,
+ *   published_at: string,
+ *   language: string,
+ *   excerpt: string,
+ *   fetched_at: string,
+ *   word_count: number,
+ * }} SourceDraftSource
+ */
+
+/**
+ * @typedef {{
+ *   source_id: string,
+ *   note: string,
+ * }} SourceDraftFactNote
+ */
+
+/**
+ * @typedef {{
+ *   input_mode: AutopilotInputMode,
+ *   script: string,
+ *   url: string,
+ *   keyword: string,
+ *   tone: string,
+ *   target_minutes: string,
+ *   regenerate_mode: SourceRegenerateMode,
+ *   visual_source_mode: VisualSourceMode,
+ *   image_count: number | "auto",
+ *   render_after_preflight: boolean,
+ *   debug_verbose: boolean,
+ * }} AutopilotOptions
+ */
+
+/**
+ * @typedef {{
+ *   ts: string,
+ *   job_id: string,
+ *   phase: string,
+ *   level: string,
+ *   event: string,
+ *   message: string,
+ *   progress: number,
+ *   worker_state: string,
+ *   related_state: Record<string, string>,
+ *   debug: Record<string, unknown>,
+ * }} AutopilotEvent
+ */
+
+/**
+ * @typedef {{
+ *   ts: string,
+ *   job_id: string,
+ *   phase: string,
+ *   error_code: string,
+ *   message: string,
+ *   action_hint: string,
+ *   recoverable: boolean,
+ *   project_state: Record<string, string>,
+ * }} AutopilotFailureSnapshot
+ */
+
+/**
+ * @typedef {{
+ *   project_id: string,
+ *   state: AutopilotState,
+ *   phase: string,
+ *   progress: number,
+ *   last_log: string,
+ *   error: string,
+ *   error_code: string,
+ *   debug_summary: string,
+ *   job_id: string,
+ *   started_at: string,
+ *   heartbeat_at: string,
+ *   wait_started_at: string,
+ *   retry_count: number,
+ *   options: AutopilotOptions | Object,
+ *   current_owner: string,
+ *   last_failure: AutopilotFailureSnapshot | null,
+ *   recent_events: AutopilotEvent[],
+ * }} AutopilotDebugSnapshot
+ */
+
+/**
+ * @typedef {{
+ *   sentence_idx: number,
+ *   sentence_text: string,
+ *   status: VisualRelevanceState,
+ *   path: string,
+ *   reason: string,
+ *   issue_codes: string[],
+ * }} VisualRelevanceRow
+ */
+
+/**
+ * @typedef {{
+ *   total: number,
+ *   pass_count: number,
+ *   stale_count: number,
+ *   missing_count: number,
+ * }} VisualRelevanceSummary
+ */
+
+/**
+ * @typedef {{
+ *   idx: number,
+ *   sentence_idx: number,
+ *   text: string,
+ *   region: Region,
+ *   duration_sec: number,
+ *   visual_intent: string,
+ *   prompt: string,
+ *   style: string,
+ *   media_path: string,
+ * }} ScenePlanScene
+ */
+
+/**
+ * @typedef {{
+ *   version: number,
+ *   format: RenderFormat,
+ *   total_duration: number,
+ *   scenes: ScenePlanScene[],
+ * }} ScenePlan
+ */
+
+/**
+ * @typedef {{
+ *   region: Region,
+ *   start: number,
+ *   end: number,
+  *   media: { path: string, kind: MediaKind }[],
+ *   motion: string,
+ *   effect: string,
+ *   caption_style: string,
+ * }} RenderPlanSegment
+ */
+
+/**
+ * @typedef {{
+ *   version: number,
+ *   total_duration: number,
+ *   segments: RenderPlanSegment[],
+ * }} RenderPlan
+ */
+
+/**
+ * @typedef {{
+ *   idx: number,
+ *   scene_id: string,
+ *   sentence_idx: number,
+ *   text: string,
+ *   region: Region,
+ *   duration_sec: number,
+ *   voice_asset_path: string,
+ *   visual_asset_path: string,
+ *   prompt: string,
+ *   subtitle_override: SubtitleStyle | null,
+ *   motion: string,
+ *   flow_status: string,
+ *   locked: boolean,
+ *   warnings: string[],
+ * }} SceneCard
+ */
+
+/**
+ * @typedef {{
+ *   reference: string,
+ *   text: string,
+ * }} SelectedVerse
+ */
+
+/**
+ * @typedef {{
  *   id: string,
  *   title: string,
  *   script: string,
+ *   content_mode: ContentMode,
+ *   visual_source_mode: VisualSourceMode,
+ *   user_script: string,
+ *   compiled_script: string,
+ *   regional_sentences: RegionalSentence[],
+ *   bible_query: string,
+ *   selected_verses: SelectedVerse[],
+ *   bible_background_file: string,
+ *   body_image_state: TaskState,
+ *   body_image_progress: number,
+ *   body_image_error: string,
+ *   body_image_phase: string,
+ *   body_image_last_log: string,
+ *   body_image_started_at: string,
+ *   body_image_heartbeat_at: string,
+ *   body_image_options: Object,
+ *   body_image_mappings: {sentence_idx: number, path: string, prompt: string, selected_reason?: string, candidate_index?: number, candidate_total?: number, candidate_score?: number}[],
+ *   visual_relevance_rows?: VisualRelevanceRow[],
+ *   visual_relevance_summary?: VisualRelevanceSummary,
+ *   source_draft_state: TaskState,
+ *   source_draft_progress: number,
+ *   source_draft_error: string,
+ *   source_draft_input_mode: SourceDraftInputMode,
+ *   source_draft_query: string,
+ *   source_draft_sources: SourceDraftSource[],
+ *   source_draft_fact_notes: SourceDraftFactNote[],
+ *   source_draft_script: string,
+ *   source_draft_previous_script: string,
+ *   source_draft_warnings: string[],
+ *   source_draft_model: string,
+ *   source_draft_risk_score: number,
+ *   source_draft_regenerate_mode: SourceRegenerateMode,
+ *   source_draft_regenerate_note: string,
+ *   source_draft_job_id: string,
+ *   source_draft_started_at: string,
+ *   source_draft_heartbeat_at: string,
+ *   source_draft_phase: string,
+ *   source_draft_last_log: string,
+ *   source_draft_options: Object,
+ *   autopilot_state: AutopilotState,
+ *   autopilot_progress: number,
+ *   autopilot_phase: string,
+ *   autopilot_last_log: string,
+ *   autopilot_error: string,
+ *   autopilot_job_id: string,
+ *   autopilot_started_at: string,
+ *   autopilot_heartbeat_at: string,
+ *   autopilot_options: AutopilotOptions | Object,
+ *   autopilot_last_error_code: string,
+ *   autopilot_debug_summary: string,
+ *   autopilot_wait_started_at: string,
+ *   autopilot_retry_count: number,
+ *   scene_plan: ScenePlan | null,
+ *   render_plan: RenderPlan | null,
  *   sentences: string[],
  *   media_order: string[],
  *   thumbnail_file: string,
@@ -127,6 +407,32 @@
  *   id: string,
  *   tts_state: TaskState,
  *   tts_progress: number,
+ *   body_image_state: TaskState,
+ *   body_image_progress: number,
+ *   body_image_phase: string,
+ *   body_image_last_log: string,
+ *   body_image_started_at: string,
+ *   body_image_heartbeat_at: string,
+ *   body_image_error: string,
+ *   source_draft_state: TaskState,
+ *   source_draft_progress: number,
+ *   source_draft_phase: string,
+ *   source_draft_last_log: string,
+ *   source_draft_started_at: string,
+ *   source_draft_heartbeat_at: string,
+ *   source_draft_error: string,
+ *   autopilot_state: AutopilotState,
+ *   autopilot_progress: number,
+ *   autopilot_phase: string,
+ *   autopilot_last_log: string,
+ *   autopilot_error: string,
+ *   autopilot_job_id: string,
+ *   autopilot_started_at: string,
+ *   autopilot_heartbeat_at: string,
+ *   autopilot_last_error_code: string,
+ *   autopilot_debug_summary: string,
+ *   autopilot_wait_started_at: string,
+ *   autopilot_retry_count: number,
  *   render_state: TaskState,
  *   render_progress: number,
  *   render_phase: string,
@@ -146,6 +452,8 @@
  *   media_upload_total: number,
  *   media_upload_error: string,
  *   thumbnail_file: string,
+ *   visual_relevance_rows?: VisualRelevanceRow[],
+ *   visual_relevance_summary?: VisualRelevanceSummary,
  *   subtitle_style: SubtitleStyle,
  *   kenburns_enabled: boolean,
  *   bgm_file: string,
@@ -342,6 +650,32 @@ function estimateSentenceCount(script) {
 }
 
 /**
+ * @param {string} region
+ * @returns {Region}
+ */
+function normalizeRegion(region) {
+  if (region === "intro" || region === "bible") {
+    return region;
+  }
+  return "body";
+}
+
+/**
+ * @param {Project} project
+ * @returns {RegionalSentence[]}
+ */
+function effectiveRegionalSentences(project) {
+  if (project.regional_sentences.length > 0) {
+    return project.regional_sentences;
+  }
+  return project.sentences.map((text, index) => ({
+    idx: index,
+    text,
+    region: "body",
+  }));
+}
+
+/**
  * @param {string} name
  * @returns {MediaKind}
  */
@@ -428,6 +762,29 @@ function readableTaskState(state) {
 }
 
 /**
+ * @param {AutopilotState} state
+ * @returns {string}
+ */
+function readableAutopilotState(state) {
+  switch (state) {
+    case "queued":
+      return "대기 중";
+    case "running":
+      return "진행 중";
+    case "paused":
+      return "일시정지";
+    case "done":
+      return "완료";
+    case "error":
+      return "오류";
+    case "canceled":
+      return "중단됨";
+    default:
+      return "대기";
+  }
+}
+
+/**
  * @param {string} phase
  * @returns {string}
  */
@@ -456,6 +813,44 @@ function readableRenderPhase(phase) {
     done: "렌더 완료",
   };
   return labels[phase] || phase;
+}
+
+/**
+ * @param {string} phase
+ * @returns {string}
+ */
+function readableImagePhase(phase) {
+  /** @type {Record<string, string>} */
+  const labels = {
+    "": "",
+    queued: "대기 중",
+    wait_gpu: "GPU 대기",
+    submit: "ComfyUI 제출",
+    poll_history: "결과 대기",
+    import_media: "미디어 가져오기",
+    refresh_plans: "플랜 재구성",
+    done: "완료",
+    done_with_plan_warning: "완료(플랜 경고)",
+    done_with_operator_warning: "완료(운영자 확인 필요)",
+  };
+  return labels[phase] || phase;
+}
+
+/**
+ * @param {VisualRelevanceState} state
+ * @returns {string}
+ */
+function readableVisualRelevanceState(state) {
+  switch (state) {
+    case "pass":
+      return "PASS";
+    case "stale":
+      return "STALE";
+    case "missing":
+      return "MISSING";
+    default:
+      return state;
+  }
 }
 
 /**
@@ -569,12 +964,24 @@ function populateVoiceSelect() {
 
 /** @type {Project | null} */
 let current = null;
+/** @type {AutopilotDebugSnapshot | null} */
+let autopilotDebugSnapshot = null;
 /** @type {number | null} */
 let pollTimer = null;
+/** @type {number | null} */
+let operatorPollTimer = null;
 /** @type {string | null} */
 let selectedMediaName = null;
 /** @type {string | null} */
 let draggingMediaName = null;
+/** @type {FlowPromptManifest | null} */
+let flowPromptManifest = null;
+/** @type {SceneCard[]} */
+let sceneCards = [];
+/** @type {number | null} */
+let pendingFlowAssetSentenceIdx = null;
+/** @type {Array<Record<string, unknown>>} */
+let simplePromptItems = [];
 /** @type {MediaClientState} */
 let mediaClientState = {
   phase: "idle",
@@ -605,6 +1012,7 @@ const DEFAULT_SUBTITLE_STYLE = {
 /** @type {TtsProfile} */
 const DEFAULT_TTS_PROFILE = {
   mode: "auto",
+  seed_mode: "per_sentence",
   language: "ko",
   instruct: "",
   speed: 1,
@@ -622,6 +1030,8 @@ let ttsPresetCatalog = null;
 let ttsFormDirtyAfterPreset = false;
 /** @type {TtsPreviewLock | null} */
 let lastTtsPreviewLock = null;
+/** @type {{ promptG: string, promptL: string }} */
+let manualPromptOverrides = { promptG: "", promptL: "" };
 const PLAY_RES_Y = 1080;
 const SUBTITLE_POSITION_CENTER_RATIO = {
   top: 0.12,
@@ -663,9 +1073,52 @@ const workflowTitle = /** @type {HTMLElement} */ (query("#wf-title"));
 const workflowId = /** @type {HTMLElement} */ (query("#wf-id"));
 const progressBar = /** @type {HTMLElement} */ (query("#progress-bar"));
 const progressLabel = /** @type {HTMLElement} */ (query("#progress-label"));
+const s1TabScript = /** @type {HTMLButtonElement} */ (query("#s1-tab-script"));
+const s1TabSource = /** @type {HTMLButtonElement} */ (query("#s1-tab-source"));
+const s1ScriptView = /** @type {HTMLElement} */ (query("#s1-script-view"));
+const s1SourceView = /** @type {HTMLElement} */ (query("#s1-source-view"));
 const scriptTitleInput = /** @type {HTMLInputElement} */ (query("#s1-title"));
+const contentModeSelect = /** @type {HTMLSelectElement} */ (query("#s1-content-mode"));
+const scriptModeHint = /** @type {HTMLElement} */ (query("#s1-mode-hint"));
 const scriptInput = /** @type {HTMLTextAreaElement} */ (query("#s1-script"));
 const scriptCount = /** @type {HTMLElement} */ (query("#s1-count"));
+const compiledPreview = /** @type {HTMLElement} */ (query("#s1-compiled-preview"));
+const regionList = /** @type {HTMLElement} */ (query("#s1-region-list"));
+const sourceUrlInput = /** @type {HTMLInputElement} */ (query("#s1-source-url"));
+const sourceKeywordInput = /** @type {HTMLInputElement} */ (query("#s1-source-keyword"));
+const sourceKeywordRunButton = /** @type {HTMLButtonElement} */ (query("#s1-source-keyword-run"));
+const sourceBraveStatus = /** @type {HTMLElement} */ (query("#s1-source-brave-status"));
+const sourceToneSelect = /** @type {HTMLSelectElement} */ (query("#s1-source-tone"));
+const sourceMinutesSelect = /** @type {HTMLSelectElement} */ (query("#s1-source-minutes"));
+sourceMinutesSelect.value = "auto";
+const sourceStructureSelect = /** @type {HTMLSelectElement} */ (query("#s1-source-structure"));
+const sourceNoteInput = /** @type {HTMLInputElement} */ (query("#s1-source-note"));
+const sourceAnalyzeButton = /** @type {HTMLButtonElement} */ (query("#s1-source-analyze"));
+const sourceClearButton = /** @type {HTMLButtonElement} */ (query("#s1-source-clear"));
+const sourceGenerateButton = /** @type {HTMLButtonElement} */ (query("#s1-source-generate"));
+const sourceRegenerateButton = /** @type {HTMLButtonElement} */ (query("#s1-source-regenerate"));
+const sourceRestoreButton = /** @type {HTMLButtonElement} */ (query("#s1-source-restore"));
+const sourceApplyButton = /** @type {HTMLButtonElement} */ (query("#s1-source-apply"));
+const sourceState = /** @type {HTMLElement} */ (query("#s1-source-state"));
+const sourceSummary = /** @type {HTMLElement} */ (query("#s1-source-summary"));
+const sourceFacts = /** @type {HTMLElement} */ (query("#s1-source-facts"));
+const sourceWarnings = /** @type {HTMLElement} */ (query("#s1-source-warnings"));
+const sourceModeBadge = /** @type {HTMLElement} */ (query("#s1-source-mode-badge"));
+const sourceRisk = /** @type {HTMLElement} */ (query("#s1-source-risk"));
+const sourceDraftPreview = /** @type {HTMLElement} */ (query("#s1-source-draft"));
+const sourceModeButtons = /** @type {HTMLButtonElement[]} */ (queryAll(".source-mode-btn"));
+const autopilotInputModeSelect = /** @type {HTMLSelectElement} */ (query("#autopilot-input-mode"));
+const autopilotImageCountInput = /** @type {HTMLInputElement} */ (query("#autopilot-image-count"));
+const autopilotRenderAfterPreflightSelect = /** @type {HTMLSelectElement} */ (query("#autopilot-render-after-preflight"));
+const autopilotDebugVerboseSelect = /** @type {HTMLSelectElement} */ (query("#autopilot-debug-verbose"));
+const autopilotStartButton = /** @type {HTMLButtonElement} */ (query("#autopilot-start"));
+const autopilotPauseButton = /** @type {HTMLButtonElement} */ (query("#autopilot-pause"));
+const autopilotResumeButton = /** @type {HTMLButtonElement} */ (query("#autopilot-resume"));
+const autopilotCancelButton = /** @type {HTMLButtonElement} */ (query("#autopilot-cancel"));
+const autopilotDebugRefreshButton = /** @type {HTMLButtonElement} */ (query("#autopilot-debug-refresh"));
+const autopilotStatePanel = /** @type {HTMLElement} */ (query("#autopilot-state"));
+const autopilotEventsPanel = /** @type {HTMLElement} */ (query("#autopilot-events"));
+const autopilotDebugPanel = /** @type {HTMLElement} */ (query("#autopilot-debug"));
 const dropzone = /** @type {HTMLElement} */ (query("#dropzone"));
 const fileInput = /** @type {HTMLInputElement} */ (query("#file-input"));
 const thumbnailUploadButton = /** @type {HTMLButtonElement} */ (query("#thumbnail-upload"));
@@ -689,6 +1142,51 @@ const mediaGrid = /** @type {HTMLElement} */ (query("#media-grid"));
 const mediaCount = /** @type {HTMLElement} */ (query("#media-count"));
 const mediaPreviewStage = /** @type {HTMLElement} */ (query("#media-preview-stage"));
 const mediaPreviewMeta = /** @type {HTMLElement} */ (query("#media-preview-meta"));
+const imageVisualModeSelect = /** @type {HTMLSelectElement} */ (query("#image-visual-mode"));
+const imageCheckpointInput = /** @type {HTMLInputElement} */ (query("#image-checkpoint"));
+const imageWidthInput = /** @type {HTMLInputElement} */ (query("#image-width"));
+const imageHeightInput = /** @type {HTMLInputElement} */ (query("#image-height"));
+const imageSeedInput = /** @type {HTMLInputElement} */ (query("#image-seed"));
+const imageLoraNameInput = /** @type {HTMLInputElement} */ (query("#image-lora-name"));
+const imageLoraStrengthInput = /** @type {HTMLInputElement} */ (query("#image-lora-strength"));
+const imageGenerationProfileSelect = /** @type {HTMLSelectElement} */ (query("#image-generation-profile"));
+const imageStylePresetSelect = /** @type {HTMLSelectElement} */ (query("#image-style-preset"));
+const imageSeedPolicySelect = /** @type {HTMLSelectElement} */ (query("#image-seed-policy"));
+const imageStyleReferenceInput = /** @type {HTMLInputElement} */ (query("#image-style-reference"));
+const imageStyleStrengthInput = /** @type {HTMLInputElement} */ (query("#image-style-strength"));
+const imageControlReferenceInput = /** @type {HTMLInputElement} */ (query("#image-control-reference"));
+const imageControlStrengthInput = /** @type {HTMLInputElement} */ (query("#image-control-strength"));
+const imageReferenceOptions = /** @type {HTMLDataListElement} */ (query("#image-reference-options"));
+const imageStyleReferenceHint = /** @type {HTMLElement} */ (query("#image-style-reference-hint"));
+const simplePromptAllButton = /** @type {HTMLButtonElement} */ (query("#simple-prompt-all"));
+const simpleLmstudioUnloadButton = /** @type {HTMLButtonElement} */ (query("#simple-lmstudio-unload"));
+const simpleCopyPromptsButton = /** @type {HTMLButtonElement} */ (query("#simple-copy-prompts"));
+const simpleImageGenerateButton = /** @type {HTMLButtonElement} */ (query("#simple-image-generate"));
+const simpleMediaState = /** @type {HTMLElement} */ (query("#simple-media-state"));
+const simplePromptList = /** @type {HTMLElement} */ (query("#simple-prompt-list"));
+const flowAspectRatioSelect = /** @type {HTMLSelectElement} */ (query("#flow-aspect-ratio"));
+const flowPromptsGenerateButton = /** @type {HTMLButtonElement} */ (query("#flow-prompts-generate"));
+const flowOpenButton = /** @type {HTMLButtonElement} */ (query("#flow-open"));
+const flowAssetInput = /** @type {HTMLInputElement} */ (query("#flow-asset-input"));
+const flowPromptList = /** @type {HTMLElement} */ (query("#flow-prompt-list"));
+const imageSentenceIdxInput = /** @type {HTMLInputElement} */ (query("#image-sentence-idx"));
+const imageBatchStartIdxInput = /** @type {HTMLInputElement} */ (query("#image-batch-start-idx"));
+const imageBatchCountInput = /** @type {HTMLInputElement} */ (query("#image-batch-count"));
+const imageVariantsPerSceneInput = /** @type {HTMLInputElement} */ (query("#image-variants-per-scene"));
+const imagePositivePromptInput = /** @type {HTMLTextAreaElement} */ (query("#image-positive-prompt"));
+const imageNegativePromptInput = /** @type {HTMLTextAreaElement} */ (query("#image-negative-prompt"));
+const imageGenSuggestButton = /** @type {HTMLButtonElement} */ (query("#image-gen-suggest"));
+const imageGenRunButton = /** @type {HTMLButtonElement} */ (query("#image-gen-run"));
+const imageGenBatchRunButton = /** @type {HTMLButtonElement} */ (query("#image-gen-batch-run"));
+const imageScenePlanRunButton = /** @type {HTMLButtonElement} */ (query("#image-scene-plan-run"));
+const imageRenderPlanRunButton = /** @type {HTMLButtonElement} */ (query("#image-render-plan-run"));
+const imageGenState = /** @type {HTMLElement} */ (query("#image-gen-state"));
+const sceneCardsRefreshButton = /** @type {HTMLButtonElement} */ (query("#scene-cards-refresh"));
+const sceneCardList = /** @type {HTMLElement} */ (query("#scene-card-list"));
+const imageRelevanceList = /** @type {HTMLElement} */ (query("#image-relevance-list"));
+const imageGenMappings = /** @type {HTMLElement} */ (query("#image-gen-mappings"));
+const imageScenePlanList = /** @type {HTMLElement} */ (query("#image-scene-plan-list"));
+const imageRenderPlanList = /** @type {HTMLElement} */ (query("#image-render-plan-list"));
 const voiceSelect = /** @type {HTMLSelectElement} */ (query("#s3-voice"));
 const ttsModeSelect = /** @type {HTMLSelectElement} */ (query("#s3-mode"));
 const ttsLanguageSelect = /** @type {HTMLSelectElement} */ (query("#s3-language"));
@@ -712,13 +1210,19 @@ const renderLogPanel = /** @type {HTMLElement} */ (query("#s4-log"));
 const renderVideo = /** @type {HTMLVideoElement} */ (query("#s4-video"));
 const preflightRunButton = /** @type {HTMLButtonElement} */ (query("#preflight-run"));
 const systemHealthRunButton = /** @type {HTMLButtonElement} */ (query("#system-health-run"));
+const renderReportRunButton = /** @type {HTMLButtonElement} */ (query("#render-report-run"));
+const operatorStatusRunButton = /** @type {HTMLButtonElement} */ (query("#operator-status-run"));
 const preflightResults = /** @type {HTMLElement} */ (query("#preflight-results"));
 const systemHealthResults = /** @type {HTMLElement} */ (query("#system-health-results"));
+const renderReportResults = /** @type {HTMLElement} */ (query("#render-report-results"));
+const operatorStatusResults = /** @type {HTMLElement} */ (query("#operator-status-results"));
 const featureKenburnsSelect = /** @type {HTMLSelectElement} */ (query("#feature-kenburns"));
 const featureBgmVolumeInput = /** @type {HTMLInputElement} */ (query("#feature-bgm-volume"));
 const featureBgmDuckingSelect = /** @type {HTMLSelectElement} */ (query("#feature-bgm-ducking"));
 const featureRenderLandscapeInput = /** @type {HTMLInputElement} */ (query("#feature-render-landscape"));
 const featureRenderShortsInput = /** @type {HTMLInputElement} */ (query("#feature-render-shorts"));
+const featureHyperframesOverlayInput = /** @type {HTMLInputElement} */ (query("#feature-hyperframes-overlay"));
+const featureHyperframesRequiredInput = /** @type {HTMLInputElement} */ (query("#feature-hyperframes-required"));
 const featureSaveButton = /** @type {HTMLButtonElement} */ (query("#feature-save"));
 const subtitleSaveButton = /** @type {HTMLButtonElement} */ (query("#subtitle-save"));
 const subtitleFontInput = /** @type {HTMLInputElement} */ (query("#subtitle-font"));
@@ -749,6 +1253,31 @@ const uploadLink = /** @type {HTMLElement} */ (query("#s5-link"));
 const uploadStatsPanel = /** @type {HTMLElement} */ (query("#s5-stats-panel"));
 const backButton = /** @type {HTMLButtonElement} */ (query("#back"));
 const cloneProjectButton = /** @type {HTMLButtonElement} */ (query("#clone-project"));
+
+/**
+ * @param {"projects" | "workflow"} view
+ * @returns {void}
+ */
+function show(view) {
+  viewProjects.hidden = view !== "projects";
+  viewWorkflow.hidden = view !== "workflow";
+  if (view === "workflow") {
+    showStep(1);
+  }
+  workflowNav.hidden = view !== "workflow";
+  navProjects.classList.toggle("active", view === "projects");
+}
+
+/**
+ * @param {"script" | "source"} mode
+ */
+function setS1Mode(mode) {
+  s1TabScript.classList.toggle("active", mode === "script");
+  s1TabSource.classList.toggle("active", mode === "source");
+  s1ScriptView.hidden = mode !== "script";
+  s1SourceView.hidden = mode !== "source";
+}
+
 const createButton = /** @type {HTMLButtonElement} */ (query("#btn-new"));
 const saveScriptButton = /** @type {HTMLButtonElement} */ (query("#s1-save"));
 const ttsRunButton = /** @type {HTMLButtonElement} */ (query("#s3-run"));
@@ -768,14 +1297,39 @@ function requireCurrent() {
 }
 
 /**
- * @param {"projects" | "workflow"} view
+ * @returns {string}
+ */
+function requestedProjectId() {
+  return new URL(window.location.href).searchParams.get("project") || "";
+}
+
+/**
+ * @returns {number}
+ */
+function requestedStep() {
+  const rawValue = new URL(window.location.href).searchParams.get("step") || "1";
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return 1;
+  }
+  return Math.max(1, Math.min(5, Math.trunc(parsed)));
+}
+
+/**
  * @returns {void}
  */
-function show(view) {
-  viewProjects.hidden = view !== "projects";
-  viewWorkflow.hidden = view !== "workflow";
-  workflowNav.hidden = view !== "workflow";
-  navProjects.classList.toggle("active", view === "projects");
+function syncUrlState() {
+  const url = new URL(window.location.href);
+  if (!current) {
+    url.searchParams.delete("project");
+    url.searchParams.delete("step");
+  } else {
+    url.searchParams.set("project", current.id);
+    const activeButton = stepButtons.find((button) => button.classList.contains("active"));
+    const activeStep = Number(activeButton?.dataset.step || "1");
+    url.searchParams.set("step", String(activeStep));
+  }
+  window.history.replaceState({}, "", url.toString());
 }
 
 /**
@@ -789,6 +1343,9 @@ function showStep(step) {
   stepButtons.forEach((button) => {
     button.classList.toggle("active", Number(button.dataset.step) === step);
   });
+  if (current) {
+    syncUrlState();
+  }
 }
 
 /**
@@ -799,6 +1356,7 @@ async function loadProjects() {
   const projectCards = /** @type {ProjectCard[]} */ (projects);
   projectsList.innerHTML = "";
   projectsEmpty.hidden = projectCards.length > 0;
+  const requestedId = requestedProjectId();
 
   for (const project of projectCards) {
     const card = document.createElement("article");
@@ -826,6 +1384,12 @@ async function loadProjects() {
     });
     projectsList.appendChild(card);
   }
+  if (requestedId) {
+    const requested = projectCards.find((project) => project.id === requestedId);
+    if (requested) {
+      await openProject(requested.id);
+    }
+  }
 }
 
 /**
@@ -849,18 +1413,27 @@ async function openProject(pid) {
   workflowTitle.textContent = current.title || "Untitled Project";
   workflowId.textContent = current.id;
   scriptTitleInput.value = current.title;
-  scriptInput.value = current.script;
+  contentModeSelect.value = current.content_mode || "standard";
+  scriptInput.value = current.user_script || current.script;
   uploadTitleInput.value = current.title || "";
   uploadDescInput.value = "";
   uploadTagsInput.value = "";
   uploadPrivacySelect.value = "private";
 
   renderScriptStats();
+  renderSourceDraft(current);
+  const initialMode = current.source_draft_query ? "source" : "script";
+  setS1Mode(initialMode);
+  renderAutopilot(current);
+  void renderBraveUsageStatus();
   renderMedia();
   renderThumbnail();
   renderBgmMeta();
   renderTtsProfileControls();
   renderFeatureControls();
+  renderImageGenPanel();
+  void loadSceneCards();
+  void loadFlowPrompts();
   renderLogPanel.textContent = formatRenderLog(
     current.render_state,
     current.render_phase,
@@ -875,15 +1448,428 @@ async function openProject(pid) {
   updateOutputVideo();
   updateProgressBar();
   updateStepMarks();
-  showStep(1);
+  showStep(pid === requestedProjectId() ? requestedStep() : 1);
+  syncUrlState();
   startPoll();
+  void refreshAutopilotDebug().catch(() => {
+    autopilotDebugSnapshot = null;
+    renderAutopilot(requireCurrent());
+  });
+  void runOperatorStatus().catch(() => {
+    // Ignore initial operator status failures.
+  });
 }
 
 /**
  * @returns {void}
  */
 function renderScriptStats() {
-  scriptCount.textContent = `문장 ${estimateSentenceCount(scriptInput.value)}개`;
+  const project = current;
+  if (!project) return;
+  const regionalSentences = project ? effectiveRegionalSentences(project) : [];
+  const sentenceCount = regionalSentences.length || estimateSentenceCount(scriptInput.value);
+  const bibleCount = regionalSentences.filter((sentence) => sentence.region === "bible").length;
+  scriptCount.textContent = bibleCount > 0
+    ? `문장 ${sentenceCount}개 | bible ${bibleCount}개`
+    : `문장 ${sentenceCount}개`;
+  scriptModeHint.textContent = contentModeSelect.value === "bible_longform"
+    ? "Bible Longform mode keeps the user script separate from the compiled script. Use region markers before saving."
+    : "Standard mode preserves the existing script-to-TTS flow.";
+  const isUnsavedScript = project
+    ? scriptInput.value !== (project.user_script || project.script || "")
+      || contentModeSelect.value !== (project.content_mode || "standard")
+    : true;
+  compiledPreview.textContent = isUnsavedScript
+    ? "Save the script to refresh compiled preview."
+    : (project?.compiled_script || project?.script || "");
+  regionList.innerHTML = "";
+  if (isUnsavedScript || !project || regionalSentences.length === 0) {
+    regionList.innerHTML = '<div class="muted">Save the script to see compiled regions.</div>';
+    return;
+  }
+  for (const sentence of regionalSentences) {
+    const region = normalizeRegion(sentence.region);
+    const row = document.createElement("div");
+    row.className = `region-row ${region}`;
+    row.innerHTML = `
+      <div class="region-badge">${escapeHtml(region)}</div>
+      <div class="region-text">${escapeHtml(sentence.text)}</div>
+    `;
+    regionList.appendChild(row);
+  }
+}
+
+/**
+ * @param {Project} project
+ * @returns {void}
+ */
+function renderSourceDraft(project) {
+  if (!project) return;
+  if (document.activeElement !== sourceUrlInput) {
+    sourceUrlInput.value = project.source_draft_input_mode === "url" ? project.source_draft_query || "" : "";
+  }
+  if (document.activeElement !== sourceKeywordInput) {
+    sourceKeywordInput.value = project.source_draft_input_mode === "keyword" ? project.source_draft_query || "" : "";
+  }
+  if (document.activeElement !== sourceNoteInput) {
+    sourceNoteInput.value = project.source_draft_regenerate_note || "";
+  }
+  sourceModeButtons.forEach((button) => {
+    button.classList.toggle("active", (button.dataset.mode || "") === (project.source_draft_regenerate_mode || ""));
+  });
+
+  if (project.source_draft_state === "queued") {
+    sourceState.textContent = "대본 초안 생성이 대기열에 등록되었습니다...";
+  } else if (project.source_draft_state === "running") {
+    const phase = project.source_draft_phase || "generate";
+    const phaseLabel = phase === "generate" ? "초안 생성 중" : phase;
+    sourceState.textContent = `${phaseLabel} ${project.source_draft_progress}%`;
+  } else if (project.source_draft_state === "error") {
+    sourceState.textContent = project.source_draft_error || "분석 중 오류가 발생했습니다.";
+  } else if (project.source_draft_state === "done") {
+    sourceState.textContent = `분석 완료 ${project.source_draft_progress}%`;
+  } else {
+    sourceState.textContent = "기사 URL을 넣고 분석하면 여기에서 source draft를 확인할 수 있습니다.";
+  }
+
+  const source = project.source_draft_sources[0];
+  if (!source) {
+    sourceSummary.innerHTML = '<div class="muted">아직 분석된 URL이 없습니다. 기사 URL을 입력해 주세요.</div>';
+    sourceFacts.innerHTML = '<div class="muted">fact note가 아직 없습니다.</div>';
+    sourceWarnings.innerHTML = '<div class="muted">안전 경고가 아직 없습니다.</div>';
+    sourceDraftPreview.textContent = "대본 초안을 생성하면 여기에서 검토할 수 있습니다.";
+    sourceModeBadge.textContent = "";
+    sourceRisk.textContent = "";
+    sourceGenerateButton.disabled = true;
+    sourceRegenerateButton.disabled = true;
+    sourceRestoreButton.disabled = true;
+    sourceApplyButton.disabled = true;
+    return;
+  }
+
+  const factItems = project.source_draft_fact_notes
+    .map((item) => `<li>${escapeHtml(item.note)}</li>`)
+    .join("");
+  const warningItems = project.source_draft_warnings
+    .map((item) => `<li>${escapeHtml(item)}</li>`)
+    .join("");
+  sourceSummary.innerHTML = `
+    <div class="source-summary-list">
+      ${project.source_draft_sources.map((item) => `
+        <div class="source-summary-item">
+          <div class="source-summary-top">
+            <strong>${escapeHtml(item.title || item.domain)}</strong>
+            <a href="${escapeHtml(item.final_url || item.url)}" target="_blank" rel="noreferrer">${escapeHtml(item.domain)}</a>
+          </div>
+          <div class="muted">단어 ${item.word_count}개 | ${escapeHtml(item.fetched_at || "")}</div>
+          <p>${escapeHtml(item.excerpt || "")}</p>
+        </div>
+      `).join("")}
+    </div>
+  `;
+  sourceFacts.innerHTML = factItems ? `<ol>${factItems}</ol>` : '<div class="muted">fact note가 아직 없습니다.</div>';
+  sourceWarnings.innerHTML = warningItems ? `<ul>${warningItems}</ul>` : '<div class="muted">안전 경고가 없습니다.</div>';
+  sourceDraftPreview.textContent = project.source_draft_script || "대본 초안을 생성하면 여기에서 검토할 수 있습니다.";
+  sourceModeBadge.textContent = project.source_draft_regenerate_mode
+    ? `Mode: ${project.source_draft_regenerate_mode}`
+    : "Mode: default";
+  sourceRisk.textContent = project.source_draft_script
+    ? `유사도 ${Math.round((project.source_draft_risk_score || 0) * 100)}% | ${project.source_draft_model || "-"}`
+    : "";
+  sourceGenerateButton.disabled = project.source_draft_sources.length === 0 || ["queued", "running"].includes(project.source_draft_state);
+  sourceRegenerateButton.disabled = project.source_draft_sources.length === 0 || ["queued", "running"].includes(project.source_draft_state);
+  sourceRestoreButton.disabled = !project.source_draft_previous_script;
+  sourceApplyButton.disabled = !project.source_draft_script;
+  sourceKeywordRunButton.disabled = ["queued", "running"].includes(project.source_draft_state);
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function renderBraveUsageStatus() {
+  try {
+    const status = /** @type {{month: string, used: number, remaining: number, limit: number}} */ (
+      await requestJson("/api/projects/_/source/brave/status")
+    );
+    sourceBraveStatus.textContent = `Brave 무료 검색 ${status.used}/${status.limit} | 이번 달 남은 ${status.remaining}건`;
+  } catch {
+    sourceBraveStatus.textContent = "Brave 사용량 정보를 불러오지 못했습니다.";
+  }
+}
+
+/**
+ * @returns {number | "auto"}
+ */
+function autopilotImageCountValue() {
+  const rawValue = autopilotImageCountInput.value.trim().toLowerCase();
+  if (!rawValue || rawValue === "auto") {
+    return "auto";
+  }
+  const parsed = Number(rawValue);
+  if (!Number.isFinite(parsed)) {
+    return "auto";
+  }
+  return Math.max(1, Math.min(48, Math.trunc(parsed)));
+}
+
+/**
+ * @returns {AutopilotOptions}
+ */
+function buildAutopilotPayload() {
+  return {
+    input_mode: /** @type {AutopilotInputMode} */ (autopilotInputModeSelect.value),
+    script: scriptInput.value,
+    url: sourceUrlInput.value.trim(),
+    keyword: sourceKeywordInput.value.trim(),
+    tone: sourceToneSelect.value || "documentary",
+    target_minutes: sourceMinutesSelect.value || "auto",
+    regenerate_mode: /** @type {SourceRegenerateMode} */ (sourceModeButtons.find((button) => button.classList.contains("active"))?.dataset.mode || ""),
+    visual_source_mode: /** @type {VisualSourceMode} */ (imageVisualModeSelect.value || "comfyui_auto"),
+    image_count: autopilotImageCountValue(),
+    render_after_preflight: autopilotRenderAfterPreflightSelect.value === "on",
+    debug_verbose: autopilotDebugVerboseSelect.value === "on",
+  };
+}
+
+/**
+ * @param {Project} project
+ * @returns {void}
+ */
+function renderAutopilot(project) {
+  if (!project) return;
+  const autopilotOptions = /** @type {Partial<AutopilotOptions>} */ (project.autopilot_options || {});
+  if (document.activeElement !== autopilotInputModeSelect) {
+    autopilotInputModeSelect.value = autopilotOptions.input_mode || autopilotInputModeSelect.value || "script";
+  }
+  if ("image_count" in autopilotOptions) {
+    const value = autopilotOptions.image_count;
+    autopilotImageCountInput.value = value === "auto" ? "auto" : String(value || "auto");
+  }
+  autopilotRenderAfterPreflightSelect.value = autopilotOptions.render_after_preflight === false ? "off" : "on";
+  autopilotDebugVerboseSelect.value = autopilotOptions.debug_verbose ? "on" : "off";
+
+  const summaryBits = [
+    `상태: ${readableAutopilotState(project.autopilot_state)}`,
+    `진행률: ${project.autopilot_progress}%`,
+    `단계: ${project.autopilot_phase || "-"}`,
+  ];
+  if (project.autopilot_last_error_code) {
+    summaryBits.push(`오류 코드: ${project.autopilot_last_error_code}`);
+  }
+  if (project.autopilot_debug_summary) {
+    summaryBits.push(`요약: ${project.autopilot_debug_summary}`);
+  }
+  const lastLine = project.autopilot_error || project.autopilot_last_log || "아직 오토파일럿 실행 기록이 없습니다.";
+  autopilotStatePanel.textContent = `${summaryBits.join(" | ")}\n${lastLine}`;
+
+  const isActive = project.autopilot_state === "queued" || project.autopilot_state === "running";
+  autopilotStartButton.disabled = isActive || project.autopilot_state === "paused";
+  autopilotPauseButton.disabled = !isActive;
+  autopilotResumeButton.disabled = project.autopilot_state !== "paused";
+  autopilotCancelButton.disabled = ["idle", "done", "error", "canceled"].includes(project.autopilot_state);
+
+  const events = autopilotDebugSnapshot?.recent_events || [];
+  if (events.length === 0) {
+    autopilotEventsPanel.innerHTML = "이벤트 로그가 아직 없습니다.";
+  } else {
+    autopilotEventsPanel.innerHTML = events.slice(-10).reverse().map((eventItem) => `
+      <div class="autopilot-event">
+        <div><strong>${escapeHtml(eventItem.phase || "-")}</strong> | ${escapeHtml(eventItem.level)} | ${escapeHtml(eventItem.ts)}</div>
+        <div>${escapeHtml(eventItem.message || "")}</div>
+      </div>
+    `).join("");
+  }
+
+  const debugSnapshot = autopilotDebugSnapshot;
+  autopilotDebugPanel.textContent = debugSnapshot
+    ? JSON.stringify(debugSnapshot, null, 2)
+    : "디버그 스냅샷이 아직 없습니다.";
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function refreshAutopilotDebug() {
+  const project = requireCurrent();
+  autopilotDebugSnapshot = /** @type {AutopilotDebugSnapshot} */ (await requestJson(`/api/projects/${project.id}/autopilot/debug`));
+  renderAutopilot(project);
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function startAutopilot() {
+  const project = requireCurrent();
+  const response = /** @type {{project: Project}} */ (
+    await requestJson(`/api/projects/${project.id}/autopilot/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildAutopilotPayload()),
+    })
+  );
+  current = response.project;
+  renderAutopilot(current);
+  await refreshAutopilotDebug();
+}
+
+/**
+ * @param {"pause" | "resume" | "cancel"} action
+ * @returns {Promise<void>}
+ */
+async function updateAutopilotState(action) {
+  const project = requireCurrent();
+  const response = /** @type {{project: Project}} */ (
+    await requestJson(`/api/projects/${project.id}/autopilot/${action}`, {
+      method: "POST",
+      body: new FormData(),
+    })
+  );
+  current = response.project;
+  renderAutopilot(current);
+  await refreshAutopilotDebug();
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function analyzeSourceUrl() {
+  const project = requireCurrent();
+  const url = sourceUrlInput.value.trim();
+  if (!url) {
+    toast("기사 URL을 먼저 입력해 주세요.");
+    return;
+  }
+  sourceAnalyzeButton.disabled = true;
+  sourceState.textContent = "URL 본문을 분석하는 중입니다...";
+  try {
+    current = /** @type {Project} */ (
+      await requestJson(`/api/projects/${project.id}/source/url/analyze`, {
+        method: "POST",
+        body: formDataFromObject({ url }),
+      })
+    );
+    renderSourceDraft(current);
+    toast("URL 분석이 완료되었습니다.");
+  } finally {
+    sourceAnalyzeButton.disabled = false;
+  }
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function collectSourceKeyword() {
+  const project = requireCurrent();
+  const keyword = sourceKeywordInput.value.trim();
+  if (!keyword) {
+    toast("키워드를 먼저 입력해 주세요.");
+    return;
+  }
+  sourceKeywordRunButton.disabled = true;
+  sourceState.textContent = "키워드 검색 결과를 수집하는 중입니다...";
+  try {
+    current = /** @type {Project} */ (
+      await requestJson(`/api/projects/${project.id}/source/keyword/collect`, {
+        method: "POST",
+        body: formDataFromObject({ keyword }),
+      })
+    );
+    renderSourceDraft(current);
+    await renderBraveUsageStatus();
+    toast("키워드 리서치 수집이 완료되었습니다.");
+  } finally {
+    sourceKeywordRunButton.disabled = false;
+  }
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function clearSourceDraft() {
+  const project = requireCurrent();
+  current = /** @type {Project} */ (await requestJson(`/api/projects/${project.id}/source/draft`, { method: "DELETE" }));
+  renderSourceDraft(current);
+  toast("Source draft를 비웠습니다.");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function generateSourceScript() {
+  const project = requireCurrent();
+  if (project.source_draft_sources.length === 0) {
+    toast("먼저 기사 URL을 분석해 주세요.");
+    return;
+  }
+  const selectedModeButton = sourceModeButtons.find((button) => button.classList.contains("active"));
+  const selectedMode = selectedModeButton ? (selectedModeButton.dataset.mode || "") : "";
+  sourceGenerateButton.disabled = true;
+  sourceRegenerateButton.disabled = true;
+  sourceState.textContent = "대본 초안을 생성하는 중입니다...";
+  try {
+    current = /** @type {Project} */ (
+      await requestJson(`/api/projects/${project.id}/source/script/generate`, {
+        method: "POST",
+        body: formDataFromObject({
+          tone: sourceToneSelect.value,
+          target_minutes: sourceMinutesSelect.value,
+          language: "ko",
+          mode: selectedMode,
+          note: sourceNoteInput.value.trim(),
+          script_structure: sourceStructureSelect.value || "hpsl",
+        }),
+      })
+    );
+    renderSourceDraft(current);
+    toast("대본 초안 생성을 대기열에 등록했습니다.");
+  } finally {
+    sourceGenerateButton.disabled = false;
+    sourceRegenerateButton.disabled = false;
+  }
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function applySourceScript() {
+  const project = requireCurrent();
+  if (!project.source_draft_script) {
+    toast("적용할 대본 초안이 없습니다.");
+    return;
+  }
+  current = /** @type {Project} */ (
+    await requestJson(`/api/projects/${project.id}/source/script/apply`, {
+      method: "POST",
+      body: new FormData(),
+    })
+  );
+  scriptInput.value = current.user_script || current.script || "";
+  contentModeSelect.value = current.content_mode || "standard";
+  renderScriptStats();
+  renderSourceDraft(current);
+  updateProgressBar();
+  updateStepMarks();
+  setS1Mode("script");
+  toast("대본 초안을 Step 1 스크립트에 적용했습니다.");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function restorePreviousSourceScript() {
+  const project = requireCurrent();
+  if (!project.source_draft_previous_script) {
+    toast("복원할 이전 초안이 없습니다.");
+    return;
+  }
+  current = /** @type {Project} */ (
+    await requestJson(`/api/projects/${project.id}/source/script/restore-previous`, {
+      method: "POST",
+      body: new FormData(),
+    })
+  );
+  renderSourceDraft(current);
+  toast("이전 초안으로 복원했습니다.");
 }
 
 /**
@@ -923,7 +1909,7 @@ function updateTtsEffectiveProfile() {
   const canonicalId = canonicalVoicePresetId(voiceSelect.value);
   const profile = readTtsProfileInputs();
   ttsEffectiveProfile.textContent =
-    `Effective: ${canonicalId} | mode=${profile.mode} | language=${profile.language} | ` +
+    `Effective: ${canonicalId} | mode=${profile.mode} | seed_mode=${profile.seed_mode} | language=${profile.language} | ` +
     `instruct="${profile.instruct || "(none)"}" | speed=${profile.speed} | ` +
     `num_step=${profile.num_step} | guidance=${profile.guidance_scale}`;
   ttsDirtyBadge.hidden = !ttsFormDirtyAfterPreset;
@@ -936,6 +1922,7 @@ function readTtsProfileInputs() {
   const durationValue = ttsDurationInput.value.trim();
   return {
     mode: /** @type {TtsMode} */ (ttsModeSelect.value === "design" ? "design" : "auto"),
+    seed_mode: "per_sentence",
     language: ttsLanguageSelect.value,
     instruct: ttsInstructInput.value.trim(),
     speed: numberInRange(ttsSpeedInput.value, DEFAULT_TTS_PROFILE.speed, 0.75, 1.25),
@@ -1008,6 +1995,7 @@ function setUploadControlsDisabled(disabled) {
  */
 function renderMediaUploadStatus() {
   const project = current;
+  if (!project) return;
   const workflowPercent = project
     ? [
         project.sentences.length > 0,
@@ -1069,8 +2057,477 @@ function renderMediaUploadStatus() {
 /**
  * @returns {void}
  */
+function renderSimpleMediaPanel() {
+  const project = requireCurrent();
+  if (!project) return;
+  const options = /** @type {Record<string, unknown>} */ (project.body_image_options || {});
+  const promptCount = Number(options.simple_media_prompt_count || 0);
+  const unload = /** @type {Record<string, unknown>} */ (options.simple_media_lmstudio_unload || {});
+  const unloadOk = unload.ok === true;
+  const isBusy = project.body_image_state === "queued" || project.body_image_state === "running";
+  simplePromptAllButton.disabled = isBusy || project.sentences.length === 0;
+  simpleLmstudioUnloadButton.disabled = isBusy || promptCount <= 0;
+  simpleCopyPromptsButton.disabled = simplePromptItems.length === 0;
+  simpleImageGenerateButton.disabled = isBusy || promptCount <= 0 || !unloadOk;
+
+  const statusParts = [];
+  statusParts.push(promptCount > 0 ? `프롬프트 ${promptCount}개 생성됨` : "프롬프트 미생성");
+  if (promptCount > 0) {
+    statusParts.push(unloadOk ? "LM Studio 종료/언로드 확인됨" : "LM Studio 종료 필요");
+  }
+  if (project.body_image_last_log) {
+    statusParts.push(project.body_image_last_log);
+  }
+  simpleMediaState.textContent = statusParts.join(" | ");
+  simpleMediaState.className = unloadOk ? "card ok" : promptCount > 0 ? "card warn" : "muted";
+
+  if (simplePromptItems.length === 0) {
+    simplePromptList.innerHTML = '<div class="muted">전체 이미지 프롬프트 생성 후 문장별 프롬프트가 여기에 표시됩니다.</div>';
+    return;
+  }
+  simplePromptList.innerHTML = simplePromptItems.map((item) => {
+    const idx = Number(item.sentence_idx || 0);
+    const sentence = String(item.sentence || "");
+    const prompt = String(item.positive_prompt || "");
+    const negative = String(item.negative_prompt || "");
+    return `
+      <article class="image-gen-mapping-item">
+        <div class="image-gen-mapping-body">
+          <div><strong>문장 ${idx + 1}</strong>: ${escapeHtml(sentence)}</div>
+          <div><strong>프롬프트</strong>: ${escapeHtml(prompt)}</div>
+          <div class="muted"><strong>Negative</strong>: ${escapeHtml(negative)}</div>
+          <div class="row"><button class="btn" type="button" data-simple-copy-prompt="${idx}">복사</button></div>
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+/**
+ * @returns {void}
+ */
+function renderImageGenPanel() {
+  const project = requireCurrent();
+  if (!project) return;
+  imageVisualModeSelect.value = project.visual_source_mode || "upload_only";
+  imageGenRunButton.disabled = project.body_image_state === "queued" || project.body_image_state === "running";
+  imageGenBatchRunButton.disabled = imageGenRunButton.disabled;
+  syncImageReferenceOptions();
+  syncImageProfileUi();
+  renderSimpleMediaPanel();
+
+  let statusText = `상태: ${readableTaskState(project.body_image_state)} ${project.body_image_progress}%`;
+  if (project.body_image_phase) {
+    statusText += ` | 단계: ${readableImagePhase(project.body_image_phase)}`;
+  }
+  if (project.body_image_error) {
+    statusText += ` | 오류: ${project.body_image_error}`;
+  } else if (project.body_image_last_log) {
+    statusText += ` | 로그: ${project.body_image_last_log}`;
+  }
+  imageGenState.textContent = statusText;
+  imageGenState.className = project.body_image_state === "error"
+    ? "card error"
+    : project.body_image_state === "done"
+      ? "card ok"
+      : project.body_image_state === "queued" || project.body_image_state === "running"
+        ? "card warn"
+        : "card muted";
+
+  if (!imagePositivePromptInput.value.trim()) {
+    const sentence = project.sentences[Number(imageSentenceIdxInput.value) || 0] || project.sentences[0] || "";
+    imagePositivePromptInput.value = sentence;
+  }
+  imageBatchStartIdxInput.value = imageBatchStartIdxInput.value || imageSentenceIdxInput.value || "0";
+  if (imageGenerationProfileSelect.value === "sdxl_style_reference" && !imageStyleReferenceInput.value.trim()) {
+    imageStyleReferenceInput.value = preferredStyleReferenceValue();
+  }
+  if (imageGenerationProfileSelect.value === "sdxl_controlnet_depth" && !imageControlReferenceInput.value.trim()) {
+    imageControlReferenceInput.value = preferredControlImageValue();
+  }
+
+  const relevanceRows = project.visual_relevance_rows || [];
+  const relevanceSummary = project.visual_relevance_summary || {
+    total: relevanceRows.length,
+    pass_count: relevanceRows.filter((item) => item.status === "pass").length,
+    stale_count: relevanceRows.filter((item) => item.status === "stale").length,
+    missing_count: relevanceRows.filter((item) => item.status === "missing").length,
+  };
+  if (project.visual_source_mode !== "comfyui_auto") {
+    imageRelevanceList.innerHTML = '<div class="muted">현재 visual mode에서는 generated-image relevance 상태를 표시하지 않습니다.</div>';
+  } else if (relevanceRows.length === 0) {
+    imageRelevanceList.innerHTML = '<div class="muted">아직 relevance 상태를 계산할 생성 이미지가 없습니다.</div>';
+  } else {
+    const summaryChips = `
+      <div class="image-relevance-summary">
+        <span class="chip">총 ${relevanceSummary.total}</span>
+        <span class="chip image-relevance-chip pass">PASS ${relevanceSummary.pass_count}</span>
+        <span class="chip image-relevance-chip stale">STALE ${relevanceSummary.stale_count}</span>
+        <span class="chip image-relevance-chip missing">MISSING ${relevanceSummary.missing_count}</span>
+      </div>
+    `;
+    imageRelevanceList.innerHTML = summaryChips + relevanceRows.map((item) => `
+      <article class="image-relevance-item ${escapeHtml(item.status)}">
+        <div class="image-relevance-top">
+          <strong>문장 ${item.sentence_idx}</strong>
+          <span class="chip image-relevance-chip ${escapeHtml(item.status)}">${readableVisualRelevanceState(item.status)}</span>
+        </div>
+        <div class="image-relevance-text">${escapeHtml(item.sentence_text)}</div>
+        <div class="muted">${escapeHtml(item.reason)}</div>
+        <div class="image-relevance-meta">
+          <span><strong>파일</strong>: ${escapeHtml(item.path || "(미연결)")}</span>
+          <span><strong>코드</strong>: ${item.issue_codes.length > 0 ? escapeHtml(item.issue_codes.join(", ")) : "정상"}</span>
+        </div>
+      </article>
+    `).join("");
+  }
+
+  if (project.body_image_mappings.length === 0) {
+    imageGenMappings.innerHTML = '<div class="muted">아직 생성된 장면 매핑이 없습니다.</div>';
+  } else {
+    imageGenMappings.innerHTML = project.body_image_mappings.map((item) => {
+      const mediaUrl = `/api/projects/${project.id}/media/${encodeURIComponent(item.path)}`;
+      const review = candidateReviewForSentence(item.sentence_idx);
+      const visionIssueCodes = Array.isArray(review.vision_qa_issue_codes) ? review.vision_qa_issue_codes.join(", ") : "";
+      const styleReason = typeof review.style_consistency_reason === "string" ? review.style_consistency_reason : "";
+      const visionReason = typeof review.vision_qa_reason === "string" ? review.vision_qa_reason : "";
+      const repairIssueCodeLabels = Array.isArray(review.repair_issue_codes)
+        ? review.repair_issue_codes.map((code) => readableIssueCode(String(code))).join(" | ")
+        : "";
+      const repairReason = typeof review.repair_reason === "string" ? review.repair_reason : "";
+      const suggestedRepairReason = typeof review.suggested_repair_reason === "string" ? review.suggested_repair_reason : "";
+      const suggestedPromptG = previewText(review.suggested_prompt_g, 120);
+      const suggestedPromptL = previewText(review.suggested_prompt_l, 120);
+      const currentNegativePrompt = previewText(review.current_negative_prompt, 100);
+      const suggestedNegativePrompt = previewText(review.suggested_negative_prompt, 100);
+      const fallbackDowngradeApplied = review.fallback_downgrade_applied === true;
+      const fallbackDowngradeReason = typeof review.fallback_downgrade_reason === "string" ? review.fallback_downgrade_reason : "";
+      const operatorInterventionRequired = review.operator_intervention_required === true;
+      const operatorInterventionReason = typeof review.operator_intervention_reason === "string" ? review.operator_intervention_reason : "";
+      const repairState = review.repair_attempted === true
+        ? "retry executed"
+        : (repairReason ? "retry skipped" : "none");
+      const repairSummary = repairReason
+        ? `${repairState} | ${readableRepairReason(repairReason)}${repairIssueCodeLabels ? ` | ${repairIssueCodeLabels}` : ""}`
+        : "none";
+      const operatorSummary = operatorInterventionRequired
+        ? `<div><strong>Operator</strong>: ${escapeHtml(readableOperatorInterventionReason(operatorInterventionReason))}</div>`
+        : "";
+      const fallbackSummary = fallbackDowngradeApplied
+        ? `<div><strong>Fallback 강등</strong>: ${escapeHtml(readableRepairReason("fallback_downgrade"))}${fallbackDowngradeReason ? ` | ${escapeHtml(fallbackDowngradeReason)}` : ""}</div>`
+        : "";
+      const suggestionSummary = suggestedRepairReason
+        ? `
+            <div><strong>Suggested Fix</strong>: ${escapeHtml(readableRepairReason(suggestedRepairReason))}</div>
+            ${suggestedPromptG ? `<div class="muted"><strong>Prompt G</strong>: ${escapeHtml(suggestedPromptG)}</div>` : ""}
+            ${suggestedPromptL && suggestedPromptL !== suggestedPromptG ? `<div class="muted"><strong>Prompt L</strong>: ${escapeHtml(suggestedPromptL)}</div>` : ""}
+            ${(currentNegativePrompt || suggestedNegativePrompt) ? `<div class="muted"><strong>Negative</strong>: ${escapeHtml(currentNegativePrompt || "(empty)")}${suggestedNegativePrompt ? ` -> ${escapeHtml(suggestedNegativePrompt)}` : ""}</div>` : ""}
+            <div class="row"><button class="btn" type="button" data-action="apply-repair-suggestion" data-sentence-idx="${item.sentence_idx}">Apply Suggestion</button></div>
+          `
+        : "";
+      return `
+        <article class="image-gen-mapping-item">
+          <div class="image-gen-mapping-preview">
+            <img src="${escapeHtml(buildMediaUrl(mediaUrl))}" alt="${escapeHtml(item.path)}">
+          </div>
+          <div class="image-gen-mapping-body">
+            <div><strong>문장</strong>: ${item.sentence_idx}</div>
+            <div><strong>파일</strong>: ${escapeHtml(item.path)}</div>
+            <div><strong>선택</strong>: ${escapeHtml(String(item.selected_reason || "legacy"))}</div>
+            <div><strong>후보</strong>: ${item.candidate_index ? `${item.candidate_index} / ${item.candidate_total || 1}` : "1 / 1"}</div>
+            <div><strong>후보 점수</strong>: ${readableScore(item.candidate_score)}</div>
+            <div><strong>Vision QA</strong>: ${readableScore(review.vision_qa_score)}${visionIssueCodes ? ` | ${escapeHtml(visionIssueCodes)}` : ""}</div>
+            <div><strong>Style 일관성</strong>: ${readableScore(review.style_consistency_score)}</div>
+            <div><strong>QA 메모</strong>: ${escapeHtml(visionReason || styleReason || "추가 이슈 없음")}</div>
+            <div><strong>Repair</strong>: ${escapeHtml(repairSummary)}</div>
+            ${fallbackSummary}
+            ${operatorSummary}
+            ${suggestionSummary}
+            <div><strong>프롬프트</strong>: ${escapeHtml(item.prompt || "")}</div>
+          </div>
+        </article>
+      `;
+    }).join("");
+  }
+
+  if (!project.scene_plan || project.scene_plan.scenes.length === 0) {
+    imageScenePlanList.innerHTML = '<div class="muted">아직 scene plan 이 없습니다.</div>';
+    return;
+  }
+  imageScenePlanList.innerHTML = project.scene_plan.scenes.map((scene) => `
+    <article class="image-scene-plan-item">
+      <div><strong>Scene ${scene.idx}</strong> | 문장 ${scene.sentence_idx} | ${escapeHtml(scene.region)} | ${scene.duration_sec.toFixed(1)}s</div>
+      <div><strong>의도</strong>: ${escapeHtml(scene.visual_intent)}</div>
+      <div><strong>프롬프트</strong>: ${escapeHtml(scene.prompt)}</div>
+      <div><strong>미디어</strong>: ${escapeHtml(scene.media_path || "(미연결)")}</div>
+      <div><strong>스타일</strong>: ${escapeHtml(scene.style)}</div>
+    </article>
+  `).join("");
+
+  if (!project.render_plan || !project.render_plan.segments || project.render_plan.segments.length === 0) {
+    imageRenderPlanList.innerHTML = '<div class="muted">아직 render plan 이 없습니다.</div>';
+    return;
+  }
+  const renderPlan = /** @type {RenderPlan} */ (project.render_plan);
+  imageRenderPlanList.innerHTML = renderPlan.segments.map(
+    /** @param {{ region: Region, start: number, end: number, media: { path: string, kind: MediaKind }[], motion: string, effect: string, caption_style: string }} segment
+     *  @param {number} index
+     */
+    (segment, index) => `
+    <article class="image-scene-plan-item">
+      <div><strong>Segment ${index + 1}</strong> | ${escapeHtml(segment.region)} | ${segment.start.toFixed(1)}s - ${segment.end.toFixed(1)}s</div>
+      <div><strong>미디어</strong>: ${segment.media.length > 0 ? segment.media.map(
+        /** @param {{ path: string, kind: MediaKind }} item */
+        (item) => escapeHtml(item.path),
+      ).join(", ") : "(미연결)"}</div>
+      <div><strong>모션</strong>: ${escapeHtml(segment.motion)} | <strong>효과</strong>: ${escapeHtml(segment.effect)} | <strong>자막</strong>: ${escapeHtml(segment.caption_style)}</div>
+    </article>
+  `).join("");
+}
+
+/**
+ * @param {string} value
+ * @returns {string}
+ */
+function sceneCardChip(value) {
+  return value ? `<span class="chip">${escapeHtml(value)}</span>` : "";
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function loadSceneCards() {
+  const project = requireCurrent();
+  sceneCardsRefreshButton.disabled = true;
+  try {
+    sceneCards = /** @type {SceneCard[]} */ (await requestJson(`/api/projects/${project.id}/scene-cards`));
+    renderSceneCards();
+  } finally {
+    sceneCardsRefreshButton.disabled = false;
+  }
+}
+
+/**
+ * @returns {void}
+ */
+function renderSceneCards() {
+  const project = requireCurrent();
+  if (sceneCards.length === 0) {
+    sceneCardList.innerHTML = '<div class="muted">대본을 저장하면 문장별 장면 카드가 여기에 표시됩니다.</div>';
+    return;
+  }
+  sceneCardList.innerHTML = sceneCards.map((card) => {
+    const visualUrl = card.visual_asset_path
+      ? `/api/projects/${project.id}/media/${encodeURIComponent(card.visual_asset_path)}`
+      : "";
+    const voiceUrl = card.voice_asset_path
+      ? `/api/projects/${project.id}/tts/${encodeURIComponent(card.voice_asset_path)}`
+      : "";
+    const subtitleState = card.subtitle_override ? "자막 개별설정" : "전체 자막";
+    return `
+      <article class="scene-card ${card.locked ? "locked" : ""}" data-sentence-idx="${card.sentence_idx}">
+        <div class="scene-card-preview">
+          ${visualUrl ? `<img src="${escapeHtml(buildMediaUrl(visualUrl))}" alt="${escapeHtml(card.visual_asset_path)}">` : '<div class="scene-card-empty">No image</div>'}
+        </div>
+        <div class="scene-card-body">
+          <div class="row between scene-card-title">
+            <strong>${escapeHtml(card.scene_id)} · 문장 ${card.sentence_idx + 1}</strong>
+            <label class="scene-lock-row"><input type="checkbox" data-scene-action="lock" ${card.locked ? "checked" : ""}> Lock</label>
+          </div>
+          <div class="scene-card-text">${escapeHtml(card.text)}</div>
+          <div class="scene-card-meta">
+            ${sceneCardChip(card.region)}
+            ${sceneCardChip(`${card.duration_sec.toFixed(1)}s`)}
+            ${sceneCardChip(card.flow_status || "flow 미생성")}
+            ${sceneCardChip(subtitleState)}
+          </div>
+          <div class="scene-card-assets">
+            <span><strong>음성</strong>: ${voiceUrl ? `<audio src="${escapeHtml(buildMediaUrl(voiceUrl))}" controls preload="none"></audio>` : "미생성"}</span>
+            <span><strong>이미지</strong>: ${escapeHtml(card.visual_asset_path || "미연결")}</span>
+          </div>
+          <div class="scene-card-controls">
+            <label>움직임
+              <select data-scene-action="motion">
+                ${sceneMotionOptions(card.motion)}
+              </select>
+            </label>
+            <button class="btn" type="button" data-scene-action="subtitle-large">큰 자막</button>
+            <button class="btn" type="button" data-scene-action="subtitle-clear" ${card.subtitle_override ? "" : "disabled"}>개별 자막 해제</button>
+          </div>
+          ${card.warnings.length ? `<div class="scene-card-warnings">${card.warnings.map((warning) => `<span>${escapeHtml(warning)}</span>`).join("")}</div>` : ""}
+        </div>
+      </article>
+    `;
+  }).join("");
+}
+
+/**
+ * @param {string} selected
+ * @returns {string}
+ */
+function sceneMotionOptions(selected) {
+  const options = [
+    ["none", "움직임 없음"],
+    ["slow_zoom_in", "보통 움직임"],
+    ["slow_zoom_out", "느린 축소"],
+    ["pan_left", "좌측 이동"],
+    ["pan_right", "우측 이동"],
+    ["pan_up", "위로 이동"],
+    ["pan_down", "아래로 이동"],
+    ["parallax_light", "입체감"],
+    ["push_in_fade", "확대+페이드"],
+    ["documentary_hold", "다큐 고정"],
+    ["beat_cut", "비트 컷"],
+    ["still_locked", "완전 고정"],
+  ];
+  return options.map(([value, label]) => (
+    `<option value="${value}" ${value === selected ? "selected" : ""}>${label}</option>`
+  )).join("");
+}
+
+/**
+ * @param {number} sentenceIdx
+ * @param {Record<string, unknown>} patch
+ * @returns {Promise<void>}
+ */
+async function patchSceneCard(sentenceIdx, patch) {
+  const project = requireCurrent();
+  const updatedCard = /** @type {SceneCard} */ (await requestJson(`/api/projects/${project.id}/scene-cards/${sentenceIdx}`, {
+    method: "PATCH",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(patch),
+  }));
+  sceneCards = sceneCards.map((card) => (card.sentence_idx === sentenceIdx ? updatedCard : card));
+  renderSceneCards();
+}
+
+/**
+ * @param {FlowPromptManifest | null} manifest
+ * @returns {void}
+ */
+function renderFlowPromptList(manifest) {
+  if (!manifest || manifest.entries.length === 0) {
+    flowPromptList.innerHTML = '<div class="muted">Flow 프롬프트를 생성하면 문장별 작업 큐가 여기에 표시됩니다.</div>';
+    return;
+  }
+  flowAspectRatioSelect.value = manifest.aspect_ratio || "9:16";
+  flowPromptList.innerHTML = manifest.entries.map((entry) => `
+    <article class="image-gen-mapping-item">
+      <div class="image-gen-mapping-body">
+        <div class="row between">
+          <strong>문장 ${entry.sentence_idx + 1} · ${escapeHtml(entry.section)}</strong>
+          <span class="chip">${escapeHtml(entry.status || "prompt_ready")}</span>
+        </div>
+        <div><strong>대본</strong>: ${escapeHtml(entry.narration)}</div>
+        <div><strong>핵심</strong>: ${escapeHtml(entry.core_keyword || "-")} | <strong>시각</strong>: ${escapeHtml(entry.visual_keyword || "-")}</div>
+        <textarea class="flow-prompt-text" rows="7" readonly>${escapeHtml(entry.prompt)}</textarea>
+        <div class="row">
+          <button class="btn" type="button" data-flow-action="copy" data-sentence-idx="${entry.sentence_idx}">프롬프트 복사</button>
+          <button class="btn" type="button" data-flow-action="attach" data-sentence-idx="${entry.sentence_idx}">Flow 결과 파일 첨부</button>
+          ${entry.asset_path ? `<span class="muted">연결됨: ${escapeHtml(entry.asset_path)}</span>` : '<span class="muted">아직 asset 없음</span>'}
+        </div>
+      </div>
+    </article>
+  `).join("");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function loadFlowPrompts() {
+  const project = requireCurrent();
+  try {
+    flowPromptManifest = /** @type {FlowPromptManifest} */ (await requestJson(`/api/flow/manifest/${project.id}`));
+  } catch {
+    flowPromptManifest = null;
+  }
+  renderFlowPromptList(flowPromptManifest);
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function generateFlowPrompts() {
+  const project = requireCurrent();
+  flowPromptsGenerateButton.disabled = true;
+  try {
+    flowPromptManifest = /** @type {FlowPromptManifest} */ (
+      await requestJson(`/api/flow/prompts/${project.id}`, {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          aspect_ratio: flowAspectRatioSelect.value || "9:16",
+          mode: "assisted",
+        }),
+      })
+    );
+    renderFlowPromptList(flowPromptManifest);
+    imageVisualModeSelect.value = "flow_assisted";
+    await saveFeatureSettings();
+    toast("Flow 프롬프트를 생성했습니다.");
+  } finally {
+    flowPromptsGenerateButton.disabled = false;
+  }
+}
+
+/**
+ * @param {number} sentenceIdx
+ * @returns {FlowPromptEntry | null}
+ */
+function flowEntryBySentence(sentenceIdx) {
+  if (!flowPromptManifest) return null;
+  return flowPromptManifest.entries.find((entry) => entry.sentence_idx === sentenceIdx) || null;
+}
+
+/**
+ * @param {number} sentenceIdx
+ * @returns {Promise<void>}
+ */
+async function copyFlowPrompt(sentenceIdx) {
+  const entry = flowEntryBySentence(sentenceIdx);
+  if (!entry) {
+    toast("복사할 Flow 프롬프트가 없습니다.");
+    return;
+  }
+  await navigator.clipboard.writeText(entry.prompt);
+  toast(`문장 ${sentenceIdx + 1} Flow 프롬프트를 복사했습니다.`);
+}
+
+/**
+ * @param {File | null} file
+ * @returns {Promise<void>}
+ */
+async function uploadFlowAsset(file) {
+  const project = requireCurrent();
+  if (!file || pendingFlowAssetSentenceIdx === null) {
+    return;
+  }
+  const entry = flowEntryBySentence(pendingFlowAssetSentenceIdx);
+  const form = new FormData();
+  form.append("file", file);
+  form.append("prompt", entry ? entry.prompt : "");
+  const response = /** @type {{project: Project, manifest: FlowPromptManifest}} */ (
+    await requestJson(`/api/flow/assets/${project.id}/${pendingFlowAssetSentenceIdx}`, {
+      method: "POST",
+      body: form,
+    })
+  );
+  current = response.project;
+  flowPromptManifest = response.manifest;
+  pendingFlowAssetSentenceIdx = null;
+  flowAssetInput.value = "";
+  renderFlowPromptList(flowPromptManifest);
+  renderMedia();
+  renderImageGenPanel();
+  toast("Flow 결과 파일을 문장 asset으로 연결했습니다.");
+}
+
+/**
+ * @returns {void}
+ */
 function renderMedia() {
   const project = requireCurrent();
+  if (!project) return;
   if (project.media_order.length === 0) {
     mediaGrid.innerHTML = "";
     mediaCount.textContent = "0 items";
@@ -1173,6 +2630,7 @@ function renderMedia() {
  */
 function renderThumbnail() {
   const project = requireCurrent();
+  if (!project) return;
   thumbnailDeleteButton.disabled = !project.thumbnail_file;
   if (!project.thumbnail_file) {
     thumbnailPreview.innerHTML = '<div class="media-empty">아직 업로드한 썸네일이 없습니다.</div>';
@@ -1193,6 +2651,7 @@ function renderThumbnail() {
  */
 function renderBgmMeta() {
   const project = requireCurrent();
+  if (!project) return;
   bgmDeleteButton.disabled = !project.bgm_file;
   bgmMeta.textContent = project.bgm_file
     ? `BGM file: ${project.bgm_file}`
@@ -1204,15 +2663,313 @@ function renderBgmMeta() {
  */
 function renderFeatureControls() {
   const project = requireCurrent();
+  if (!project) return;
   featureKenburnsSelect.value = project.kenburns_enabled ? "on" : "off";
   featureBgmVolumeInput.value = String(project.bgm_volume_db);
   featureBgmDuckingSelect.value = project.bgm_ducking_enabled ? "on" : "off";
   featureRenderLandscapeInput.checked = project.render_formats.includes("landscape");
   featureRenderShortsInput.checked = project.render_formats.includes("shorts");
+  imageVisualModeSelect.value = project.visual_source_mode || "upload_only";
+  const rawOptions = /** @type {Record<string, unknown>} */ (project.body_image_options || {});
+  imageStylePresetSelect.value = typeof rawOptions.style_preset === "string"
+    ? rawOptions.style_preset
+    : recommendedStylePresetForProject(project);
+  featureHyperframesOverlayInput.checked = rawOptions.hyperframes_overlay_enabled === true;
+  featureHyperframesRequiredInput.checked = rawOptions.hyperframes_overlay_required === true;
+  featureHyperframesRequiredInput.disabled = !featureHyperframesOverlayInput.checked;
 }
 
 /**
- * @returns {{kenburns_enabled: boolean, bgm_volume_db: number, bgm_ducking_enabled: boolean, render_formats: RenderFormat[]}}
+ * @param {Project} project
+ * @returns {string}
+ */
+function recommendedStylePresetForProject(project) {
+  if (project.content_mode === "bible_longform") {
+    return "";
+  }
+  const haystack = [
+    project.title,
+    project.compiled_script,
+    project.script,
+    ...project.sentences,
+    ...(project.source_draft_fact_notes || []).map((item) => item.note || ""),
+  ].join(" ").toLowerCase();
+  const needles = [
+    "ai",
+    "agent",
+    "agents",
+    "gpu",
+    "browser",
+    "headless",
+    "automation",
+    "model",
+    "models",
+    "datacenter",
+    "data center",
+    "power",
+    "electricity",
+    "payment",
+    "message",
+    "messages",
+    "schedule",
+    "workflow",
+    "compare",
+    "comparison",
+    "전력",
+    "브라우저",
+    "자동화",
+    "에이전트",
+    "데이터센터",
+    "결제",
+    "메시지",
+    "일정",
+  ];
+  return needles.some((needle) => haystack.includes(needle)) ? "editorial_symbolic" : "";
+}
+
+/**
+ * @returns {string}
+ */
+function preferredStyleReferenceValue() {
+  const project = requireCurrent();
+  const typedValue = imageStyleReferenceInput.value.trim();
+  if (typedValue) {
+    return typedValue;
+  }
+  if (project.thumbnail_file) {
+    return "__auto__";
+  }
+  const selectedName = selectedMediaName || project.media_order[0] || "";
+  if (selectedName && mediaKindFromName(selectedName) === "image") {
+    return selectedName;
+  }
+  const firstImage = project.media_order.find((name) => mediaKindFromName(name) === "image");
+  if (firstImage) {
+    return firstImage;
+  }
+  return "__auto__";
+}
+
+/**
+ * @returns {string[]}
+ */
+function collectImageReferenceOptions() {
+  const project = requireCurrent();
+  /** @type {string[]} */
+  const options = [];
+  if (project.thumbnail_file) {
+    options.push("__auto__");
+    options.push(project.thumbnail_file);
+  }
+  project.media_order.forEach((name) => {
+    if (mediaKindFromName(name) === "image") {
+      options.push(name);
+    }
+  });
+  project.body_image_mappings.forEach((item) => {
+    if (item.path) {
+      options.push(item.path);
+    }
+  });
+  return [...new Set(options.filter(Boolean))];
+}
+
+/**
+ * @returns {void}
+ */
+function syncImageReferenceOptions() {
+  imageReferenceOptions.innerHTML = collectImageReferenceOptions().map((value) => (
+    `<option value="${escapeHtml(value)}"></option>`
+  )).join("");
+}
+
+/**
+ * @returns {string}
+ */
+function preferredControlImageValue() {
+  const project = requireCurrent();
+  const typedValue = imageControlReferenceInput.value.trim();
+  if (typedValue) {
+    return typedValue;
+  }
+  const selectedName = selectedMediaName || project.media_order[0] || "";
+  if (selectedName && mediaKindFromName(selectedName) === "image") {
+    return selectedName;
+  }
+  if (project.thumbnail_file) {
+    return "__auto__";
+  }
+  const generatedImage = project.body_image_mappings.find((item) => item.path)?.path || "";
+  if (generatedImage) {
+    return generatedImage;
+  }
+  const firstImage = project.media_order.find((name) => mediaKindFromName(name) === "image");
+  if (firstImage) {
+    return firstImage;
+  }
+  return "__auto__";
+}
+
+/**
+ * @param {number} sentenceIdx
+ * @returns {Record<string, unknown>}
+ */
+function candidateReviewForSentence(sentenceIdx) {
+  const project = requireCurrent();
+  const rawOptions = /** @type {Record<string, unknown>} */ (project.body_image_options || {});
+  if (!rawOptions || typeof rawOptions !== "object") {
+    return {};
+  }
+  const candidateReviews = /** @type {Record<string, unknown>} */ (rawOptions.candidate_reviews || {});
+  const review = candidateReviews[String(sentenceIdx)];
+  return review && typeof review === "object" ? /** @type {Record<string, unknown>} */ (review) : {};
+}
+
+/**
+ * @returns {void}
+ */
+function clearManualPromptOverrides() {
+  manualPromptOverrides = { promptG: "", promptL: "" };
+}
+
+/**
+ * @param {number} sentenceIdx
+ * @returns {void}
+ */
+function applyRepairSuggestionForSentence(sentenceIdx) {
+  const project = requireCurrent();
+  const review = candidateReviewForSentence(sentenceIdx);
+  const suggestedPositivePrompt = typeof review.suggested_positive_prompt === "string" ? review.suggested_positive_prompt.trim() : "";
+  const suggestedNegativePrompt = typeof review.suggested_negative_prompt === "string" ? review.suggested_negative_prompt.trim() : "";
+  const suggestedPromptG = typeof review.suggested_prompt_g === "string" ? review.suggested_prompt_g.trim() : "";
+  const suggestedPromptL = typeof review.suggested_prompt_l === "string" ? review.suggested_prompt_l.trim() : "";
+  const suggestedRepairReason = typeof review.suggested_repair_reason === "string" ? review.suggested_repair_reason.trim() : "";
+  if (!suggestedPositivePrompt && !suggestedPromptG && !suggestedPromptL) {
+    toast("적용할 repair suggestion이 없습니다.");
+    return;
+  }
+  imageSentenceIdxInput.value = String(sentenceIdx);
+  imagePositivePromptInput.value = suggestedPositivePrompt || suggestedPromptG || suggestedPromptL;
+  if (suggestedNegativePrompt) {
+    imageNegativePromptInput.value = suggestedNegativePrompt;
+  }
+  manualPromptOverrides = {
+    promptG: suggestedPromptG,
+    promptL: suggestedPromptL,
+  };
+  imageGenState.textContent =
+    `Repair suggestion applied | 문장 ${sentenceIdx} | ${suggestedRepairReason || "manual fix ready"} | ${project.sentences[sentenceIdx] || ""}`;
+  imageGenState.className = "card ok";
+}
+
+/**
+ * @param {unknown} value
+ * @param {number} maxLength
+ * @returns {string}
+ */
+function previewText(value, maxLength = 140) {
+  if (typeof value !== "string") {
+    return "";
+  }
+  const text = value.trim();
+  if (!text) {
+    return "";
+  }
+  return text.length > maxLength ? `${text.slice(0, maxLength - 1)}…` : text;
+}
+
+/**
+ * @param {string} code
+ * @returns {string}
+ */
+function readableIssueCode(code) {
+  const labels = /** @type {Record<string, string>} */ ({
+    RAW_TEXT_VISUAL_TARGET: "원문 문장이 그대로 시각 목표에 섞임",
+    GENERIC_SYMBOL_WITHOUT_ALLOW: "자동차/체크리스트 같은 generic 상징으로 새는 중",
+    DIAGRAM_STYLE_COLLISION: "다이어그램 장면에 실사/시네마틱 표현이 섞임",
+    DIAGRAM_COMPLEXITY_RISK: "다이어그램이 너무 복잡하거나 배경이 과함",
+    DIAGRAM_TEXT_CONTROL_MISSING: "텍스트 억제 네거티브가 부족함",
+    BOOK_TEXT_RISK: "책/문서/화면에 읽을 수 있는 글자가 생길 위험",
+    CLOSEUP_RISK: "손/화면 클로즈업으로 잘릴 위험",
+    MISSING_FRAMING_SLOT: "구도 앵커가 부족함",
+    MISSING_CAMERA_TECHNICAL_SLOT: "카메라/기술 앵커가 부족함",
+    LITERAL_SIMILE_IGNORED: "직유/비유 핵심이 프롬프트에 반영되지 않음",
+    FORBIDDEN_OBJECT_IN_NEGATIVE_MISSING: "금지 오브젝트 네거티브가 비어 있음",
+    ESSAY_ROAD_WITHOUT_VEHICLE_BAN: "길 장면인데 차량 차단 네거티브가 부족함",
+  });
+  return labels[code] || code;
+}
+
+/**
+ * @param {string} reason
+ * @returns {string}
+ */
+function readableRepairReason(reason) {
+  const labels = /** @type {Record<string, string>} */ ({
+    must_show_reinforced: "핵심 시각 요소를 더 강하게 고정",
+    generic_drift_blocked: "generic 상징으로 새는 경로 차단",
+    diagram_style_reinforced: "다이어그램 스타일을 다시 고정",
+    diagram_simplified: "장면 복잡도를 낮춤",
+    text_risk_blocked: "읽히는 텍스트 위험 차단",
+    framing_repaired: "구도/프레이밍 앵커 보강",
+    camera_anchor_added: "카메라/기술 앵커 보강",
+    generic_retry_reinforcement: "기본 repair 강화",
+    preserve_control_layout: "ControlNet 구도 유지 힌트 추가",
+    preserve_style_reference: "Style reference 톤 유지 힌트 추가",
+    preserve_lora_style: "LoRA 스타일/캐릭터 일관성 유지 힌트 추가",
+    repair_retry_skipped_heavy_path: "heavy path라 자동 재시도는 건너뜀",
+    repair_retry_skipped_gpu_busy: "GPU 사용 중이라 자동 재시도는 건너뜀",
+    fallback_downgrade: "안전 fallback 장면으로 강등",
+  });
+  if (reason.startsWith("retry_limit_reached:")) {
+    return `재시도 한도 도달 (${reason.slice("retry_limit_reached:".length) || "score gate"})`;
+  }
+  return reason.split(",").map((part) => labels[part.trim()] || part.trim()).join(" + ");
+}
+
+/**
+ * @param {string} reason
+ * @returns {string}
+ */
+function readableOperatorInterventionReason(reason) {
+  if (reason.startsWith("operator_review_required:")) {
+    return `자동 복구 후에도 ${reason.slice("operator_review_required:".length) || "score gate"} 문제가 남아 운영자 확인이 필요합니다.`;
+  }
+  return reason || "운영자 확인 필요";
+}
+
+/**
+ * @param {unknown} value
+ * @returns {string}
+ */
+function readableScore(value) {
+  return typeof value === "number" ? value.toFixed(2) : "-";
+}
+
+/**
+ * @returns {void}
+ */
+function syncImageProfileUi() {
+  const styleMode = imageGenerationProfileSelect.value === "sdxl_style_reference";
+  const controlMode = imageGenerationProfileSelect.value === "sdxl_controlnet_depth";
+  imageStyleReferenceInput.disabled = !styleMode;
+  imageStyleStrengthInput.disabled = !styleMode;
+  imageControlReferenceInput.disabled = !controlMode;
+  imageControlStrengthInput.disabled = !controlMode;
+  let hint = "Style reference profile uses a project thumbnail, uploaded image, or explicit file path to keep tone more consistent across scenes.";
+  if (styleMode) {
+    hint = "Style reference is active. Leave the field blank to use the project thumbnail or the first uploaded image automatically.";
+    if (imageLoraNameInput.value.trim()) {
+      hint += " LoRA and style reference will use the mixed workflow.";
+    }
+  } else if (controlMode) {
+    hint = "ControlNet Depth is active. Pick an image with clear structure, or leave it blank to fall back to the thumbnail / first image automatically.";
+  }
+  imageStyleReferenceHint.textContent = hint;
+}
+
+/**
+ * @returns {{kenburns_enabled: boolean, bgm_volume_db: number, bgm_ducking_enabled: boolean, render_formats: RenderFormat[], visual_source_mode: VisualSourceMode, style_preset: string, hyperframes_overlay_enabled: boolean, hyperframes_overlay_required: boolean}}
  */
 function readFeatureInputs() {
   /** @type {RenderFormat[]} */
@@ -1231,6 +2988,10 @@ function readFeatureInputs() {
     bgm_volume_db: numberInRange(featureBgmVolumeInput.value, -20, -40, 6),
     bgm_ducking_enabled: featureBgmDuckingSelect.value === "on",
     render_formats: renderFormats,
+    visual_source_mode: /** @type {VisualSourceMode} */ (imageVisualModeSelect.value || "upload_only"),
+    style_preset: imageStylePresetSelect.value || "",
+    hyperframes_overlay_enabled: featureHyperframesOverlayInput.checked,
+    hyperframes_overlay_required: featureHyperframesOverlayInput.checked && featureHyperframesRequiredInput.checked,
   };
 }
 
@@ -1320,7 +3081,319 @@ async function saveFeatureSettings() {
   current = /** @type {Project} */ (response.project);
   renderFeatureControls();
   renderBgmMeta();
+  renderImageGenPanel();
   toast("Render settings saved.");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function enqueueImageGen() {
+  const project = requireCurrent();
+  const sentenceIdx = numberInRange(imageSentenceIdxInput.value, 0, 0, 99999);
+  const loraName = imageLoraNameInput.value.trim();
+  const generationProfile = imageGenerationProfileSelect.value || "";
+  const styleReferenceImage = generationProfile === "sdxl_style_reference" ? preferredStyleReferenceValue() : "";
+  const controlImage = generationProfile === "sdxl_controlnet_depth" ? preferredControlImageValue() : "";
+  const positivePrompt = imagePositivePromptInput.value.trim()
+    || project.sentences[sentenceIdx]
+    || project.sentences[0]
+    || "";
+  if (!positivePrompt) {
+    throw new Error("이미지 생성 프롬프트가 비어 있습니다.");
+  }
+
+  const featurePayload = readFeatureInputs();
+  current = /** @type {Project} */ ((await requestJson(`/api/projects/${project.id}/features`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(featurePayload),
+  })).project);
+
+  await requestJson(`/api/projects/${project.id}/comfyui/job`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      template_id: "txt2img_sdxl_basic",
+      checkpoint: imageCheckpointInput.value.trim() || "sd_xl_base_1.0.safetensors",
+      positive_prompt: positivePrompt,
+      positive_prompt_g: manualPromptOverrides.promptG,
+      positive_prompt_l: manualPromptOverrides.promptL,
+      negative_prompt: imageNegativePromptInput.value.trim(),
+      width: numberInRange(imageWidthInput.value, 1024, 256, 2048),
+      height: numberInRange(imageHeightInput.value, 576, 256, 2048),
+      seed: numberInRange(imageSeedInput.value, 1, 0, 2147483647),
+      generation_profile: generationProfile,
+      lora_name: loraName,
+      lora_strength: numberInRange(imageLoraStrengthInput.value, 0.8, 0, 2),
+      style_reference_image: styleReferenceImage,
+      style_reference_strength: numberInRange(imageStyleStrengthInput.value, 0.65, 0, 2),
+      control_image: controlImage,
+      control_strength: numberInRange(imageControlStrengthInput.value, 0.75, 0, 2),
+      filename_prefix: `project_${project.id}`,
+      client_id: `newauto-${project.id}`,
+      sentence_idx: sentenceIdx,
+      prompt: positivePrompt,
+    }),
+  });
+
+  current = {
+    ...requireCurrent(),
+    body_image_state: "queued",
+    body_image_progress: 0,
+    body_image_phase: "queued",
+    body_image_last_log: "Queued ComfyUI image generation.",
+    body_image_error: "",
+    visual_source_mode: featurePayload.visual_source_mode,
+  };
+  renderFeatureControls();
+  renderImageGenPanel();
+  toast("이미지 생성 작업을 큐에 등록했습니다.");
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function suggestImagePrompt() {
+  const project = requireCurrent();
+  const sentenceIdx = numberInRange(imageSentenceIdxInput.value, 0, 0, 99999);
+  const featurePayload = readFeatureInputs();
+  current = /** @type {Project} */ ((await requestJson(`/api/projects/${project.id}/features`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(featurePayload),
+  })).project);
+  const payload = /** @type {{
+   *   sentence_idx: number,
+   *   sentence: string,
+   *   positive_prompt: string,
+   *   negative_prompt: string,
+   *   style_hint: string,
+   *   template_key: string,
+   *   reference_names: string[],
+   *   visual_source_mode: VisualSourceMode,
+   *   requested_style_preset: string,
+   *   recommended_style_preset: string,
+   * }} */ (
+    await requestJson(`/api/projects/${project.id}/comfyui/prompt-suggestion?sentence_idx=${sentenceIdx}`)
+  );
+  clearManualPromptOverrides();
+  imagePositivePromptInput.value = payload.positive_prompt;
+  if (!imageNegativePromptInput.value.trim()) {
+    imageNegativePromptInput.value = payload.negative_prompt;
+  }
+  if (!imageStylePresetSelect.value && payload.recommended_style_preset) {
+    imageStylePresetSelect.value = payload.recommended_style_preset;
+  }
+  imageGenState.textContent =
+    `추천 완료 | 문장 ${payload.sentence_idx} | 템플릿 ${payload.template_key} | 스타일 ${payload.requested_style_preset || payload.recommended_style_preset || "default"} | ${payload.sentence}`;
+  imageGenState.className = "card ok";
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function enqueueBatchImageGen() {
+  const project = requireCurrent();
+  const startIdx = numberInRange(imageBatchStartIdxInput.value, 0, 0, 99999);
+  const count = numberInRange(imageBatchCountInput.value, 3, 1, 12);
+  const loraName = imageLoraNameInput.value.trim();
+  const generationProfile = imageGenerationProfileSelect.value || "";
+  const styleReferenceImage = generationProfile === "sdxl_style_reference" ? preferredStyleReferenceValue() : "";
+  const controlImage = generationProfile === "sdxl_controlnet_depth" ? preferredControlImageValue() : "";
+  const featurePayload = readFeatureInputs();
+  current = /** @type {Project} */ ((await requestJson(`/api/projects/${project.id}/features`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(featurePayload),
+  })).project);
+
+  const variantsPerScene = numberInRange(imageVariantsPerSceneInput.value, 1, 1, 5);
+  const payload = /** @type {{ ok: boolean, count: number, variants_per_scene: number }} */ (await requestJson(`/api/projects/${project.id}/comfyui/job/batch-auto`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      checkpoint: imageCheckpointInput.value.trim() || "sd_xl_base_1.0.safetensors",
+      start_idx: startIdx,
+      count,
+      width: numberInRange(imageWidthInput.value, 1024, 256, 2048),
+      height: numberInRange(imageHeightInput.value, 576, 256, 2048),
+      seed_base: numberInRange(imageSeedInput.value, 1, 0, 2147483647),
+      generation_profile: generationProfile,
+      seed_policy: imageSeedPolicySelect.value || "spaced",
+      lora_name: loraName,
+      lora_strength: numberInRange(imageLoraStrengthInput.value, 0.8, 0, 2),
+      style_reference_image: styleReferenceImage,
+      style_reference_strength: numberInRange(imageStyleStrengthInput.value, 0.65, 0, 2),
+      control_image: controlImage,
+      control_strength: numberInRange(imageControlStrengthInput.value, 0.75, 0, 2),
+      filename_prefix: `project_${project.id}`,
+      client_id: `newauto-${project.id}`,
+      variants_per_scene: variantsPerScene,
+    }),
+  }));
+
+  current = {
+    ...requireCurrent(),
+    body_image_state: "queued",
+    body_image_progress: 0,
+    body_image_phase: "queued",
+    body_image_last_log: `Queued ${payload.count} ComfyUI image jobs (${payload.variants_per_scene} variant(s) per scene).`,
+    body_image_error: "",
+    visual_source_mode: featurePayload.visual_source_mode,
+  };
+  renderFeatureControls();
+  renderImageGenPanel();
+  toast(`이미지 ${payload.count}건 일괄 생성을 큐에 등록했습니다.`);
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function generateAllSimpleImagePrompts() {
+  const project = requireCurrent();
+  simplePromptAllButton.disabled = true;
+  simpleMediaState.textContent = "전체 문장 이미지 프롬프트를 생성하는 중입니다...";
+  try {
+    const response = /** @type {{ ok: boolean, count: number, items: Array<Record<string, unknown>>, lmstudio_unload: Record<string, unknown>, project: Project }} */ (
+      await requestJson(`/api/projects/${project.id}/media-simple/prompt-manifest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          start_idx: 0,
+          count: Math.max(1, Math.min(48, project.sentences.length || 1)),
+          unload_lmstudio_after: true,
+        }),
+      })
+    );
+    simplePromptItems = response.items || [];
+    current = response.project;
+    renderImageGenPanel();
+    const unloadOk = response.lmstudio_unload && response.lmstudio_unload.ok === true;
+    toast(unloadOk ? "전체 이미지 프롬프트 생성 후 LM Studio를 종료했습니다." : "프롬프트 생성 완료. LM Studio 종료 확인이 필요합니다.");
+  } finally {
+    simplePromptAllButton.disabled = false;
+  }
+}
+
+async function unloadLmStudioForSimpleMedia() {
+  const project = requireCurrent();
+  simpleLmstudioUnloadButton.disabled = true;
+  try {
+    const response = /** @type {{ ok: boolean, project: Project }} */ (
+      await requestJson(`/api/projects/${project.id}/media-simple/lmstudio-unload`, {
+        method: "POST",
+      })
+    );
+    current = response.project;
+    renderImageGenPanel();
+    toast(response.ok ? "LM Studio를 종료/언로드했습니다." : "LM Studio 종료를 확인하지 못했습니다. LM Studio에서 모델을 직접 언로드해 주세요.");
+  } finally {
+    simpleLmstudioUnloadButton.disabled = false;
+  }
+}
+
+async function copyAllSimplePrompts() {
+  if (simplePromptItems.length === 0) {
+    toast("복사할 이미지 프롬프트가 없습니다.");
+    return;
+  }
+  const text = simplePromptItems.map((item) => {
+    const idx = Number(item.sentence_idx || 0) + 1;
+    return `[${idx}] ${String(item.positive_prompt || "")}`;
+  }).join("\n\n");
+  await navigator.clipboard.writeText(text);
+  toast("전체 이미지 프롬프트를 복사했습니다.");
+}
+
+async function enqueueSimpleMediaImageGen() {
+  const project = requireCurrent();
+  const options = /** @type {Record<string, unknown>} */ (project.body_image_options || {});
+  const promptCount = Number(options.simple_media_prompt_count || simplePromptItems.length || project.sentences.length || 1);
+  const unload = /** @type {Record<string, unknown>} */ (options.simple_media_lmstudio_unload || {});
+  if (unload.ok !== true) {
+    throw new Error("이미지 생성 전에 LM Studio를 종료/언로드해 주세요.");
+  }
+  const generationProfile = imageGenerationProfileSelect.value || "";
+  const styleReferenceImage = generationProfile === "sdxl_style_reference" ? preferredStyleReferenceValue() : "";
+  const controlImage = generationProfile === "sdxl_controlnet_depth" ? preferredControlImageValue() : "";
+  const featurePayload = {
+    ...readFeatureInputs(),
+    visual_source_mode: "comfyui_auto",
+  };
+  current = /** @type {Project} */ ((await requestJson(`/api/projects/${project.id}/features`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(featurePayload),
+  })).project);
+  const variantsPerScene = numberInRange(imageVariantsPerSceneInput.value, 1, 1, 5);
+  const payload = /** @type {{ ok: boolean, count: number, variants_per_scene: number }} */ (await requestJson(`/api/projects/${project.id}/media-simple/comfyui/job`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      checkpoint: imageCheckpointInput.value.trim() || "sd_xl_base_1.0.safetensors",
+      start_idx: 0,
+      count: Math.max(1, Math.min(48, promptCount)),
+      width: numberInRange(imageWidthInput.value, 1024, 256, 2048),
+      height: numberInRange(imageHeightInput.value, 576, 256, 2048),
+      seed_base: numberInRange(imageSeedInput.value, 1, 0, 2147483647),
+      generation_profile: generationProfile,
+      seed_policy: imageSeedPolicySelect.value || "spaced",
+      lora_name: imageLoraNameInput.value.trim(),
+      lora_strength: numberInRange(imageLoraStrengthInput.value, 0.8, 0, 2),
+      style_reference_image: styleReferenceImage,
+      style_reference_strength: numberInRange(imageStyleStrengthInput.value, 0.65, 0, 2),
+      control_image: controlImage,
+      control_strength: numberInRange(imageControlStrengthInput.value, 0.75, 0, 2),
+      filename_prefix: `project_${project.id}`,
+      client_id: `newauto-${project.id}`,
+      variants_per_scene: variantsPerScene,
+    }),
+  }));
+  current = {
+    ...requireCurrent(),
+    body_image_state: "queued",
+    body_image_progress: 0,
+    body_image_phase: "queued",
+    body_image_last_log: `Queued ${payload.count} ComfyUI image jobs.`,
+    body_image_error: "",
+    visual_source_mode: "comfyui_auto",
+  };
+  renderFeatureControls();
+  renderImageGenPanel();
+  toast(`이미지 ${payload.count}건 생성을 큐에 등록했습니다.`);
+}
+
+async function buildScenePlan() {
+  const project = requireCurrent();
+  const renderFormat = featureRenderShortsInput.checked && !featureRenderLandscapeInput.checked ? "shorts" : "landscape";
+  const scenePlan = /** @type {ScenePlan} */ (await requestJson(`/api/projects/${project.id}/scene-plan/build?render_format=${renderFormat}`, {
+    method: "POST",
+  }));
+  current = {
+    ...requireCurrent(),
+    scene_plan: scenePlan,
+  };
+  renderImageGenPanel();
+  toast(`Scene plan ${scenePlan.scenes.length}개를 생성했습니다.`);
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function buildRenderPlan() {
+  const project = requireCurrent();
+  const renderPlan = /** @type {RenderPlan} */ (
+    await requestJson(`/api/projects/${project.id}/render-plan/build`, {
+      method: "POST",
+    })
+  );
+  current = {
+    ...requireCurrent(),
+    render_plan: renderPlan,
+  };
+  renderImageGenPanel();
+  toast(`Render plan ${renderPlan.segments.length}개를 생성했습니다.`);
 }
 
 /**
@@ -1340,17 +3413,182 @@ async function runPreflight() {
  * @returns {Promise<void>}
  */
 async function runSystemHealth() {
-  const payload = /** @type {{ ffmpeg_available: boolean, oauth_ready: boolean, omnivoice_python_found: boolean, disk_free_gb: number, storage_path: string }} */ (
+  const payload = /** @type {{ ffmpeg_available: boolean, oauth_ready: boolean, omnivoice_python_found: boolean, omnivoice_python_path: string, omnivoice_import_ok: boolean, omnivoice_torch_ok: boolean, omnivoice_cuda_available: boolean, disk_free_gb: number, storage_path: string }} */ (
     await requestJson("/api/system/health")
   );
   systemHealthResults.innerHTML = `
     <div><strong>FFmpeg</strong>: ${payload.ffmpeg_available ? "ok" : "missing"}</div>
     <div><strong>OAuth</strong>: ${payload.oauth_ready ? "ready" : "missing client_secret.json"}</div>
     <div><strong>OmniVoice Python</strong>: ${payload.omnivoice_python_found ? "found" : "missing"}</div>
+    <div><strong>OmniVoice Path</strong>: ${escapeHtml(payload.omnivoice_python_path || "-")}</div>
+    <div><strong>OmniVoice Import</strong>: ${payload.omnivoice_import_ok ? "ok" : "failed"}</div>
+    <div><strong>Torch / CUDA</strong>: ${payload.omnivoice_torch_ok ? "ok" : "failed"} / ${payload.omnivoice_cuda_available ? "cuda" : "cpu-or-missing"}</div>
     <div><strong>Disk Free</strong>: ${payload.disk_free_gb} GB</div>
     <div><strong>Storage</strong>: ${escapeHtml(payload.storage_path)}</div>
   `;
   systemHealthResults.className = "card";
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function runRenderReport() {
+  const project = requireCurrent();
+  const payload = /** @type {{
+   *   status: string,
+   *   autopilot_job_id: string,
+   *   autopilot_input_mode: string,
+   *   autopilot_state: AutopilotState,
+   *   autopilot_phase: string,
+   *   audio_duration_sec: number,
+   *   subtitle_cue_count: number,
+   *   render_plan_segment_count: number,
+   *   missing_render_plan_media_count: number,
+   *   fallback_used: boolean,
+   *   outputs: { format: string, path: string, exists: boolean, size_bytes: number, duration_sec: number, hyperframes_overlay_status?: string, hyperframes_overlay_path?: string, hyperframes_overlay_pix_fmt?: string }[],
+   *   segments: { region: string, media_path: string, motion: string, effect: string, caption_style: string, media_missing: boolean }[],
+   *   final_scene_review_exists: boolean,
+   *   final_scene_review_path: string,
+   *   ffmpeg_log_tail: string,
+   *   error: string
+   * }} */ (
+    await requestJson(`/api/projects/${project.id}/render-report`)
+  );
+  let finalSceneReview = null;
+  if (payload.final_scene_review_exists) {
+    try {
+      finalSceneReview = await requestJson(`/api/projects/${project.id}/final-scene-review`);
+    } catch (_error) {
+      finalSceneReview = null;
+    }
+  }
+  const outputs = payload.outputs.map(
+    /** @param {{ format: string, exists: boolean, size_bytes: number, duration_sec: number, hyperframes_overlay_status?: string, hyperframes_overlay_path?: string, hyperframes_overlay_pix_fmt?: string }} item */
+    (item) => {
+      const overlay = item.hyperframes_overlay_status
+        ? ` | overlay ${escapeHtml(item.hyperframes_overlay_status)}${item.hyperframes_overlay_pix_fmt ? ` (${escapeHtml(item.hyperframes_overlay_pix_fmt)})` : ""}${item.hyperframes_overlay_path ? ` | ${escapeHtml(item.hyperframes_overlay_path)}` : ""}`
+        : "";
+      return `<div><strong>${escapeHtml(item.format)}</strong>: ${item.exists ? `${(item.size_bytes / (1024 * 1024)).toFixed(1)} MB | ${item.duration_sec.toFixed(1)}s${overlay}` : `missing output file${overlay}`}</div>`;
+    },
+  ).join("");
+  const segments = payload.segments.slice(0, 4).map(
+    /** @param {{ region: string, motion: string, effect: string, caption_style: string, media_missing: boolean }} item */
+    (item) => (
+    `<div><strong>${escapeHtml(item.region)}</strong>: ${escapeHtml(item.motion)} / ${escapeHtml(item.effect)} / ${escapeHtml(item.caption_style)}${item.media_missing ? " | missing media" : ""}</div>`
+  )).join("");
+  const finalEntries = finalSceneReview && Array.isArray(finalSceneReview.entries)
+    ? finalSceneReview.entries
+    : [];
+  const operatorEntries = finalEntries.filter(
+    /** @param {{ operator_intervention_required?: boolean } | null} item */
+    (item) => item && item.operator_intervention_required === true,
+  );
+  const fallbackEntries = finalEntries.filter(
+    /** @param {{ fallback_downgrade_applied?: boolean } | null} item */
+    (item) => item && item.fallback_downgrade_applied === true,
+  );
+  const reviewPreview = finalEntries.slice(0, 4).map(
+    /** @param {{ sentence_idx: number, visual_mode?: string, selection_reason?: string, selected_reason?: string, operator_intervention_required?: boolean }} item */
+    (item) => (
+    `<div><strong>문장 ${item.sentence_idx}</strong>: ${escapeHtml(item.visual_mode || "-")} | ${escapeHtml(item.selection_reason || item.selected_reason || "-")}${item.operator_intervention_required ? " | operator review" : ""}</div>`
+  )).join("");
+  renderReportResults.innerHTML = `
+    <div><strong>Status</strong>: ${escapeHtml(payload.status)}</div>
+    <div><strong>Autopilot</strong>: ${payload.autopilot_job_id ? `${escapeHtml(payload.autopilot_input_mode || "manual")} | ${escapeHtml(readableAutopilotState(payload.autopilot_state))} | ${escapeHtml(payload.autopilot_phase || "-")} | ${escapeHtml(payload.autopilot_job_id)}` : "manual render or no autopilot metadata"}</div>
+    <div><strong>Audio</strong>: ${payload.audio_duration_sec.toFixed(1)}s | <strong>Subtitle cues</strong>: ${payload.subtitle_cue_count}</div>
+    <div><strong>Plan</strong>: segments ${payload.render_plan_segment_count} | missing media ${payload.missing_render_plan_media_count} | fallback ${payload.fallback_used ? "yes" : "no"}</div>
+    <div><strong>Final Scene Review</strong>: ${payload.final_scene_review_exists ? `${escapeHtml(payload.final_scene_review_path)} | fallback ${fallbackEntries.length} | operator warning ${operatorEntries.length}` : "missing"}</div>
+    ${reviewPreview ? `<div><strong>Review Preview</strong></div>${reviewPreview}` : ""}
+    <div><strong>Outputs</strong></div>
+    ${outputs || "<div>표시할 출력 정보가 없습니다.</div>"}
+    <div><strong>Segments</strong></div>
+    ${segments || "<div>표시할 세그먼트 정보가 없습니다.</div>"}
+    ${payload.error ? `<div><strong>Error</strong>: ${escapeHtml(payload.error)}</div>` : ""}
+    ${payload.ffmpeg_log_tail ? `<div><strong>FFmpeg tail</strong><pre>${escapeHtml(payload.ffmpeg_log_tail)}</pre></div>` : ""}
+  `;
+  renderReportResults.className = payload.status === "done" && operatorEntries.length === 0 ? "card ok" : "card warn";
+}
+
+/**
+ * @returns {Promise<void>}
+ */
+async function runOperatorStatus() {
+  const payload = /** @type {{
+   *   health: { ffmpeg_available: boolean, oauth_ready: boolean, omnivoice_python_found: boolean, disk_free_gb: number, storage_path: string },
+   *   tools: { key: string, label: string, availability: "available" | "unavailable", configured: boolean, version: string, detail: string, install_path: string }[],
+   *   models: { key: string, label: string, available: boolean, source: string, path: string, detail: string }[],
+   *   usage: { provider: string, day_count: number, month_count: number, day_limit: number | null, month_limit: number | null }[],
+   *   gpu: { locked: boolean, owner: string, resource: string, expires_at: string },
+   *   queue: { source_draft_queued: number, source_draft_running: number, autopilot_queued: number, autopilot_running: number, autopilot_paused: number, render_queued: number, render_running: number, tts_queued: number, tts_running: number },
+   *   render_metrics: { total: number, success: number, error: number, fallback: number, missing_media: number },
+   *   autopilot_metrics: { total: number, done: number, paused: number, error: number, running: number, queued: number },
+   *   recent_autopilot_runs: { project_id: string, title: string, state: AutopilotState, phase: string, progress: number, updated_at: string, started_at: string, job_id: string, last_error_code: string }[]
+   * }} */ (
+    await requestJson("/api/system/operator")
+  );
+  const queue = payload.queue;
+  const queueSummary = [
+    `Autopilot ${queue.autopilot_queued}/${queue.autopilot_running}/${queue.autopilot_paused}`,
+    `Source Draft ${queue.source_draft_queued}/${queue.source_draft_running}`,
+    `TTS ${queue.tts_queued}/${queue.tts_running}`,
+    `Render ${queue.render_queued}/${queue.render_running}`,
+  ].join(" | ");
+  const usageItems = payload.usage.map((item) => (
+    `<div><strong>${escapeHtml(item.provider)}</strong>: day ${item.day_count}${item.day_limit === null ? "" : `/${item.day_limit}`} | month ${item.month_count}${item.month_limit === null ? "" : `/${item.month_limit}`}</div>`
+  )).join("");
+  const toolItems = payload.tools.map((item) => (
+    `<div><strong>${escapeHtml(item.label)}</strong>: ${item.availability === "available" ? "ready" : "missing"} | ${item.configured ? "configured" : "not configured"}${item.version ? ` | ${escapeHtml(item.version)}` : ""}</div>`
+  )).join("");
+  const modelItems = payload.models.map((item) => (
+    `<div><strong>${escapeHtml(item.label)}</strong>: ${item.available ? "ready" : "missing"} | ${escapeHtml(item.detail)}</div>`
+  )).join("");
+  const recentAutopilotItems = payload.recent_autopilot_runs.map((item) => (
+    `<div><strong>${escapeHtml(item.title || item.project_id)}</strong>: ${escapeHtml(readableAutopilotState(item.state))} ${item.progress}%${item.phase ? ` | ${escapeHtml(item.phase)}` : ""}${item.last_error_code ? ` | ${escapeHtml(item.last_error_code)}` : ""}</div>`
+  )).join("");
+  operatorStatusResults.innerHTML = `
+    <div class="operator-grid">
+      <div class="operator-section">
+        <strong>Queue</strong>
+        <div>${escapeHtml(queueSummary)}</div>
+        <div>Autopilot queue/running/paused</div>
+      </div>
+      <div class="operator-section">
+        <strong>GPU</strong>
+        <div>${payload.gpu.locked ? `사용 중: ${escapeHtml(payload.gpu.owner || payload.gpu.resource)}` : "대기 중"}</div>
+      </div>
+      <div class="operator-section">
+        <strong>System</strong>
+        <div>FFmpeg ${payload.health.ffmpeg_available ? "ok" : "missing"} | Disk ${payload.health.disk_free_gb} GB</div>
+      </div>
+      <div class="operator-section">
+        <strong>Usage</strong>
+        ${usageItems || "<div>표시할 사용량이 없습니다.</div>"}
+      </div>
+      <div class="operator-section">
+        <strong>Tools</strong>
+        ${toolItems || "<div>표시할 도구 상태가 없습니다.</div>"}
+      </div>
+      <div class="operator-section">
+        <strong>Models</strong>
+        ${modelItems || "<div>표시할 모델 상태가 없습니다.</div>"}
+      </div>
+      <div class="operator-section">
+        <strong>Recent Render</strong>
+        <div>Total ${payload.render_metrics.total} | Success ${payload.render_metrics.success} | Error ${payload.render_metrics.error}</div>
+        <div>Fallback ${payload.render_metrics.fallback} | Missing media ${payload.render_metrics.missing_media}</div>
+      </div>
+      <div class="operator-section">
+        <strong>Autopilot</strong>
+        <div>Total ${payload.autopilot_metrics.total} | Done ${payload.autopilot_metrics.done} | Paused ${payload.autopilot_metrics.paused}</div>
+        <div>Running ${payload.autopilot_metrics.running} | Queued ${payload.autopilot_metrics.queued} | Error ${payload.autopilot_metrics.error}</div>
+      </div>
+      <div class="operator-section">
+        <strong>Recent Autopilot Runs</strong>
+        ${recentAutopilotItems || "<div>표시할 오토파일럿 실행 기록이 없습니다.</div>"}
+      </div>
+    </div>
+  `;
+  operatorStatusResults.className = "card";
 }
 
 /**
@@ -1363,26 +3601,6 @@ async function cloneProject() {
   }));
   await openProject(response.project.id);
   toast("Project cloned.");
-}
-
-/**
- * @returns {Promise<void>}
- */
-async function fetchYoutubeStats() {
-  const project = requireCurrent();
-  if (!project.youtube_id) {
-    toast("Upload to YouTube first.");
-    return;
-  }
-  const stats = /** @type {{ view_count: number, like_count: number, comment_count: number, video_id: string }} */ (
-    await requestJson(`/api/projects/${project.id}/stats`)
-  );
-  uploadStatsPanel.innerHTML = `
-    <div><strong>Video</strong>: ${escapeHtml(stats.video_id)}</div>
-    <div><strong>Views</strong>: ${stats.view_count}</div>
-    <div><strong>Likes</strong>: ${stats.like_count}</div>
-    <div><strong>Comments</strong>: ${stats.comment_count}</div>
-  `;
 }
 
 /**
@@ -1720,12 +3938,15 @@ function renderTtsList() {
     return;
   }
 
+  const regionalSentences = effectiveRegionalSentences(project);
   project.sentences.forEach((sentence, index) => {
+    const region = normalizeRegion(regionalSentences[index]?.region || "body");
     const row = document.createElement("div");
-    row.className = "tts-row";
+    row.className = `tts-row ${region}`;
     const pad = String(index).padStart(4, "0");
     row.innerHTML = `
       <div class="idx">${index + 1}</div>
+      <div class="region-badge">${escapeHtml(region)}</div>
       <div class="text">${escapeHtml(sentence)}</div>
       <audio controls src="/api/projects/${project.id}/tts/${pad}.wav"></audio>
     `;
@@ -1861,6 +4082,9 @@ async function pollProjectStatus() {
   const project = requireCurrent();
   const previous = {
     tts: project.tts_state,
+    bodyImage: project.body_image_state,
+    sourceDraft: project.source_draft_state,
+    autopilot: project.autopilot_state,
     render: project.render_state,
     upload: project.upload_state,
     mediaUpload: project.media_upload_state,
@@ -1885,6 +4109,9 @@ async function pollProjectStatus() {
     status.render_heartbeat_at,
   );
   uploadState.textContent = `${readableTaskState(status.upload_state)} ${status.upload_progress}%`;
+  renderSourceDraft(current);
+  renderAutopilot(current);
+  renderImageGenPanel();
   renderMediaUploadStatus();
   updateProgressBar();
   updateStepMarks();
@@ -1904,6 +4131,24 @@ async function pollProjectStatus() {
     renderMedia();
     renderMediaUploadStatus();
   }
+  if (previous.sourceDraft !== "done" && status.source_draft_state === "done") {
+    current = /** @type {Project} */ (await requestJson(`/api/projects/${project.id}`));
+    renderSourceDraft(current);
+  }
+  if (
+    previous.autopilot !== status.autopilot_state
+    || ["queued", "running", "paused"].includes(status.autopilot_state)
+  ) {
+    await refreshAutopilotDebug().catch(() => {
+      autopilotDebugSnapshot = null;
+      renderAutopilot(requireCurrent());
+    });
+  }
+  if (previous.bodyImage !== "done" && status.body_image_state === "done") {
+    current = /** @type {Project} */ (await requestJson(`/api/projects/${project.id}`));
+    renderMedia();
+    renderImageGenPanel();
+  }
 }
 
 /**
@@ -1916,6 +4161,11 @@ function startPoll() {
       // Ignore transient polling failures and keep the UI responsive.
     });
   }, 1500);
+  operatorPollTimer = window.setInterval(() => {
+    void runOperatorStatus().catch(() => {
+      // Ignore static operator polling failures.
+    });
+  }, 30000);
 }
 
 /**
@@ -1926,6 +4176,10 @@ function stopPoll() {
     window.clearInterval(pollTimer);
   }
   pollTimer = null;
+  if (operatorPollTimer !== null) {
+    window.clearInterval(operatorPollTimer);
+  }
+  operatorPollTimer = null;
 }
 
 /**
@@ -2040,6 +4294,7 @@ stepButtons.forEach((button) => {
   });
 });
 
+contentModeSelect.addEventListener("change", renderScriptStats);
 scriptInput.addEventListener("input", renderScriptStats);
 
 saveScriptButton.addEventListener("click", async () => {
@@ -2051,17 +4306,202 @@ saveScriptButton.addEventListener("click", async () => {
         body: formDataFromObject({
           title: scriptTitleInput.value,
           script: scriptInput.value,
+          content_mode: contentModeSelect.value,
         }),
       })
     );
     workflowTitle.textContent = current.title || "Untitled Project";
+    contentModeSelect.value = current.content_mode || "standard";
     renderScriptStats();
+    renderSourceDraft(current);
     updateProgressBar();
     updateStepMarks();
     toast("스크립트를 저장했습니다.");
   } catch (error) {
     handleError(error, "스크립트를 저장하지 못했습니다.");
   }
+});
+
+sourceAnalyzeButton.addEventListener("click", () => {
+  void analyzeSourceUrl().catch((error) => handleError(error, "URL 분석을 완료하지 못했습니다."));
+});
+
+sourceKeywordRunButton.addEventListener("click", () => {
+  void collectSourceKeyword().catch((error) => handleError(error, "키워드 리서치를 완료하지 못했습니다."));
+});
+
+sourceClearButton.addEventListener("click", () => {
+  void clearSourceDraft().catch((error) => handleError(error, "Source draft를 비우지 못했습니다."));
+});
+
+autopilotStartButton.addEventListener("click", () => {
+  void startAutopilot()
+    .then(() => {
+      toast("오토파일럿을 시작했습니다.");
+    })
+    .catch((error) => handleError(error, "오토파일럿을 시작하지 못했습니다."));
+});
+
+autopilotPauseButton.addEventListener("click", () => {
+  void updateAutopilotState("pause")
+    .then(() => {
+      toast("오토파일럿을 일시정지했습니다.");
+    })
+    .catch((error) => handleError(error, "오토파일럿을 일시정지하지 못했습니다."));
+});
+
+autopilotResumeButton.addEventListener("click", () => {
+  void updateAutopilotState("resume")
+    .then(() => {
+      toast("오토파일럿을 재개했습니다.");
+    })
+    .catch((error) => handleError(error, "오토파일럿을 재개하지 못했습니다."));
+});
+
+autopilotCancelButton.addEventListener("click", () => {
+  void updateAutopilotState("cancel")
+    .then(() => {
+      toast("오토파일럿을 중단했습니다.");
+    })
+    .catch((error) => handleError(error, "오토파일럿을 중단하지 못했습니다."));
+});
+
+autopilotDebugRefreshButton.addEventListener("click", () => {
+  void refreshAutopilotDebug().catch((error) => handleError(error, "디버그 스냅샷을 불러오지 못했습니다."));
+});
+
+sourceGenerateButton.addEventListener("click", () => {
+  void generateSourceScript().catch((error) => handleError(error, "대본 초안을 생성하지 못했습니다."));
+});
+
+sourceRegenerateButton.addEventListener("click", () => {
+  void generateSourceScript().catch((error) => handleError(error, "대본 초안을 다시 생성하지 못했습니다."));
+});
+
+sourceRestoreButton.addEventListener("click", () => {
+  void restorePreviousSourceScript().catch((error) => handleError(error, "이전 초안을 복원하지 못했습니다."));
+});
+
+sourceApplyButton.addEventListener("click", () => {
+  void applySourceScript().catch((error) => handleError(error, "대본 초안을 적용하지 못했습니다."));
+});
+
+flowPromptsGenerateButton.addEventListener("click", () => {
+  void generateFlowPrompts().catch((error) => handleError(error, "Flow 프롬프트를 생성하지 못했습니다."));
+});
+
+simplePromptAllButton.addEventListener("click", () => {
+  void generateAllSimpleImagePrompts().catch((error) => handleError(error, "전체 이미지 프롬프트를 생성하지 못했습니다."));
+});
+
+simpleLmstudioUnloadButton.addEventListener("click", () => {
+  void unloadLmStudioForSimpleMedia().catch((error) => handleError(error, "LM Studio를 종료하지 못했습니다."));
+});
+
+simpleCopyPromptsButton.addEventListener("click", () => {
+  void copyAllSimplePrompts().catch((error) => handleError(error, "이미지 프롬프트를 복사하지 못했습니다."));
+});
+
+simpleImageGenerateButton.addEventListener("click", () => {
+  void enqueueSimpleMediaImageGen().catch((error) => handleError(error, "이미지 생성을 시작하지 못했습니다."));
+});
+
+simplePromptList.addEventListener("click", (event) => {
+  const target = /** @type {HTMLElement} */ (event.target);
+  const rawIdx = target.dataset.simpleCopyPrompt;
+  if (rawIdx === undefined) {
+    return;
+  }
+  const item = simplePromptItems.find((candidate) => Number(candidate.sentence_idx || 0) === Number(rawIdx));
+  if (!item) {
+    toast("복사할 프롬프트를 찾지 못했습니다.");
+    return;
+  }
+  void navigator.clipboard.writeText(String(item.positive_prompt || ""))
+    .then(() => toast(`문장 ${Number(rawIdx) + 1} 이미지 프롬프트를 복사했습니다.`))
+    .catch((error) => handleError(error, "이미지 프롬프트를 복사하지 못했습니다."));
+});
+
+flowOpenButton.addEventListener("click", () => {
+  window.open("https://labs.google/fx/tools/flow", "_blank", "noopener,noreferrer");
+});
+
+flowPromptList.addEventListener("click", (event) => {
+  const target = /** @type {HTMLElement} */ (event.target);
+  const action = target.dataset.flowAction || "";
+  if (!action) return;
+  const sentenceIdx = Number(target.dataset.sentenceIdx || "0");
+  if (!Number.isFinite(sentenceIdx)) return;
+  if (action === "copy") {
+    void copyFlowPrompt(sentenceIdx).catch((error) => handleError(error, "Flow 프롬프트를 복사하지 못했습니다."));
+  } else if (action === "attach") {
+    pendingFlowAssetSentenceIdx = sentenceIdx;
+    flowAssetInput.click();
+  }
+});
+
+flowAssetInput.addEventListener("change", () => {
+  const file = flowAssetInput.files ? flowAssetInput.files[0] || null : null;
+  void uploadFlowAsset(file).catch((error) => handleError(error, "Flow 결과 파일을 연결하지 못했습니다."));
+});
+
+sceneCardsRefreshButton.addEventListener("click", () => {
+  void loadSceneCards().catch((error) => handleError(error, "장면 카드를 불러오지 못했습니다."));
+});
+
+sceneCardList.addEventListener("change", (event) => {
+  const target = /** @type {HTMLElement} */ (event.target);
+  const card = target.closest(".scene-card");
+  if (!(card instanceof HTMLElement)) {
+    return;
+  }
+  const sentenceIdx = Number(card.dataset.sentenceIdx || "-1");
+  if (!Number.isFinite(sentenceIdx) || sentenceIdx < 0) {
+    return;
+  }
+  const action = target.dataset.sceneAction || "";
+  if (action === "lock" && target instanceof HTMLInputElement) {
+    void patchSceneCard(sentenceIdx, {locked: target.checked}).catch((error) => handleError(error, "장면 잠금을 저장하지 못했습니다."));
+  }
+  if (action === "motion" && target instanceof HTMLSelectElement) {
+    void patchSceneCard(sentenceIdx, {motion: target.value}).catch((error) => handleError(error, "움직임 설정을 저장하지 못했습니다."));
+  }
+});
+
+sceneCardList.addEventListener("click", (event) => {
+  const target = /** @type {HTMLElement} */ (event.target);
+  const action = target.dataset.sceneAction || "";
+  if (!action) {
+    return;
+  }
+  const card = target.closest(".scene-card");
+  if (!(card instanceof HTMLElement)) {
+    return;
+  }
+  const sentenceIdx = Number(card.dataset.sentenceIdx || "-1");
+  if (!Number.isFinite(sentenceIdx) || sentenceIdx < 0) {
+    return;
+  }
+  if (action === "subtitle-large") {
+    void patchSceneCard(sentenceIdx, {
+      subtitle_override: {
+        font_size: Math.min(96, Math.max(60, DEFAULT_SUBTITLE_STYLE.font_size + 16)),
+        primary_color: "#FFFFFF",
+        outline_color: "#000000",
+        outline_width: 4,
+        shadow: 2,
+      },
+    }).catch((error) => handleError(error, "개별 자막 설정을 저장하지 못했습니다."));
+  }
+  if (action === "subtitle-clear") {
+    void patchSceneCard(sentenceIdx, {clear_subtitle_override: true}).catch((error) => handleError(error, "개별 자막 설정을 해제하지 못했습니다."));
+  }
+});
+
+sourceModeButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    sourceModeButtons.forEach((item) => item.classList.toggle("active", item === button));
+  });
 });
 
 dropzone.addEventListener("click", () => {
@@ -2155,6 +4595,20 @@ mediaGrid.addEventListener("click", (event) => {
   }
 });
 
+imageGenMappings.addEventListener("click", (event) => {
+  const target = /** @type {HTMLElement} */ (event.target);
+  const actionTarget = target.closest("[data-action]");
+  if (!(actionTarget instanceof HTMLElement)) {
+    return;
+  }
+  const action = actionTarget.dataset.action || "";
+  if (action !== "apply-repair-suggestion") {
+    return;
+  }
+  const sentenceIdx = Number(actionTarget.dataset.sentenceIdx || "0");
+  applyRepairSuggestionForSentence(sentenceIdx);
+});
+
 [
   subtitleFontInput,
   subtitleSizeInput,
@@ -2189,12 +4643,81 @@ featureSaveButton.addEventListener("click", () => {
   void saveFeatureSettings().catch((error) => handleError(error, "Saving render settings failed."));
 });
 
+featureHyperframesOverlayInput.addEventListener("change", () => {
+  if (!featureHyperframesOverlayInput.checked) {
+    featureHyperframesRequiredInput.checked = false;
+  }
+  featureHyperframesRequiredInput.disabled = !featureHyperframesOverlayInput.checked;
+});
+
+youtubeRunButton.addEventListener("click", async () => {
+  const project = requireCurrent();
+  try {
+    await requestJson(`/api/projects/${project.id}/upload`, {
+      method: "POST",
+      body: formDataFromObject({
+        title: uploadTitleInput.value,
+        description: uploadDescInput.value,
+        tags: uploadTagsInput.value,
+        privacy: uploadPrivacySelect.value,
+        schedule_at: uploadScheduleInput.value,
+      }),
+    });
+    toast("YouTube 업로드를 시작했습니다.");
+  } catch (error) {
+    handleError(error, "YouTube 업로드를 시작하지 못했습니다.");
+  }
+});
+
+s1TabScript.addEventListener("click", () => setS1Mode("script"));
+s1TabSource.addEventListener("click", () => setS1Mode("source"));
+
+imageGenRunButton.addEventListener("click", () => {
+  void enqueueImageGen().catch((error) => handleError(error, "이미지 생성 작업을 등록하지 못했습니다."));
+});
+imageGenBatchRunButton.addEventListener("click", () => {
+  void enqueueBatchImageGen().catch((error) => handleError(error, "일괄 이미지 생성을 등록하지 못했습니다."));
+});
+imageGenSuggestButton.addEventListener("click", () => {
+  void suggestImagePrompt().catch((error) => handleError(error, "프롬프트 추천을 불러오지 못했습니다."));
+});
+imageGenerationProfileSelect.addEventListener("change", () => {
+  if (imageGenerationProfileSelect.value === "sdxl_style_reference" && !imageStyleReferenceInput.value.trim()) {
+    imageStyleReferenceInput.value = preferredStyleReferenceValue();
+  }
+  if (imageGenerationProfileSelect.value === "sdxl_controlnet_depth" && !imageControlReferenceInput.value.trim()) {
+    imageControlReferenceInput.value = preferredControlImageValue();
+  }
+  syncImageProfileUi();
+});
+imagePositivePromptInput.addEventListener("input", () => {
+  clearManualPromptOverrides();
+});
+imageNegativePromptInput.addEventListener("input", () => {
+  clearManualPromptOverrides();
+});
+imageLoraNameInput.addEventListener("input", () => {
+  syncImageProfileUi();
+});
+imageScenePlanRunButton.addEventListener("click", () => {
+  void buildScenePlan().catch((error) => handleError(error, "scene plan을 생성하지 못했습니다."));
+});
+imageRenderPlanRunButton.addEventListener("click", () => {
+  void buildRenderPlan().catch((error) => handleError(error, "render plan을 생성하지 못했습니다."));
+});
+
 preflightRunButton.addEventListener("click", () => {
   void runPreflight().catch((error) => handleError(error, "Pre-flight failed."));
 });
 
 systemHealthRunButton.addEventListener("click", () => {
   void runSystemHealth().catch((error) => handleError(error, "System health check failed."));
+});
+renderReportRunButton.addEventListener("click", () => {
+  void runRenderReport().catch((error) => handleError(error, "Render report check failed."));
+});
+operatorStatusRunButton.addEventListener("click", () => {
+  void runOperatorStatus().catch((error) => handleError(error, "Operator status check failed."));
 });
 
 cloneProjectButton.addEventListener("click", () => {
