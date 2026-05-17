@@ -17,8 +17,15 @@ from ..types import (
     VisualRelevanceSummary,
 )
 from .domain_detection import is_ai_policy_conflict_domain, is_food_trend_domain, is_news_explainer_domain
-from .prompt_compiler import GENERIC_FALLBACK_TERMS
 from .text_health import any_mojibake, looks_mojibake
+
+GENERIC_FALLBACK_TERMS = (
+    "generic illustration",
+    "abstract background",
+    "single everyday object in a quiet realistic room",
+    "stock photo",
+    "placeholder",
+)
 
 
 class VisualRelevanceIssue(TypedDict):
@@ -647,13 +654,13 @@ def _keyword_tokens(value: str) -> list[str]:
 
 
 def _keyword_present(prompt: str, keyword: str) -> bool:
-    prompt_lower = prompt.lower()
-    if keyword.lower() in prompt_lower:
+    prompt_text_lower = prompt.lower()
+    if keyword.lower() in prompt_text_lower:
         return True
     tokens = _keyword_tokens(keyword)
     if not tokens:
         return False
-    matched = sum(1 for token in tokens if token in prompt_lower)
+    matched = sum(1 for token in tokens if token in prompt_text_lower)
     if len(tokens) == 1:
         return matched == 1
     if len(tokens) == 2:
@@ -1051,8 +1058,8 @@ def write_visual_contact_sheet(project: ProjectRecord) -> Path:
         must_show_text = ", ".join(item for item in must_show if isinstance(item, str)) if isinstance(must_show, list) else ""
         draw.text((x + padding, y + padding + thumb_h + 18), f"must_show: {must_show_text[:92]}", fill=(40, 40, 40), font=small_font)
         prompt = str(row.get("positive_prompt") or "")
-        for prompt_line in _wrap_text(f"prompt: {prompt[:220]}", width=92):
-            draw.text((x + padding, y + padding + thumb_h + 44), prompt_line, fill=(80, 80, 80), font=small_font)
+        for rendered_prompt_text in _wrap_text(f"prompt: {prompt[:220]}", width=92):
+            draw.text((x + padding, y + padding + thumb_h + 44), rendered_prompt_text, fill=(80, 80, 80), font=small_font)
             y += 20
 
     sheet.save(output_path, quality=92)

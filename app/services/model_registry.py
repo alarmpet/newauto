@@ -2,7 +2,6 @@ from pathlib import Path
 
 from ..config import COMFYUI_INSTALL_DIR, LLM_PROVIDER, SCRIPT_LLM_MODEL
 from ..types import ModelStatus
-from .comfyui_capabilities import get_controlnet_depth_capability, get_style_reference_capability
 
 
 def _model(
@@ -36,9 +35,6 @@ def list_model_status() -> list[ModelStatus]:
     loras_dir = comfy_models_dir / "loras"
     checkpoints_count = _count_model_files(checkpoints_dir)
     loras_count = _count_model_files(loras_dir)
-    style_reference = get_style_reference_capability(COMFYUI_INSTALL_DIR)
-    controlnet_depth = get_controlnet_depth_capability(COMFYUI_INSTALL_DIR)
-
     return [
         _model(
             key="script_llm",
@@ -71,29 +67,5 @@ def list_model_status() -> list[ModelStatus]:
             source="filesystem",
             path=str(loras_dir),
             detail=f"LoRA files: {loras_count}",
-        ),
-        _model(
-            key="comfyui_ipadapter_style_reference",
-            label="IPAdapter Style Reference",
-            available=style_reference["available"],
-            source="filesystem",
-            path=style_reference["custom_node_path"],
-            detail=(
-                f"Ready. {style_reference['detail']}"
-                if style_reference["available"]
-                else f"Missing pieces. {style_reference['detail']}"
-            ),
-        ),
-        _model(
-            key="comfyui_controlnet_depth",
-            label="ControlNet Depth",
-            available=controlnet_depth["available"],
-            source="filesystem",
-            path=controlnet_depth["custom_node_path"],
-            detail=(
-                f"Ready. {controlnet_depth['detail']}"
-                if controlnet_depth["available"]
-                else f"Missing pieces. {controlnet_depth['detail']}"
-            ),
         ),
     ]

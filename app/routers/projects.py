@@ -135,7 +135,7 @@ class ProjectFeaturePayload(BaseModel):
             patch["visual_source_mode"] = self.visual_source_mode
         if self.style_preset is not None:
             normalized = self.style_preset.strip().lower()
-            allowed = {"", "k_webtoon", "simple_diagram", "editorial_symbolic", "stickman_business"}
+            allowed = {"", "k_webtoon", "simple_diagram", "editorial_symbolic"}
             if normalized not in allowed:
                 raise HTTPException(400, f"unsupported style_preset: {self.style_preset}")
             patch["style_preset"] = normalized

@@ -9,7 +9,6 @@ PrivacyValue = Literal["private", "unlisted", "public"]
 RenderFormat = Literal["landscape", "shorts"]
 ContentMode = Literal["standard", "bible_longform"]
 VisualSourceMode = Literal["upload_only", "hybrid", "comfyui_auto"]
-VisualBriefMode = Literal["literal_scene", "keyword_image", "symbolic_metaphor"]
 Region = Literal["intro", "body", "bible"]
 SourceDraftInputMode = Literal["", "url", "keyword"]
 SourceRegenerateMode = Literal["", "hook", "point", "story", "lesson"]
@@ -104,39 +103,7 @@ class BodyImageMapping(TypedDict):
     vision_qa_issue_codes: NotRequired[list[str]]
 
 
-class SdxlDualPrompt(TypedDict):
-    prompt_g: str
-    prompt_l: str
-    combined: str
-
-
-class ControlNetDecision(TypedDict):
-    enabled: bool
-    type: str
-    strength: float
-    start_percent: float
-    end_percent: float
-
-
-class LoraDecision(TypedDict):
-    enabled: bool
-    name: str
-    strength: float
-
-
-class PromptRepairDecision(TypedDict):
-    should_retry: bool
-    attempt: int
-    issue_codes: list[str]
-    repaired_positive_prompt: str
-    repaired_prompt_g: str
-    repaired_prompt_l: str
-    repaired_negative_prompt: str
-    repair_reason: str
-
-
 class VisualBrief(TypedDict):
-    mode: VisualBriefMode
     main_subject: str
     action: str
     primary_prop: str
@@ -162,12 +129,8 @@ class VisualBrief(TypedDict):
     scene_anchor: NotRequired[str]
     hero_subject: NotRequired[str]
     symbolic_marker: NotRequired[str]
-    prompt_g: NotRequired[str]
-    prompt_l: NotRequired[str]
     style_mode: NotRequired[str]
     qa_expectations: NotRequired[list[str]]
-    controlnet: NotRequired[ControlNetDecision]
-    lora: NotRequired[LoraDecision]
     composition_template: NotRequired[str]
     visual_mode: NotRequired[VisualSceneMode]
     semantic_anchor_type: NotRequired[SemanticAnchorType]

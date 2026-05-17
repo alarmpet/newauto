@@ -38,37 +38,7 @@ from ..types import (
 MAX_EVENT_LINES = 2000
 MAX_RECENT_EVENTS = 10
 POLL_WAIT_SEC = 2.0
-DEFAULT_IMAGE_CHECKPOINT = "sd_xl_base_1.0.safetensors"
-DEFAULT_STICKMAN_LORA_STRENGTH = 0.8
 AUTOPILOT_DEFAULT_VOICE_PRESET = "male-announcer-40s-50s"
-_STICKMAN_BLOCKED_DOMAIN_SET = {"ev_battery", "news_explainer", "ai_policy_conflict", "tech"}
-_STICKMAN_TRIGGER_TERMS = (
-    "Flipchartvisu, Stick figure, ",
-    "Flipchartvisu, Stick figure",
-    "Flipchartvisu",
-    "Stick figure",
-    "minimalist 2d stickman explainer poster",
-    "stickman",
-)
-_STICKMAN_BLOCKED_SUB_STRATEGIES = {
-    "semiconductor_business_news",
-    "political_business_delegation",
-    "executive_travel_diplomacy",
-}
-_STICKMAN_BLOCKED_NEEDLES = (
-    "jensen huang",
-    "nvidia",
-    "trump",
-    "donald trump",
-    "delegation",
-    "business delegation",
-    "economic delegation",
-    "air force one",
-    "beijing",
-    "alaska",
-    "china trip",
-    "ceo",
-)
 
 
 def _autopilot_dir(pid: str) -> Path:
@@ -514,111 +484,6 @@ def _effective_autopilot_tts_profile(project: ProjectRecord) -> tuple[str, TtsPr
         script_text,
     )
     return autopilot_preset, autopilot_profile, True
-
-
-def _find_stickfigures_lora_name() -> str:
-    loras_dir = COMFYUI_INSTALL_DIR / "models" / "loras"
-    if not loras_dir.exists():
-        return ""
-    for path in sorted(loras_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        lowered = path.name.lower()
-        if "stickfigure" in lowered or "stickfigures" in lowered:
-            return path.name
-    return ""
-
-
-def _candidate_total_for_prompt(prompt: dict[str, object], quality_mode: QualityMode) -> int:
-    if quality_mode == "fast":
-        return 1
-    visual_plan = prompt.get("visual_plan")
-    subject_modes: list[str] = []
-    if isinstance(visual_plan, dict):
-        raw_subject_modes = visual_plan.get("subject_modes")
-        if isinstance(raw_subject_modes, list):
-            subject_modes = [item for item in raw_subject_modes if isinstance(item, str)]
-    abstract_scene = any(mode in {"environment", "object_metaphor", "symbolic"} for mode in subject_modes)
-    if quality_mode == "balanced":
-        return 2 if abstract_scene else 1
-    return 3 if abstract_scene else 2
-
-
-def _int_from_object(value: object, default: int) -> int:
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    return default
-
-
-def _float_from_object(value: object, default: float) -> float:
-    if isinstance(value, bool):
-        return float(int(value))
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return default
-    return default
-
-
-def _lowered_prompt_haystack(prompt: dict[str, object]) -> str:
-    parts: list[str] = []
-    for key in ("sentence", "positive_prompt", "prompt", "prompt_g", "prompt_l"):
-        value = prompt.get(key)
-        if isinstance(value, str):
-            parts.append(value)
-    for key in ("visual_brief", "visual_plan"):
-        value = prompt.get(key)
-        if isinstance(value, dict):
-            parts.extend(str(item) for item in value.values() if isinstance(item, (str, int, float)))
-            for list_value in value.values():
-                if isinstance(list_value, list):
-                    parts.extend(str(item) for item in list_value if isinstance(item, str))
-    return " ".join(parts).lower()
-
-
-def _stickman_lora_blocked_for_prompt(prompt: dict[str, object]) -> bool:
-    visual_brief = prompt.get("visual_brief")
-    visual_plan = prompt.get("visual_plan")
-    domain = ""
-    sub_strategy = ""
-    lora_policy = ""
-    if isinstance(visual_brief, dict):
-        domain = str(visual_brief.get("domain") or "").strip().lower()
-    if isinstance(visual_plan, dict):
-        domain = domain or str(visual_plan.get("domain") or "").strip().lower()
-        sub_strategy = str(visual_plan.get("sub_strategy") or "").strip().lower()
-        lora_policy = str(visual_plan.get("lora_policy") or "").strip().lower()
-    if lora_policy == "none":
-        return True
-    if domain in _STICKMAN_BLOCKED_DOMAIN_SET:
-        return True
-    if sub_strategy in _STICKMAN_BLOCKED_SUB_STRATEGIES:
-        return True
-    haystack = _lowered_prompt_haystack(prompt)
-    return any(needle in haystack for needle in _STICKMAN_BLOCKED_NEEDLES)
-
-
-def _strip_stickman_trigger_terms(value: str) -> str:
-    cleaned = value
-    for term in _STICKMAN_TRIGGER_TERMS:
-        cleaned = cleaned.replace(term, "")
-    return " ".join(cleaned.replace(",,", ",").split()).strip(" ,")
-
-
-def _build_image_batch_items(project: ProjectRecord, options: AutopilotOptions) -> list[dict[str, object]]:
-    return []
 
 
 def _wait_for_state(

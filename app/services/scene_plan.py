@@ -148,12 +148,20 @@ def build_scene_plan(project: ProjectRecord, *, render_format: RenderFormat = "l
         }
         if primary_prop:
             scene["key_concept"] = primary_prop
+        elif visual_plan_entry is not None and visual_plan_entry["primary_keywords"]:
+            scene["key_concept"] = visual_plan_entry["primary_keywords"][0]
         if visual_metaphor:
             scene["visual_metaphor"] = visual_metaphor
         if subject:
             scene["subject"] = subject
+        elif visual_plan_entry is not None:
+            scene["subject"] = visual_plan_entry.get("hero_subject") or (
+                visual_plan_entry["primary_keywords"][0] if visual_plan_entry["primary_keywords"] else sentence
+            )
         if props:
             scene["props"] = props
+        elif visual_plan_entry is not None and visual_plan_entry["must_show"]:
+            scene["props"] = list(visual_plan_entry["must_show"][:2])
         if scene_background:
             scene["background"] = scene_background
         if avoid:
