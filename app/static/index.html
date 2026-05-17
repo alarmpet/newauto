@@ -12,7 +12,7 @@
       <div class="logo">NA</div>
       <div>
         <b>newauto Studio</b>
-        <div class="muted">D1 compatibility shell</div>
+        <div class="muted">Z-Image Korean backend</div>
       </div>
     </div>
     <button id="nav-projects" class="nav active" type="button">Projects</button>
@@ -48,10 +48,31 @@
         <button id="s1-save" class="btn primary" type="button">Save Script</button>
       </section>
 
-      <section id="image-gen-disabled-panel" class="card disabled-panel">
-        <h2>2. Image Generation Disabled</h2>
-        <p>Image generation is disabled until the D2 Z-Image backend lands.</p>
-        <code>IMAGE_GEN_DISABLED_D1</code>
+      <section id="image-gen-panel" class="card">
+        <h2>2. Z-Image Turbo</h2>
+        <div class="grid two">
+          <label>
+            Sentence
+            <select id="s2-sentence"></select>
+          </label>
+          <label>
+            Aspect
+            <select id="s2-aspect">
+              <option value="16:9">16:9</option>
+              <option value="9:16">9:16</option>
+              <option value="1:1">1:1</option>
+            </select>
+          </label>
+        </div>
+        <label for="s2-negative">Negative prompt override</label>
+        <input id="s2-negative" placeholder="Optional">
+        <div class="actions">
+          <button id="s2-preview" class="btn" type="button">Preview Prompt</button>
+          <button id="s2-generate-one" class="btn primary" type="button">Generate Sentence</button>
+          <button id="s2-generate-all" class="btn" type="button">Generate All</button>
+        </div>
+        <textarea id="s2-prompt-preview" readonly placeholder="Z-Image Korean prompt preview"></textarea>
+        <div id="s2-status" class="status-line"></div>
       </section>
 
       <section class="card">

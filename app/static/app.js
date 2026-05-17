@@ -1,7 +1,8 @@
 // @ts-check
 
 /** @typedef {{id: string, title: string, updated_at?: string, body_image_state?: string}} ProjectCard */
-/** @typedef {{id: string, title: string, script: string}} ProjectRecord */
+/** @typedef {{sentence_idx: number, positive_prompt: string, negative_prompt: string}} PromptSuggestion */
+/** @typedef {{id: string, title: string, script: string, sentences?: string[], body_image_state?: string, body_image_progress?: number, body_image_phase?: string, body_image_last_log?: string}} ProjectRecord */
 
 const projectsView = document.querySelector("#view-projects");
 const workflowView = document.querySelector("#view-workflow");
@@ -15,6 +16,14 @@ const workflowId = document.querySelector("#wf-id");
 const scriptTitle = /** @type {HTMLInputElement | null} */ (document.querySelector("#s1-title"));
 const scriptText = /** @type {HTMLTextAreaElement | null} */ (document.querySelector("#s1-script"));
 const saveScriptButton = document.querySelector("#s1-save");
+const sentenceSelect = /** @type {HTMLSelectElement | null} */ (document.querySelector("#s2-sentence"));
+const aspectSelect = /** @type {HTMLSelectElement | null} */ (document.querySelector("#s2-aspect"));
+const negativeInput = /** @type {HTMLInputElement | null} */ (document.querySelector("#s2-negative"));
+const previewButton = document.querySelector("#s2-preview");
+const generateOneButton = document.querySelector("#s2-generate-one");
+const generateAllButton = document.querySelector("#s2-generate-all");
+const promptPreview = /** @type {HTMLTextAreaElement | null} */ (document.querySelector("#s2-prompt-preview"));
+const imageStatus = /** @type {HTMLElement | null} */ (document.querySelector("#s2-status"));
 
 /** @type {ProjectRecord | null} */
 let currentProject = null;
@@ -53,6 +62,58 @@ function showWorkflow(project) {
   if (workflowId) workflowId.textContent = project.id;
   if (scriptTitle) scriptTitle.value = project.title || "";
   if (scriptText) scriptText.value = project.script || "";
+  renderImageControls(project);
+}
+
+/**
+ * @param {ProjectRecord} project
+ */
+function renderImageControls(project) {
+  if (sentenceSelect) {
+    sentenceSelect.textContent = "";
+    const sentences = project.sentences || splitSentences(project.script || "");
+    sentences.forEach((sentence, index) => {
+      const option = document.createElement("option");
+      option.value = String(index);
+      option.textContent = `${index + 1}. ${sentence.slice(0, 54)}`;
+      sentenceSelect.appendChild(option);
+    });
+  }
+  updateImageStatus(project);
+}
+
+/**
+ * @param {string} script
+ * @returns {string[]}
+ */
+function splitSentences(script) {
+  return script.split(/\n+/).map((line) => line.trim()).filter(Boolean);
+}
+
+/**
+ * @param {ProjectRecord} project
+ */
+function updateImageStatus(project) {
+  if (!imageStatus) return;
+  const state = project.body_image_state || "idle";
+  const progress = Number(project.body_image_progress || 0);
+  const phase = project.body_image_phase || "";
+  const log = project.body_image_last_log || "";
+  imageStatus.textContent = `State: ${state} ${progress}% ${phase}${log ? ` - ${log}` : ""}`;
+}
+
+function imagePayload() {
+  return {
+    sentence_idx: Number(sentenceSelect?.value || 0),
+    aspect_ratio: aspectSelect?.value || "16:9",
+    negative_prompt_override: negativeInput?.value || "",
+  };
+}
+
+async function refreshCurrentProject() {
+  if (!currentProject) return;
+  currentProject = /** @type {ProjectRecord} */ (await api(`/api/projects/${currentProject.id}`));
+  renderImageControls(currentProject);
 }
 
 async function loadProjects() {
@@ -87,9 +148,12 @@ function escapeHtml(value) {
 
 createButton?.addEventListener("click", async () => {
   const title = newTitle?.value.trim() || "Untitled";
+  const form = new FormData();
+  form.set("title", title);
   const project = /** @type {ProjectRecord} */ (await api("/api/projects", {
     method: "POST",
-    body: JSON.stringify({title}),
+    headers: {},
+    body: form,
   }));
   await loadProjects();
   showWorkflow(project);
@@ -102,14 +166,42 @@ backButton?.addEventListener("click", () => {
 
 saveScriptButton?.addEventListener("click", async () => {
   if (!currentProject) return;
-  const updated = /** @type {ProjectRecord} */ (await api(`/api/projects/${currentProject.id}`, {
-    method: "PATCH",
-    body: JSON.stringify({
-      title: scriptTitle?.value || currentProject.title,
-      script: scriptText?.value || "",
-    }),
+  const form = new FormData();
+  form.set("title", scriptTitle?.value || currentProject.title);
+  form.set("script", scriptText?.value || "");
+  const updated = /** @type {ProjectRecord} */ (await api(`/api/projects/${currentProject.id}/script`, {
+    method: "PUT",
+    headers: {},
+    body: form,
   }));
   showWorkflow(updated);
+});
+
+previewButton?.addEventListener("click", async () => {
+  if (!currentProject || !promptPreview) return;
+  const payload = imagePayload();
+  const suggestion = /** @type {PromptSuggestion} */ (await api(
+    `/api/projects/${currentProject.id}/comfyui/prompt-suggestion?sentence_idx=${payload.sentence_idx}`,
+  ));
+  promptPreview.value = `${suggestion.positive_prompt}\n\nNegative:\n${suggestion.negative_prompt}`;
+});
+
+generateOneButton?.addEventListener("click", async () => {
+  if (!currentProject) return;
+  await api(`/api/projects/${currentProject.id}/comfyui/job`, {
+    method: "POST",
+    body: JSON.stringify(imagePayload()),
+  });
+  await refreshCurrentProject();
+});
+
+generateAllButton?.addEventListener("click", async () => {
+  if (!currentProject) return;
+  await api(`/api/projects/${currentProject.id}/comfyui/job/batch-auto`, {
+    method: "POST",
+    body: JSON.stringify(imagePayload()),
+  });
+  await refreshCurrentProject();
 });
 
 void loadProjects();
