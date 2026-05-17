@@ -11,6 +11,7 @@ from urllib.request import Request, urlopen
 from fastapi import HTTPException
 
 from ..config import BRAVE_API_KEY, BRAVE_FREE_MONTHLY_LIMIT, BRAVE_USAGE_PATH, SOURCE_RESEARCH_CACHE_DIR
+from .web_search import parse_duckduckgo_html
 from .usage_registry import get_provider_usage, reserve_provider_usage
 
 BRAVE_WEB_SEARCH_URL = "https://api.search.brave.com/res/v1/web/search"
@@ -133,27 +134,10 @@ def _collect_sources_from_duckduckgo_html(query: str, *, count: int) -> tuple[li
     except (HTTPError, URLError) as exc:
         raise HTTPException(502, f"DuckDuckGo HTML 검색에 연결하지 못했습니다: {exc}") from exc
 
-    pattern = re.compile(
-        r'<a[^>]+class="result__a"[^>]+href="(?P<href>[^"]+)"[^>]*>(?P<title>.*?)</a>',
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    snippet_pattern = re.compile(
-        r'<a[^>]+class="result__snippet"[^>]*>(?P<snippet>.*?)</a>',
-        flags=re.IGNORECASE | re.DOTALL,
-    )
-    snippets = [_html_unescape(match.group("snippet")) for match in snippet_pattern.finditer(html_text)]
-    results: list[SearchResult] = []
-    seen_urls: set[str] = set()
-    for index, match in enumerate(pattern.finditer(html_text)):
-        url = _duckduckgo_result_url(_html_unescape(match.group("href")))
-        title = _html_unescape(match.group("title"))
-        if not url.startswith(("http://", "https://")) or not title or url in seen_urls:
-            continue
-        seen_urls.add(url)
-        description = snippets[index] if index < len(snippets) else ""
-        results.append(SearchResult(title=title, url=url, description=description))
-        if len(results) >= max(1, min(count, 10)):
-            break
+    results = [
+        SearchResult(title=item.title, url=item.url, description=item.snippet)
+        for item in parse_duckduckgo_html(html_text, limit=max(1, min(count, 10)))
+    ]
     if not results:
         raise HTTPException(404, "DuckDuckGo HTML 검색에서도 수집할 검색 결과를 찾지 못했습니다.")
     usage = get_brave_usage_status()

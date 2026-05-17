@@ -3,7 +3,7 @@ import time
 from typing import cast
 
 from .. import db
-from ..config import CLIENT_SECRET_PATH, PROJECTS_DIR
+from ..config import CLIENT_SECRET_PATH, LLM_PROVIDER, LMSTUDIO_BASE_URL, OLLAMA_BASE_URL, PROJECTS_DIR, SCRIPT_LLM_MODEL
 from ..types import (
     AutopilotState,
     AutopilotRunSummary,
@@ -16,6 +16,8 @@ from ..types import (
     UsageRecord,
 )
 from .gpu_guard import get_status as get_gpu_status
+from .hyperframes_probe import probe_hyperframes_runtime
+from .lmstudio_runtime import loaded_lmstudio_models
 from .model_registry import list_model_status
 from .python_runtime import get_omnivoice_runtime_status
 from .render_report import summarize_recent_render_reports
@@ -54,14 +56,29 @@ def _get_omnivoice_status(*, refresh_runtime: bool = False) -> dict[str, object]
 def get_system_health(*, refresh_runtime: bool = False) -> SystemHealth:
     usage = shutil.disk_usage(PROJECTS_DIR)
     omnivoice_status = _get_omnivoice_status(refresh_runtime=refresh_runtime)
+    hyperframes_status = probe_hyperframes_runtime(refresh=refresh_runtime)
+    lmstudio_models = loaded_lmstudio_models() if LLM_PROVIDER == "lmstudio" else []
+    llm_base_url = LMSTUDIO_BASE_URL if LLM_PROVIDER == "lmstudio" else OLLAMA_BASE_URL
     return {
         "ffmpeg_available": shutil.which("ffmpeg") is not None,
         "oauth_ready": CLIENT_SECRET_PATH.exists(),
+        "llm_provider": LLM_PROVIDER,
+        "llm_model": SCRIPT_LLM_MODEL,
+        "llm_base_url": llm_base_url,
+        "llm_ready": SCRIPT_LLM_MODEL in lmstudio_models if LLM_PROVIDER == "lmstudio" else bool(SCRIPT_LLM_MODEL.strip()),
+        "lmstudio_loaded_models": lmstudio_models,
         "omnivoice_python_found": bool(omnivoice_status["resolved"]),
         "omnivoice_python_path": str(omnivoice_status["python_path"]),
         "omnivoice_import_ok": bool(omnivoice_status["omnivoice_import_ok"]),
         "omnivoice_torch_ok": bool(omnivoice_status["torch_import_ok"]),
         "omnivoice_cuda_available": bool(omnivoice_status["cuda_available"]),
+        "hyperframes_node_available": bool(hyperframes_status["node_available"]),
+        "hyperframes_node_version": str(hyperframes_status["node_version"]),
+        "hyperframes_npx_available": bool(hyperframes_status["npx_available"]),
+        "hyperframes_npx_version": str(hyperframes_status["npx_version"]),
+        "hyperframes_doctor_ok": bool(hyperframes_status["doctor_ok"]),
+        "hyperframes_doctor_detail": str(hyperframes_status["doctor_detail"]),
+        "hyperframes_ffmpeg_alpha_ok": bool(hyperframes_status["ffmpeg_alpha_ok"]),
         "disk_free_gb": round(usage.free / (1024 ** 3), 2),
         "storage_path": str(PROJECTS_DIR),
     }
