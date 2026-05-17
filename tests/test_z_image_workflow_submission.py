@@ -1,0 +1,58 @@
+import unittest
+from unittest.mock import patch
+
+from app.services.comfyui_client import ComfyImageResult, ComfyPromptSubmission, ComfyUIClient
+from app.services.comfyui_pipeline import submit_z_image_workflow
+from app.services.z_image_workflow import LATENT_NODE_ID, NEGATIVE_NODE_ID, POSITIVE_NODE_ID, SAVE_NODE_ID, load_z_image_workflow
+
+
+class ZImageWorkflowTests(unittest.TestCase):
+    def test_loads_workflow_with_korean_positive_prompt(self) -> None:
+        workflow = load_z_image_workflow(
+            positive_prompt="젠슨 황 방중 경제사절단 합류 장면",
+            negative_prompt="저품질",
+            aspect_ratio="9:16",
+            filename_prefix="smoke",
+        )
+        positive = workflow[str(POSITIVE_NODE_ID)]["inputs"]["text"]
+        negative = workflow[str(NEGATIVE_NODE_ID)]["inputs"]["text"]
+        latent = workflow[str(LATENT_NODE_ID)]["inputs"]
+        save = workflow[str(SAVE_NODE_ID)]["inputs"]["filename_prefix"]
+        self.assertEqual(positive, "젠슨 황 방중 경제사절단 합류 장면")
+        self.assertEqual(negative, "저품질")
+        self.assertEqual(latent["width"], 768)
+        self.assertEqual(latent["height"], 1344)
+        self.assertEqual(save, "smoke")
+
+    def test_submits_with_korean_positive_prompt(self) -> None:
+        client = ComfyUIClient()
+        captured: dict[str, object] = {}
+
+        def fake_submit(workflow: dict[str, object]) -> ComfyPromptSubmission:
+            captured["workflow"] = workflow
+            return ComfyPromptSubmission(prompt_id="pid-1", number=1, node_errors={})
+
+        with (
+            patch.object(client, "submit_workflow", side_effect=fake_submit),
+            patch.object(client, "get_history", return_value={"pid-1": {"outputs": {"228": {"images": [{
+                "filename": "out.png",
+                "subfolder": "",
+                "type": "output",
+            }]}}}}),
+        ):
+            prompt_id, results = submit_z_image_workflow(
+                client,
+                positive_prompt="한국어 프롬프트 그대로",
+                negative_prompt="저품질",
+                timeout_sec=1,
+            )
+
+        workflow = captured["workflow"]
+        assert isinstance(workflow, dict)
+        self.assertEqual(workflow[str(POSITIVE_NODE_ID)]["inputs"]["text"], "한국어 프롬프트 그대로")
+        self.assertEqual(prompt_id, "pid-1")
+        self.assertEqual(results, [ComfyImageResult(filename="out.png", subfolder="", type="output")])
+
+
+if __name__ == "__main__":
+    unittest.main()

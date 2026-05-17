@@ -13,6 +13,7 @@ from ..types import BodyImageMapping, ProjectRecord
 from .comfyui_client import ComfyImageResult, ComfyUIClient
 from .comfyui_workflows import PlaceholderMap, render_workflow_template
 from .visual_relevance import sentence_hash
+from .z_image_workflow import load_z_image_workflow
 
 
 class CandidateSelectionDecision(TypedDict):
@@ -106,3 +107,32 @@ def submit_template(
             raise HTTPException(status_code=502, detail=error)
         time.sleep(1.0)
     raise HTTPException(status_code=504, detail="ComfyUI workflow timed out.")
+
+
+def submit_z_image_workflow(
+    client: ComfyUIClient,
+    *,
+    positive_prompt: str,
+    negative_prompt: str,
+    aspect_ratio: str = "16:9",
+    filename_prefix: str = "newauto_z_image",
+    timeout_sec: int = 180,
+) -> tuple[str, list[ComfyImageResult]]:
+    workflow = load_z_image_workflow(
+        positive_prompt=positive_prompt,
+        negative_prompt=negative_prompt,
+        aspect_ratio=aspect_ratio,
+        filename_prefix=filename_prefix,
+    )
+    submission = client.submit_workflow(workflow)
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        history = client.get_history(submission.prompt_id)
+        results = client.extract_image_results(history, submission.prompt_id)
+        if results:
+            return submission.prompt_id, results
+        error = client.extract_execution_error(history, submission.prompt_id)
+        if error:
+            raise HTTPException(status_code=502, detail=error)
+        time.sleep(1.0)
+    raise HTTPException(status_code=504, detail="ComfyUI Z-Image workflow timed out.")
