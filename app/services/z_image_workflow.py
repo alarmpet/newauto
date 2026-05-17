@@ -14,6 +14,12 @@ POSITIVE_NODE_ID = 67
 NEGATIVE_NODE_ID = 191
 LATENT_NODE_ID = 68
 SAVE_NODE_ID = 228
+UNET_NODE_IDS = (109, 130)
+CLIP_NODE_ID = 62
+VAE_NODE_ID = 63
+DEFAULT_UNET_NAME = "z_image_turbo_nvfp4.safetensors"
+DEFAULT_CLIP_NAME = "qwen_3_4b_fp8_mixed.safetensors"
+DEFAULT_VAE_NAME = "ae.safetensors"
 
 _WIDGET_INPUTS: dict[str, list[str]] = {
     "UNETLoader": ["unet_name", "weight_dtype"],
@@ -71,16 +77,72 @@ def load_z_image_workflow(
     negative_prompt: str,
     aspect_ratio: str = "16:9",
     filename_prefix: str = "newauto_z_image",
+    unet_name: str = DEFAULT_UNET_NAME,
+    clip_name: str = DEFAULT_CLIP_NAME,
+    vae_name: str = DEFAULT_VAE_NAME,
     base_dir: Path = COMFYUI_WORKFLOW_DIR,
 ) -> dict[str, object]:
     workflow = copy.deepcopy(load_workflow_template(Z_IMAGE_TEMPLATE_ID, base_dir=base_dir))
-    _set_first_widget(_find_node(workflow, POSITIVE_NODE_ID), positive_prompt)
-    _set_first_widget(_find_node(workflow, NEGATIVE_NODE_ID), negative_prompt)
+    # Validate the vendored workflow still contains the node classes D2 depends on.
+    for node_id in (CLIP_NODE_ID, VAE_NODE_ID, POSITIVE_NODE_ID, NEGATIVE_NODE_ID, LATENT_NODE_ID, UNET_NODE_IDS[0], 107, 106, 111):
+        _find_node(workflow, node_id)
+    _set_first_widget(_find_node(workflow, CLIP_NODE_ID), clip_name)
+    _set_first_widget(_find_node(workflow, VAE_NODE_ID), vae_name)
     width, height = _dimensions_for_aspect_ratio(aspect_ratio)
-    latent = _find_node(workflow, LATENT_NODE_ID)
-    latent["widgets_values"] = [width, height, 1]
-    _set_first_widget(_find_node(workflow, SAVE_NODE_ID), filename_prefix)
-    return convert_comfyui_graph_to_api(workflow)
+    return {
+        str(CLIP_NODE_ID): {
+            "class_type": "CLIPLoader",
+            "inputs": {"clip_name": clip_name, "type": "lumina2", "device": "default"},
+        },
+        str(VAE_NODE_ID): {
+            "class_type": "VAELoader",
+            "inputs": {"vae_name": vae_name},
+        },
+        str(POSITIVE_NODE_ID): {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"clip": [str(CLIP_NODE_ID), 0], "text": positive_prompt},
+        },
+        str(NEGATIVE_NODE_ID): {
+            "class_type": "CLIPTextEncode",
+            "inputs": {"clip": [str(CLIP_NODE_ID), 0], "text": negative_prompt},
+        },
+        str(LATENT_NODE_ID): {
+            "class_type": "EmptySD3LatentImage",
+            "inputs": {"width": width, "height": height, "batch_size": 1},
+        },
+        str(UNET_NODE_IDS[0]): {
+            "class_type": "UNETLoader",
+            "inputs": {"unet_name": unet_name, "weight_dtype": "default"},
+        },
+        "107": {
+            "class_type": "ModelSamplingAuraFlow",
+            "inputs": {"model": [str(UNET_NODE_IDS[0]), 0], "shift": 5},
+        },
+        "106": {
+            "class_type": "KSampler",
+            "inputs": {
+                "model": ["107", 0],
+                "positive": [str(POSITIVE_NODE_ID), 0],
+                "negative": [str(NEGATIVE_NODE_ID), 0],
+                "latent_image": [str(LATENT_NODE_ID), 0],
+                "seed": 8,
+                "control_after_generate": "fixed",
+                "steps": 9,
+                "cfg": 1,
+                "sampler_name": "euler",
+                "scheduler": "simple",
+                "denoise": 0.6,
+            },
+        },
+        "111": {
+            "class_type": "VAEDecode",
+            "inputs": {"samples": ["106", 0], "vae": [str(VAE_NODE_ID), 0]},
+        },
+        str(SAVE_NODE_ID): {
+            "class_type": "SaveImage",
+            "inputs": {"images": ["111", 0], "filename_prefix": filename_prefix},
+        },
+    }
 
 
 def convert_comfyui_graph_to_api(workflow: dict[str, Any]) -> dict[str, object]:
@@ -90,11 +152,24 @@ def convert_comfyui_graph_to_api(workflow: dict[str, Any]) -> dict[str, object]:
         raise HTTPException(500, "ComfyUI workflow graph export is invalid.")
 
     link_sources: dict[int, list[object]] = {}
+    required_node_ids: set[int] = {SAVE_NODE_ID}
+    incoming_by_node: dict[int, list[int]] = {}
     for link in links:
         if isinstance(link, list) and len(link) >= 6:
-            link_id, origin_id, origin_slot = link[0], link[1], link[2]
+            link_id, origin_id, origin_slot, target_id = link[0], link[1], link[2], link[3]
             if isinstance(link_id, int):
                 link_sources[link_id] = [str(origin_id), origin_slot]
+            if isinstance(origin_id, int) and isinstance(target_id, int):
+                incoming_by_node.setdefault(target_id, []).append(origin_id)
+
+    queue = [SAVE_NODE_ID]
+    while queue:
+        node_id = queue.pop()
+        for upstream_id in incoming_by_node.get(node_id, []):
+            if upstream_id in required_node_ids:
+                continue
+            required_node_ids.add(upstream_id)
+            queue.append(upstream_id)
 
     api: dict[str, object] = {}
     for node in nodes:
@@ -103,6 +178,8 @@ def convert_comfyui_graph_to_api(workflow: dict[str, Any]) -> dict[str, object]:
         node_id = node.get("id")
         class_type = node.get("type")
         if not isinstance(node_id, int) or not isinstance(class_type, str):
+            continue
+        if node_id not in required_node_ids:
             continue
 
         inputs: dict[str, object] = {}

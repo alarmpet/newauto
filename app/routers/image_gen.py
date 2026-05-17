@@ -9,6 +9,7 @@ from .. import db
 from ..services.comfyui_client import ComfyUIClient
 from ..services.comfyui_pipeline import import_history_image, submit_z_image_workflow
 from ..services.image_prompt import build_z_image_prompt
+from ..services.z_image_readiness import z_image_readiness
 from ..services.z_image_workflow import Z_IMAGE_TEMPLATE_ID, load_z_image_workflow
 from ..types import ProjectRecord
 
@@ -212,6 +213,7 @@ def comfyui_status(pid: str) -> dict[str, object]:
     return {
         "ok": True,
         "backend": "z_image_turbo_korean",
+        "ready": z_image_readiness(),
         "state": project["body_image_state"],
         "progress": project["body_image_progress"],
         "phase": project["body_image_phase"],

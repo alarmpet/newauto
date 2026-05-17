@@ -3,7 +3,17 @@ from unittest.mock import patch
 
 from app.services.comfyui_client import ComfyImageResult, ComfyPromptSubmission, ComfyUIClient
 from app.services.comfyui_pipeline import submit_z_image_workflow
-from app.services.z_image_workflow import LATENT_NODE_ID, NEGATIVE_NODE_ID, POSITIVE_NODE_ID, SAVE_NODE_ID, load_z_image_workflow
+from app.services.z_image_workflow import (
+    CLIP_NODE_ID,
+    DEFAULT_CLIP_NAME,
+    DEFAULT_UNET_NAME,
+    LATENT_NODE_ID,
+    NEGATIVE_NODE_ID,
+    POSITIVE_NODE_ID,
+    SAVE_NODE_ID,
+    UNET_NODE_IDS,
+    load_z_image_workflow,
+)
 
 
 class ZImageWorkflowTests(unittest.TestCase):
@@ -20,9 +30,12 @@ class ZImageWorkflowTests(unittest.TestCase):
         save = workflow[str(SAVE_NODE_ID)]["inputs"]["filename_prefix"]
         self.assertEqual(positive, "젠슨 황 방중 경제사절단 합류 장면")
         self.assertEqual(negative, "저품질")
+        self.assertEqual(workflow[str(UNET_NODE_IDS[0])]["inputs"]["unet_name"], DEFAULT_UNET_NAME)
+        self.assertEqual(workflow[str(CLIP_NODE_ID)]["inputs"]["clip_name"], DEFAULT_CLIP_NAME)
         self.assertEqual(latent["width"], 768)
         self.assertEqual(latent["height"], 1344)
         self.assertEqual(save, "smoke")
+        self.assertNotIn("199", workflow)
 
     def test_submits_with_korean_positive_prompt(self) -> None:
         client = ComfyUIClient()
