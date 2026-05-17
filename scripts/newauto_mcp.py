@@ -3,6 +3,7 @@
 import json
 import os
 import re
+import argparse
 import subprocess
 import sys
 import time
@@ -15,18 +16,22 @@ from hashlib import md5
 from pathlib import Path
 from typing import Literal, cast
 
-from mcp.server.fastmcp import FastMCP
+try:
+    from mcp.server.fastmcp import FastMCP
+except ModuleNotFoundError:
+    FastMCP = None  # type: ignore[assignment]
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-BASE_URL = "http://127.0.0.1:9001"
+API_PORT = int(os.environ.get("NEWAUTO_API_PORT", "9002"))
+BASE_URL = os.environ.get("NEWAUTO_BASE_URL", f"http://127.0.0.1:{API_PORT}").rstrip("/")
 HEALTH_URL = f"{BASE_URL}/health"
 FLOW_URL = "https://labs.google/fx/tools/flow"
 URL_RE = re.compile(r"https?://[^\s)>\"]+")
 DEFAULT_DOWNLOADS_DIR = Path.home() / "Downloads"
 FLOW_ASSET_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".mp4", ".mov", ".webm"}
 FLOW_BROWSER_SCRIPT = ROOT_DIR / "scripts" / "flow_browser_automation.py"
-FLOW_DESKTOP_SCRIPT = ROOT_DIR / "scripts" / "flow_desktop_control.py"
+FLOW_GENERATE_ALL_WORKER_SCRIPT = ROOT_DIR / "scripts" / "flow_generate_all_worker.py"
 SOURCE_COLLECT_SCRIPT = ROOT_DIR / "scripts" / "source_collect_job.py"
 STEPWISE_DIR = ROOT_DIR / "storage" / "stepwise_workflows"
 STEPWISE_LATEST_PATH = STEPWISE_DIR / "latest.json"
@@ -35,23 +40,64 @@ SOURCE_DRAFT_WORKER_LOG = ROOT_DIR / "storage" / "logs" / "source_draft_worker.l
 SOURCE_COLLECT_LOG = ROOT_DIR / "storage" / "logs" / "source_collect_mcp.log"
 RUNTIME_DIAGNOSTICS_DIR = ROOT_DIR / "storage" / "runtime_diagnostics"
 RUNTIME_DIAGNOSTICS_LATEST = RUNTIME_DIAGNOSTICS_DIR / "latest.json"
+FLOW_GENERATE_COOLDOWN_SECONDS = int(max(75.0, float(os.environ.get("FLOW_GENERATE_COOLDOWN_SECONDS", "90"))))
+FLOW_GENERATE_PACE_PATH = STEPWISE_DIR / "flow_generate_pace.json"
+FLOW_GENERATE_LOCK_DIR = STEPWISE_DIR / "flow_generate.lock"
+FLOW_GENERATE_LOCK_STALE_SECONDS = int(max(300.0, float(os.environ.get("FLOW_GENERATE_LOCK_STALE_SECONDS", "900"))))
+SHORTS_SUBTITLE_STYLE: dict[str, object] = {
+    "font_size": 52,
+    "position": "bottom",
+    "margin_h": 72,
+    "margin_v": 116,
+    "max_line_chars": 16,
+    "min_display_sec": 0.5,
+    "cue_split_mode": "readable",
+    "max_cue_sec": 2.6,
+    "max_lines": 1,
+    "outline_width": 3,
+    "shadow": 1,
+}
 
-FlowAutomationBackend = Literal["uivision", "playwright", "assisted"]
-FlowMode = Literal["uivision", "playwright"]
+FlowAutomationBackend = Literal["playwright", "assisted"]
+FlowMode = Literal["playwright"]
 
 
 def _flow_backend() -> FlowAutomationBackend:
-    raw_backend = os.environ.get("FLOW_AUTOMATION_BACKEND", "uivision").strip().lower()
-    if raw_backend in {"uivision", "playwright", "assisted"}:
+    raw_backend = os.environ.get("FLOW_AUTOMATION_BACKEND", "playwright").strip().lower()
+    if raw_backend in {"playwright", "assisted"}:
         return cast(FlowAutomationBackend, raw_backend)
-    return "uivision"
+    return "playwright"
 
 
 def _flow_mode() -> FlowMode:
     raw_mode = os.environ.get("FLOW_MODE", _flow_backend()).strip().lower()
-    if raw_mode == "playwright":
-        return "playwright"
-    return "uivision"
+    return "playwright"
+
+
+def _flow_browser_executable() -> Path | None:
+    browser = os.environ.get("FLOW_BROWSER", "").strip().lower()
+    if browser not in {"edge", "msedge", "microsoft-edge"}:
+        return None
+    for candidate in (
+        Path("C:/Program Files/Microsoft/Edge/Application/msedge.exe"),
+        Path("C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe"),
+    ):
+        if candidate.exists():
+            return candidate
+    return None
+
+
+def _open_flow_url() -> None:
+    executable = _flow_browser_executable()
+    if executable is not None:
+        subprocess.Popen(
+            [str(executable), "--new-window", FLOW_URL],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+        )
+        return
+    webbrowser.open(FLOW_URL)
 
 
 def _mcp_instructions() -> str:
@@ -79,29 +125,39 @@ def _mcp_instructions() -> str:
         "If the user asks for step-by-step approval or says they want to send OK/proceed between stages, use "
         "start_stepwise_hpsl_video_workflow first and then continue_stepwise_hpsl_video_workflow exactly once per approval."
     )
-    if mode == "playwright":
-        return (
-            base
-            + " FLOW_MODE=playwright: after Flow authentication, use open_flow_for_auth, automate_flow_generation, "
-            "download_flow_results_from_browser, and attach_latest_flow_downloads. If automatic download fails, "
-            "ask the user to download manually and continue with attach_latest_flow_downloads."
-        )
     return (
         base
-        + " FLOW_MODE=uivision: Google Flow screen operation belongs to Ui.Vision RPA, not Gemma4. "
-        "After Flow prompts are generated, use continue_stepwise_hpsl_video_workflow. In flow_generate it will click "
-        "Generate once through the desktop controller and return quickly. In flow_wait_sentence it will download and "
-        "attach the generated asset. open_flow must only open the Flow page and return; do not wait for CDP automation. "
-        "TTS and render are also split into start/wait steps, so keep calling continue_stepwise_hpsl_video_workflow once per user approval instead of waiting for long jobs inside one tool call. "
-        "When renamed files like flow_s001_*.png are downloaded, call attach_renamed_flow_downloads only as a fallback. "
-        "Use attach_latest_flow_downloads only as a fallback for manual downloads."
+        + " FLOW_MODE=playwright: after Flow authentication, use open_flow_for_auth, automate_flow_generation, "
+        "download_flow_results_from_browser, and attach_latest_flow_downloads. If automatic download fails, "
+        "ask the user to download manually and continue with attach_latest_flow_downloads. "
+        "If browser state shows Korean Flow controls such as '장면 빌더', '미디어 추가', 'Nano Banana', or '만들기', "
+        "treat Flow as open and recoverable; do not abandon Flow for ComfyUI unless Flow generation returns an explicit error."
     )
 
 
-mcp = FastMCP(
-    name="newauto-hpsl-flow",
-    log_level="ERROR",
-    instructions=_mcp_instructions(),
+class _CliOnlyMCP:
+    def tool(self):
+        def decorator(func):
+            return func
+
+        return decorator
+
+    def run(self, *, transport: str) -> None:
+        raise RuntimeError(
+            "The 'mcp' Python package is not installed in this interpreter. "
+            "Use C:\\Users\\petbl\\local-rag\\.venv\\Scripts\\python.exe to run the MCP server, "
+            "or install the package in the active environment."
+        )
+
+
+mcp = (
+    FastMCP(
+        name="newauto-hpsl-flow",
+        log_level="ERROR",
+        instructions=_mcp_instructions(),
+    )
+    if FastMCP is not None
+    else _CliOnlyMCP()
 )
 
 
@@ -166,6 +222,25 @@ def _json_request(
     if not isinstance(payload_obj, dict):
         raise NewautoError(f"{method} {path} returned non-object JSON.")
     return cast(dict[str, object], payload_obj)
+
+
+def _stable_project_seed(pid: str) -> int:
+    return int(md5(pid.encode("utf-8")).hexdigest()[:8], 16) % 2_147_483_647 or 1
+
+
+def _ensure_shorts_workflow_defaults(pid: str) -> None:
+    _json_request(
+        "PUT",
+        f"/api/projects/{pid}/features",
+        payload={"render_formats": ["shorts"]},
+        timeout=30,
+    )
+    _json_request(
+        "PUT",
+        f"/api/projects/{pid}/subtitle-style",
+        payload=SHORTS_SUBTITLE_STYLE,
+        timeout=30,
+    )
 
 
 def _health_ok() -> bool:
@@ -275,7 +350,7 @@ def _flow_window_lines() -> list[str]:
 def _start_newauto_server() -> None:
     run_bat = ROOT_DIR / "run-newauto-9001.cmd"
     if not run_bat.exists():
-        raise NewautoError(f"run.bat not found: {run_bat}")
+        raise NewautoError(f"run-newauto-9001.cmd not found: {run_bat}")
     command = (
         "Start-Process -WindowStyle Hidden "
         f"-FilePath '{run_bat}' "
@@ -300,7 +375,7 @@ def _ensure_server(timeout_sec: int = 45) -> None:
             return
         time.sleep(1.0)
     raise NewautoError(
-        "newauto server did not become ready. Open C:/Users/petbl/newauto/run.bat once, "
+        "newauto server did not become ready. Run C:/Users/petbl/newauto/run-newauto-9001.cmd once, "
         "then ask me to continue."
     )
 
@@ -314,6 +389,13 @@ def _extract_project(payload: dict[str, object]) -> dict[str, object]:
 
 def _project_url(pid: str, *, step: int = 2) -> str:
     return f"{BASE_URL}/?project={urllib.parse.quote(pid)}&step={step}"
+
+
+def _output_url(pid: str, project: dict[str, object] | None = None) -> str:
+    formats = project.get("render_formats") if isinstance(project, dict) else None
+    if isinstance(formats, list) and "shorts" in formats and "landscape" not in formats:
+        return f"{BASE_URL}/api/projects/{pid}/output?format=shorts"
+    return f"{BASE_URL}/api/projects/{pid}/output"
 
 
 def _is_url(text: str) -> bool:
@@ -439,8 +521,23 @@ def _task_status(pid: str, task_key: str) -> dict[str, object]:
     project = _json_request("GET", f"/api/projects/{pid}/status", timeout=15)
     task_state = str(project.get(f"{task_key}_state") or "")
     if task_state == "error":
-        raise NewautoError(str(project.get(f"{task_key}_error") or f"{task_key} failed"))
+        raise NewautoError(_brief_error_message(str(project.get(f"{task_key}_error") or f"{task_key} failed")))
     return project
+
+
+def _brief_error_message(message: str, *, limit: int = 600) -> str:
+    cleaned_lines: list[str] = []
+    for line in message.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if "Loading weights:" in stripped or "Fetching " in stripped:
+            continue
+        cleaned_lines.append(stripped)
+    cleaned = "\n".join(cleaned_lines).strip() or message.strip()
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[:limit].rstrip() + "\n...[truncated]"
 
 
 def _check_task_done(pid: str, task_key: str) -> dict[str, object] | None:
@@ -478,6 +575,12 @@ def _project_sentence_asset_status(project: dict[str, object]) -> tuple[int, int
     return sentence_count, len(mapped_indexes), missing
 
 
+def _project_has_sentence_asset(project: dict[str, object], sentence_number: int) -> bool:
+    if sentence_number <= 0:
+        return False
+    return sentence_number - 1 in _mapped_sentence_indexes(project.get("body_image_mappings"))
+
+
 def _project_coverage_text(project_id: str) -> str:
     if not project_id.strip():
         return "project_id not provided"
@@ -498,7 +601,7 @@ def _stepwise_next_step(project_id: str) -> str:
 
 
 def _runtime_snapshot(project_id: str = "") -> dict[str, object]:
-    pid_9001 = _port_owner_pid(9001)
+    api_pid = _port_owner_pid(API_PORT)
     pid_1234 = _port_owner_pid(1234)
     pid_9223 = _port_owner_pid(9223)
     stepwise_state: dict[str, object] = {}
@@ -519,11 +622,12 @@ def _runtime_snapshot(project_id: str = "") -> dict[str, object]:
         "python_executable": sys.executable,
         "cwd": str(ROOT_DIR),
         "base_url": BASE_URL,
+        "api_port": API_PORT,
         "flow_automation_backend": _flow_backend(),
         "flow_mode": _flow_mode(),
         "api_server_ok": _health_ok(),
-        "api_server_pid_9001": pid_9001,
-        "api_server_command_9001": _process_command_line(pid_9001),
+        "api_server_pid": api_pid,
+        "api_server_command": _process_command_line(api_pid),
         "resolved_omnivoice_python": _resolved_omnivoice_python(),
         "lmstudio_server_pid_1234": pid_1234,
         "flow_cdp_pid_9223": pid_9223,
@@ -539,12 +643,13 @@ def _runtime_snapshot(project_id: str = "") -> dict[str, object]:
 
 
 def _debug_footer(next_step_before: str = "", next_step_after: str = "") -> str:
-    api_pid = _port_owner_pid(9001)
+    api_pid = _port_owner_pid(API_PORT)
     lines = [
         "---",
         f"mcp_commit: {_git_commit(short=True)}",
         f"mcp_pid: {os.getpid()}",
-        f"api_pid_9001: {api_pid}",
+        f"api_port: {API_PORT}",
+        f"api_pid: {api_pid}",
     ]
     if next_step_before or next_step_after:
         lines.append(f"step: {next_step_before or '?'} -> {next_step_after or '?'}")
@@ -593,45 +698,10 @@ def _latest_flow_asset_paths(downloads_dir: Path, *, limit: int, since_minutes: 
     return [str(path) for path in selected]
 
 
-def _uivision_project_dir(project_id: str) -> Path:
-    path = ROOT_DIR / "storage" / "projects" / project_id / "uivision"
+def _flow_pending_dir(project_id: str) -> Path:
+    path = ROOT_DIR / "storage" / "projects" / project_id / "flow_pending"
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def _uivision_marker_path(project_id: str) -> Path:
-    return _uivision_project_dir(project_id) / "run_done.json"
-
-
-def _uivision_file_overview(project_id: str) -> str:
-    directory = _uivision_project_dir(project_id)
-    csv_path = directory / "flow_prompts.csv"
-    marker_path = _uivision_marker_path(project_id)
-    return (
-        f"- Ui.Vision folder: {directory}\n"
-        f"- CSV: {csv_path}\n"
-        f"- marker: {marker_path}"
-    )
-
-
-def _prepare_uivision_payload(project_id: str) -> dict[str, object]:
-    return _json_request("POST", f"/api/flow/prompts/{project_id}/uivision/prepare", timeout=30)
-
-
-def _uivision_instructions(project_id: str, *, sentence_number: int = 1, batch: bool = False) -> str:
-    mode = "6문장 batch" if batch else f"{sentence_number}번 문장 단건"
-    return (
-        f"Ui.Vision으로 Flow {mode} 생성을 진행할 준비가 됐어.\n\n"
-        f"- project_id: {project_id}\n"
-        f"{_uivision_file_overview(project_id)}\n\n"
-        "사용자님이 해줄 일:\n"
-        "1. Flow 로그인/권한승인 화면이 있으면 승인\n"
-        "2. Ui.Vision에서 Flow_Generate_One 또는 Flow_Generate_Batch 매크로 실행\n"
-        "3. 매크로가 다운로드 파일을 `flow_s001_...` 형식으로 저장/rename했는지 확인\n"
-        "4. 끝나면 LM Studio에 `진행`이라고 입력\n\n"
-        "주의: 매크로 실행 중에는 Flow 브라우저를 건드리지 말아줘. "
-        "결제/4K 업그레이드/유료 크레딧 버튼은 누르면 안 돼."
-    )
 
 
 def _run_flow_browser_script(args: list[str], *, timeout_sec: int = 180) -> dict[str, object]:
@@ -644,6 +714,7 @@ def _run_flow_browser_script(args: list[str], *, timeout_sec: int = 180) -> dict
         timeout=timeout_sec,
         encoding="utf-8",
         errors="replace",
+        stdin=subprocess.DEVNULL,
     )
     if completed.returncode != 0:
         raise NewautoError(
@@ -659,83 +730,6 @@ def _run_flow_browser_script(args: list[str], *, timeout_sec: int = 180) -> dict
     return cast(dict[str, object], payload)
 
 
-def _run_flow_desktop_control(
-    project_id: str,
-    sentence_number: int,
-    *,
-    mode: str,
-    downloads_before: list[str] | None = None,
-    wait_seconds: int = 62,
-    download_timeout_seconds: int = 45,
-) -> dict[str, object]:
-    python_command = os.environ.get("NEWAUTO_DESKTOP_PYTHON", "python").strip() or "python"
-    command = [
-        python_command,
-        str(FLOW_DESKTOP_SCRIPT),
-        project_id,
-        "--sentence",
-        str(sentence_number),
-        "--mode",
-        mode,
-        "--wait-seconds",
-        str(wait_seconds),
-        "--download-timeout-seconds",
-        str(download_timeout_seconds),
-        "--api-base",
-        BASE_URL,
-    ]
-    if downloads_before is not None:
-        command.extend(["--downloads-before-json", json.dumps(downloads_before, ensure_ascii=False)])
-    subprocess_timeout = 35 if mode == "click-generate" else max(90, download_timeout_seconds + 35)
-    try:
-        completed = subprocess.run(
-            command,
-            cwd=str(ROOT_DIR),
-            capture_output=True,
-            text=True,
-            timeout=subprocess_timeout,
-            encoding="utf-8",
-            errors="replace",
-        )
-    except subprocess.TimeoutExpired as exc:
-        code = "FLOW_GENERATE_CLICK_TIMEOUT" if mode == "click-generate" else "MCP_TRANSPORT_TIMEOUT_SUSPECTED"
-        raise NewautoError(
-            f"{code}: Flow desktop control exceeded {subprocess_timeout}s. "
-            f"stdout={str(exc.stdout or '')[:300]} stderr={str(exc.stderr or '')[:300]}"
-        ) from exc
-    if completed.stdout.strip():
-        try:
-            payload = json.loads(completed.stdout.strip())
-        except json.JSONDecodeError:
-            payload = {}
-        if isinstance(payload, dict):
-            parsed_payload = cast(dict[str, object], payload)
-            if completed.returncode == 0 or parsed_payload.get("ok") is False:
-                return parsed_payload
-    if completed.returncode != 0:
-        combined_error = completed.stderr.strip() or completed.stdout.strip() or str(completed.returncode)
-        if "Flow browser window was not found" in combined_error:
-            code = "FLOW_WINDOW_NOT_FOUND"
-        elif "No completed new Flow download" in combined_error:
-            code = "FLOW_DOWNLOAD_NOT_READY"
-        elif "attach failed" in combined_error:
-            code = "FLOW_ATTACH_FAILED"
-        elif mode == "click-generate":
-            code = "FLOW_GENERATE_CLICK_FAILED"
-        else:
-            code = "FLOW_DESKTOP_CONTROL_FAILED"
-        raise NewautoError(
-            f"{code}: Flow desktop control failed: {combined_error}"
-        )
-    try:
-        payload = json.loads(completed.stdout.strip())
-    except json.JSONDecodeError as exc:
-        raise NewautoError(f"Flow desktop control returned invalid JSON: {completed.stdout[:500]}") from exc
-    if not isinstance(payload, dict):
-        raise NewautoError("Flow desktop control returned non-object JSON.")
-    return cast(dict[str, object], payload)
-
-
 def _set_stepwise_fields(state: dict[str, object], fields: dict[str, object]) -> dict[str, object]:
     updated = dict(state)
     updated.update(fields)
@@ -745,7 +739,7 @@ def _set_stepwise_fields(state: dict[str, object], fields: dict[str, object]) ->
 
 
 def _pending_attach_path(project_id: str, sentence_number: int) -> Path:
-    return _uivision_project_dir(project_id) / f"pending_attach_{sentence_number:03d}.json"
+    return _flow_pending_dir(project_id) / f"pending_attach_{sentence_number:03d}.json"
 
 
 def _load_pending_attach(project_id: str, sentence_number: int) -> dict[str, object] | None:
@@ -789,6 +783,7 @@ def _pid_exists(pid: int) -> bool:
             text=True,
             encoding="utf-8",
             errors="replace",
+            stdin=subprocess.DEVNULL,
         )
         return f'"{pid}"' in completed.stdout
     try:
@@ -814,7 +809,7 @@ def _ensure_source_draft_worker(timeout_sec: int = 20) -> None:
     env = dict(os.environ)
     env["LLM_PROVIDER"] = "lmstudio"
     env["LMSTUDIO_BASE_URL"] = "http://127.0.0.1:1234"
-    env["SCRIPT_LLM_MODEL"] = "google/gemma-4-e4b"
+    env["SCRIPT_LLM_MODEL"] = os.environ.get("SCRIPT_LLM_MODEL", "qwen/qwen3.5-9b")
     subprocess.Popen(
         [sys.executable, "-m", "app.workers.source_draft_worker"],
         cwd=str(ROOT_DIR),
@@ -870,6 +865,220 @@ def _set_next_step(state: dict[str, object], next_step: str) -> dict[str, object
     return updated
 
 
+def _wait_step_snapshot(project_id: str, wait_step: str) -> dict[str, object]:
+    if not project_id.strip():
+        return {}
+    try:
+        project = _json_request("GET", f"/api/projects/{project_id}/status", timeout=10)
+    except NewautoError as exc:
+        return {"error": str(exc)[:300]}
+    if wait_step == "tts_wait":
+        return {
+            "tts_state": project.get("tts_state"),
+            "tts_progress": project.get("tts_progress"),
+            "tts_error": _brief_error_message(str(project.get("tts_error") or "")),
+            "tts_job_id": project.get("tts_job_id"),
+            "tts_heartbeat_at": project.get("tts_heartbeat_at"),
+        }
+    if wait_step == "render_wait":
+        return {
+            "render_state": project.get("render_state"),
+            "render_progress": project.get("render_progress"),
+            "render_phase": project.get("render_phase"),
+            "render_error": project.get("render_error"),
+            "render_heartbeat_at": project.get("render_heartbeat_at"),
+        }
+    if wait_step in {"source_collect_wait", "script_generate_wait"}:
+        return {
+            "source_draft_state": project.get("source_draft_state"),
+            "source_draft_error": project.get("source_draft_error"),
+            "source_draft_heartbeat_at": project.get("source_draft_heartbeat_at"),
+        }
+    return {"step": wait_step}
+
+
+def _run_forensic_doctor_json(project_id: str, timeout_sec: int = 45) -> dict[str, object]:
+    forensic_script = ROOT_DIR / "scripts" / "forensic_doctor.py"
+    if not forensic_script.exists():
+        return {"ok": False, "error": f"missing forensic_doctor.py at {forensic_script}"}
+    try:
+        out = subprocess.run(
+            [sys.executable, str(forensic_script), "--project-id", project_id, "--json"],
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=timeout_sec,
+            encoding="utf-8",
+            errors="replace",
+            stdin=subprocess.DEVNULL,
+        )
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    if out.returncode != 0:
+        return {
+            "ok": False,
+            "error": f"forensic_doctor exit={out.returncode}",
+            "stderr": (out.stderr or "")[:800],
+        }
+    try:
+        report = json.loads(out.stdout)
+    except Exception as exc:
+        return {
+            "ok": False,
+            "error": f"JSON parse failed: {exc}",
+            "stdout_head": (out.stdout or "")[:800],
+        }
+    return {"ok": True, "report": report}
+
+
+def _forensic_wait_packet(project_id: str) -> dict[str, object]:
+    payload = _run_forensic_doctor_json(project_id)
+    if payload.get("ok") is not True:
+        return payload
+    report = payload.get("report")
+    if not isinstance(report, dict):
+        return {"ok": False, "error": "forensic report was not a JSON object"}
+    tts = report.get("tts") if isinstance(report.get("tts"), dict) else {}
+    return {
+        "ok": True,
+        "status": report.get("status", "unknown"),
+        "critical_findings": report.get("critical_findings", []),
+        "recommended_actions": report.get("recommended_actions", []),
+        "tts": {
+            "db": tts.get("db") if isinstance(tts, dict) else {},
+            "processes": tts.get("processes") if isinstance(tts, dict) else {},
+            "artifacts": tts.get("artifacts") if isinstance(tts, dict) else {},
+        },
+    }
+
+
+def _run_openrouter_wait_escalation(project_id: str, packet: dict[str, object]) -> dict[str, object]:
+    harness_script = ROOT_DIR / "scripts" / "openrouter_subagent_harness.py"
+    if not harness_script.exists():
+        return {"ok": False, "error": f"missing OpenRouter harness at {harness_script}"}
+    task = {
+        "request": "Repeated workflow wait step persisted after local diagnostics. Recommend the next deterministic local action.",
+        "project_id": project_id,
+        "forensic_facts": packet,
+    }
+    try:
+        out = subprocess.run(
+            [
+                sys.executable,
+                str(harness_script),
+                "--mode",
+                "debug",
+                "--task-stdin",
+                "--json-output",
+            ],
+            input=json.dumps(task, ensure_ascii=False),
+            cwd=str(ROOT_DIR),
+            capture_output=True,
+            text=True,
+            timeout=60,
+            encoding="utf-8",
+            errors="replace",
+        )
+    except Exception as exc:
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    try:
+        parsed = json.loads(out.stdout)
+    except Exception:
+        parsed = {"stdout_head": (out.stdout or "")[:1200]}
+    return {
+        "ok": out.returncode == 0,
+        "exit_code": out.returncode,
+        "result": parsed,
+        "stderr": (out.stderr or "")[:800],
+    }
+
+
+def _record_wait_repeat(project_id: str, previous_step: str, message: str) -> str:
+    if not project_id.strip():
+        return message
+    try:
+        state = _load_stepwise_state(project_id)
+    except Exception:
+        return message
+    current_step = str(state.get("next_step") or "")
+    if not current_step.endswith("_wait"):
+        if state.get("last_wait_step") or state.get("wait_repeat_count"):
+            _set_stepwise_fields(
+                state,
+                {
+                    "last_wait_step": "",
+                    "wait_repeat_count": 0,
+                    "last_wait_snapshot": {},
+                },
+            )
+        return message
+
+    snapshot = _wait_step_snapshot(project_id, current_step)
+    last_wait_step = str(state.get("last_wait_step") or "")
+    repeat_count = int(state.get("wait_repeat_count") or 0)
+    if previous_step == current_step and last_wait_step == current_step:
+        repeat_count += 1
+    else:
+        repeat_count = 1
+    _set_stepwise_fields(
+        state,
+        {
+            "last_wait_step": current_step,
+            "wait_repeat_count": repeat_count,
+            "last_wait_snapshot": snapshot,
+        },
+    )
+    if repeat_count < 2:
+        return message
+
+    forensic_packet: dict[str, object] | None = None
+    if repeat_count >= 3:
+        forensic_packet = _forensic_wait_packet(project_id)
+
+    if current_step == "tts_wait":
+        guidance = (
+            "\n\n[자동 반복 감지]\n"
+            f"- wait_step: {current_step}\n"
+            f"- repeat_count: {repeat_count}\n"
+            "- 같은 TTS 대기 단계가 반복됐습니다. 다음 응답에서는 선택지를 묻지 말고 "
+            "`diagnose_runtime -> forensic_diagnose -> repair_tts` 순서로 확인하세요.\n"
+            f"- wait_snapshot: {json.dumps(snapshot, ensure_ascii=False)}"
+        )
+        if forensic_packet is not None:
+            guidance += (
+                "\n\n[FORCED_FORENSIC_DIAGNOSIS]\n"
+                + json.dumps(forensic_packet, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n\n[AUTONOMOUS_RECOVERY_REQUIRED]\n"
+                "- 위 critical_findings/recommended_actions를 읽고 사용자에게 선택지를 묻지 마세요.\n"
+                "- TTS worker, heartbeat, subprocess, output artifact 문제가 확인되면 즉시 repair_tts를 1회 호출하세요."
+            )
+    else:
+        guidance = (
+            "\n\n[자동 반복 감지]\n"
+            f"- wait_step: {current_step}\n"
+            f"- repeat_count: {repeat_count}\n"
+            "- 같은 대기 단계가 반복됐습니다. 다음 응답에서는 먼저 `diagnose_runtime`과 "
+            "`forensic_diagnose`로 상태를 확정하세요.\n"
+            f"- wait_snapshot: {json.dumps(snapshot, ensure_ascii=False)}"
+        )
+        if forensic_packet is not None:
+            guidance += (
+                "\n\n[FORCED_FORENSIC_DIAGNOSIS]\n"
+                + json.dumps(forensic_packet, ensure_ascii=False, indent=2, sort_keys=True)
+                + "\n\n[AUTONOMOUS_RECOVERY_REQUIRED]\n"
+                "- 위 critical_findings/recommended_actions를 읽고 사용자에게 선택지를 묻지 마세요.\n"
+                "- stale worker, lock, heartbeat, missing artifact 문제가 확인되면 repair_runtime 또는 전용 repair 도구를 1회 호출하세요."
+            )
+    if repeat_count >= 5:
+        packet = forensic_packet or _forensic_wait_packet(project_id)
+        escalation = _run_openrouter_wait_escalation(project_id, packet)
+        guidance += (
+            "\n\n[OPENROUTER_ESCALATION]\n"
+            + json.dumps(escalation, ensure_ascii=False, indent=2, sort_keys=True)
+        )
+    return message + guidance
+
+
 def _project_counts(project: dict[str, object]) -> tuple[int, int, int]:
     sources = project.get("source_draft_sources")
     sentences = project.get("sentences")
@@ -890,12 +1099,18 @@ def _draft_sentence_count(project: dict[str, object]) -> int:
 
 def _enqueue_hpsl_script(pid: str, state: dict[str, object]) -> None:
     _ensure_source_draft_worker()
+    raw_target_minutes = state.get("target_minutes")
+    if raw_target_minutes in {None, "", "auto"}:
+        target_minutes = "auto"
+    else:
+        parsed_target_minutes = _object_to_int(raw_target_minutes, 0)
+        target_minutes = "auto" if parsed_target_minutes <= 0 else str(max(1, min(15, parsed_target_minutes)))
     _json_request(
         "POST",
         f"/api/projects/{pid}/source/script/generate",
         form={
             "tone": str(state.get("tone") or "설명형"),
-            "target_minutes": str(max(1, min(8, _object_to_int(state.get("target_minutes"), 1)))),
+            "target_minutes": target_minutes,
             "language": "ko",
             "mode": "",
             "note": "HPSL은 훅-포인트-스토리-교훈 구조다. 이 4단계를 지키고, 각 문장이 Flow 장면 하나가 되게 작성해.",
@@ -927,6 +1142,8 @@ def _enqueue_tts(pid: str, voice_preset: str) -> dict[str, object]:
             "tts_profile": {
                 "mode": "design",
                 "synthesis_mode": "full_passage",
+                "seed_mode": "fixed",
+                "seed": _stable_project_seed(pid),
                 "language": "ko",
             },
         },
@@ -939,9 +1156,11 @@ def _enqueue_render(pid: str) -> dict[str, object]:
     project = _json_request("GET", f"/api/projects/{pid}/status", timeout=30)
     if str(project.get("render_state") or "") in {"queued", "running", "done"}:
         return project
-    _json_request("POST", f"/api/projects/{pid}/scene-plan/build", timeout=60)
-    _json_request("POST", f"/api/projects/{pid}/render-plan/build", timeout=60)
     preflight = _json_request("GET", f"/api/projects/{pid}/preflight", timeout=60)
+    if preflight.get("ok") is not True:
+        _json_request("POST", f"/api/projects/{pid}/scene-plan/build", timeout=180)
+        _json_request("POST", f"/api/projects/{pid}/render-plan/build", timeout=60)
+        preflight = _json_request("GET", f"/api/projects/{pid}/preflight", timeout=60)
     if preflight.get("ok") is not True:
         checks = preflight.get("checks")
         failed: list[str] = []
@@ -958,7 +1177,7 @@ def _enqueue_render(pid: str) -> dict[str, object]:
 def start_stepwise_hpsl_video_workflow(
     keyword_or_url: str,
     title: str = "",
-    target_minutes: int = 1,
+    target_minutes: int = 0,
     tone: str = "설명형",
 ) -> str:
     """Start an approval-gated video workflow. Do not reject user date filters; pass them through in keyword_or_url."""
@@ -972,12 +1191,13 @@ def start_stepwise_hpsl_video_workflow(
     pid = str(created.get("id") or "")
     if not pid:
         raise NewautoError("newauto project creation did not return an id.")
+    _ensure_shorts_workflow_defaults(pid)
     source_mode = _enqueue_source_collection(pid, clean_request)
     state: dict[str, object] = {
         "project_id": pid,
         "request": clean_request,
         "title": project_title,
-        "target_minutes": max(1, min(8, int(target_minutes or 1))),
+        "target_minutes": "auto" if int(target_minutes or 0) <= 0 else max(1, min(15, int(target_minutes))),
         "tone": tone,
         "source_mode": source_mode,
         "next_step": "source_collect_wait",
@@ -1130,52 +1350,37 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
 
     if next_step == "flow_prompts":
         _json_request("POST", f"/api/projects/{pid}/source/script/apply", form={}, timeout=30)
+        _ensure_shorts_workflow_defaults(pid)
         manifest = _json_request(
             "POST",
             f"/api/flow/prompts/{pid}",
             payload={"aspect_ratio": "9:16", "mode": "assisted"},
             timeout=30,
         )
-        uivision_payload = _prepare_uivision_payload(pid)
         project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
         _, sentence_count, _ = _project_counts(project)
         entries = manifest.get("entries")
         prompt_count = len(entries) if isinstance(entries, list) else 0
         _set_next_step(state, "flow_auth")
         webbrowser.open(_project_url(pid, step=2))
-        csv_path = str(uivision_payload.get("csv_path") or "")
         return (
             "3단계 완료: 대본 적용과 Flow 프롬프트 생성이 끝났어.\n\n"
             f"- project_id: {pid}\n"
             f"- script sentences: {sentence_count}\n"
             f"- Flow prompts: {prompt_count}\n"
-            f"- Ui.Vision CSV: {csv_path}\n"
             f"- newauto: {_project_url(pid, step=2)}\n\n"
-            "다음 단계: Flow 인증/Ui.Vision 준비.\n"
+            "다음 단계: Flow 인증 준비.\n"
             "`진행`이라고 말하면 현재 backend에 맞춰 다음 단계만 안내하거나 실행할게."
         )
 
     if next_step == "flow_auth":
         backend = _flow_backend()
-        if backend == "uivision":
-            webbrowser.open(FLOW_URL)
-            _set_next_step(state, "flow_generate")
-            return (
-                "4단계 준비 완료: Ui.Vision 방식으로 Flow를 열었어.\n\n"
-                f"- project_id: {pid}\n"
-                f"- backend: {backend}\n"
-                f"{_uivision_file_overview(pid)}\n\n"
-                "Flow 로그인/권한승인이 필요하면 사용자님이 승인해줘.\n"
-                "인증이 끝났거나 이미 로그인되어 있으면 `진행`이라고 말해줘. "
-                "다음에는 Ui.Vision 매크로 실행 안내로 넘어갈게."
-            )
         if backend == "assisted":
-            webbrowser.open(FLOW_URL)
+            _open_flow_url()
             _set_next_step(state, "flow_generate")
             return (
                 "4단계 준비 완료: 수동 보조 방식으로 Flow를 열었어.\n\n"
                 f"- project_id: {pid}\n"
-                f"{_uivision_file_overview(pid)}\n\n"
                 "Flow 로그인/권한승인을 완료한 뒤 `진행`이라고 말해줘. "
                 "다음에는 프롬프트 파일 위치와 수동 입력 순서를 안내할게."
             )
@@ -1191,96 +1396,73 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
 
     if next_step == "flow_generate":
         backend = _flow_backend()
-        if backend == "uivision":
-            _prepare_uivision_payload(pid)
-            project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
-            sentence_count, attached_count, missing = _project_sentence_asset_status(project)
-            if not missing:
-                _set_next_step(state, "tts")
-                return (
-                    "4단계 완료: Flow 이미지가 이미 모든 문장에 연결되어 있어.\n\n"
-                    f"- project_id: {pid}\n"
-                    f"- coverage: {attached_count}/{sentence_count}\n\n"
-                    "다음 단계: OmniVoice 음성 생성.\n"
-                    "`진행`이라고 말하면 음성 생성만 실행하고 다시 멈출게."
-                )
-            sentence_number = missing[0]
-            pending = _load_pending_attach(pid, sentence_number)
-            if pending is not None:
-                _set_stepwise_fields(
-                    state,
-                    {
-                        "next_step": "flow_wait_sentence",
-                        "active_sentence_number": sentence_number,
-                    },
-                )
-                return (
-                    "4단계 복구 대기: 이미 다운로드된 Flow 파일이 있고 attach만 남아 있어.\n\n"
-                    f"- project_id: {pid}\n"
-                    f"- target sentence: {sentence_number}\n"
-                    f"- pending asset: {pending.get('asset_path')}\n\n"
-                    "`진행`이라고 말하면 Flow를 다시 생성하지 않고 이 파일을 문장 asset에 연결할게."
-                )
-            try:
-                result = _run_flow_desktop_control(pid, sentence_number, mode="click-generate")
-            except NewautoError as exc:
-                return (
-                    "4단계 중단: Flow Generate 클릭 전에 사용자 확인이 필요해.\n\n"
-                    f"- project_id: {pid}\n"
-                    f"- target sentence: {sentence_number}\n"
-                    f"- reason: {exc}\n\n"
-                    "Flow 창이 로그인된 상태로 열려 있고, 생성 입력창이 보이는지 확인해줘. "
-                    "인증/팝업을 처리한 뒤 `진행`이라고 말하면 같은 문장을 다시 시도할게."
-                )
-            downloads_before = _object_to_str_list(result.get("downloads_before"))
-            screenshots = _object_to_str_list(result.get("screenshots"))
-            _set_stepwise_fields(
-                state,
-                {
-                    "next_step": "flow_wait_sentence",
-                    "active_sentence_number": sentence_number,
-                    "downloads_before": downloads_before,
-                    "flow_generate_started_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
-                    "flow_generate_screenshots": screenshots,
-                },
-            )
-            return (
-                "4단계 진행: Flow Generate 클릭만 완료했어.\n\n"
-                f"- project_id: {pid}\n"
-                f"- target sentence: {sentence_number}\n"
-                f"- coverage before: {attached_count}/{sentence_count}\n"
-                f"- screenshots: {screenshots}\n\n"
-                "이 호출에서는 다운로드/attach를 기다리지 않았어. "
-                "Flow 화면에 결과 이미지가 보이면 `진행`이라고 말해줘. 그러면 다운로드와 문장 연결만 실행할게."
-            )
         if backend == "assisted":
-            _prepare_uivision_payload(pid)
             _set_next_step(state, "flow_download")
             return (
                 "4단계 대기: 수동 보조 방식으로 프롬프트를 입력해줘.\n\n"
-                f"{_uivision_file_overview(pid)}\n"
                 f"- single prompt API: {BASE_URL}/api/flow/prompts/{pid}/sentence/1\n\n"
                 "Flow에 프롬프트를 입력하고 생성/다운로드를 완료한 뒤, "
                 "파일명을 `flow_s001_...` 형식으로 맞춰서 `진행`이라고 말해줘."
             )
-        result = _run_flow_browser_script(
-            ["generate", "--project-id", pid, "--start-sentence-number", "1", "--limit", "0"],
-            timeout_sec=240,
-        )
-        if result.get("ok") is not True:
+        project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
+        sentence_count, attached_count, missing = _project_sentence_asset_status(project)
+        if not missing:
+            _set_next_step(state, "tts")
             return (
-                "4단계 중단: Flow 자동 입력/생성에서 사용자 확인이 필요해.\n\n"
+                "4단계 완료: Flow 이미지가 이미 모든 문장에 연결되어 있어.\n\n"
                 f"- project_id: {pid}\n"
-                f"- reason: {result.get('message') or result}\n\n"
-                "Flow 창에서 로그인/팝업/입력창 상태를 정리한 뒤 `진행`이라고 말해줘. 같은 단계를 다시 시도할게."
+                f"- coverage: {attached_count}/{sentence_count}\n\n"
+                "다음 단계: OmniVoice 음성 생성.\n"
+                "`진행`이라고 말하면 음성 생성만 실행하고 다시 멈출게."
             )
-        _set_next_step(state, "flow_download")
+        worker_status = _start_flow_generate_all_worker(pid, start_sentence_number=1, limit=0)
+        _set_next_step(state, "flow_generate_wait")
         return (
-            "4단계 완료: Flow 프롬프트 입력과 Generate 클릭을 자동 시도했어.\n\n"
+            "4단계 시작: MakeLens 방식 Flow generate-all worker를 백그라운드로 시작했어.\n\n"
             f"- project_id: {pid}\n"
-            f"- prompts processed: {result.get('processed')}\n\n"
-            "다음 단계: Flow 결과 다운로드 자동 클릭/감지.\n"
-            "결과가 화면에 생성됐으면 `진행`이라고 말해줘. 아직 생성 중이면 기다렸다가 말해줘."
+            f"- backend: playwright/direct Flow\n"
+            f"- worker_pid: {worker_status.get('pid')}\n"
+            f"- coverage_before: {attached_count}/{sentence_count}\n"
+            f"- missing: {missing}\n\n"
+            "이제 Cline/Qwen이 장면마다 판단하지 않고 worker가 누락 문장을 끝까지 생성/저장/연결해.\n"
+            "`진행`이라고 말하면 worker 상태와 operator_summary만 확인할게."
+        )
+
+    if next_step == "flow_generate_wait":
+        status = _load_flow_generate_all_status(pid)
+        if _flow_generate_all_worker_running(status):
+            project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
+            sentence_count, attached_count, missing = _project_sentence_asset_status(project)
+            return (
+                "4단계 진행 중: Flow generate-all worker가 아직 실행 중이야.\n\n"
+                f"- project_id: {pid}\n"
+                f"- worker_pid: {status.get('pid')}\n"
+                f"- coverage: {attached_count}/{sentence_count}\n"
+                f"- missing: {missing}\n\n"
+                "조금 더 기다린 뒤 `진행`이라고 말하면 상태만 다시 확인할게."
+            )
+        project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
+        sentence_count, attached_count, missing = _project_sentence_asset_status(project)
+        if not missing:
+            _set_next_step(state, "tts")
+            return (
+                "4단계 완료: Flow generate-all worker가 모든 이미지를 생성/연결했어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- coverage: {attached_count}/{sentence_count}\n"
+                f"- status: {status.get('status') or 'done'}\n\n"
+                "다음 단계: OmniVoice 음성 생성.\n"
+                "`진행`이라고 말하면 음성 생성만 실행하고 다시 멈출게."
+            )
+        _set_next_step(state, "flow_generate")
+        return (
+            "4단계 중단: Flow generate-all worker가 모든 문장을 끝내지 못했어.\n\n"
+            f"- project_id: {pid}\n"
+            f"- worker_status: {status.get('status') or 'unknown'}\n"
+            f"- coverage: {attached_count}/{sentence_count}\n"
+            f"- missing: {missing}\n"
+            f"- reason: {status.get('error') or status.get('result', {}).get('message') if isinstance(status.get('result'), dict) else status.get('error')}\n\n"
+            "다음 진단은 operator_summary와 flow_run_log 기준으로 진행해야 해. "
+            "같은 브라우저 클릭을 추측으로 반복하지 마."
         )
 
     if next_step == "flow_wait_sentence":
@@ -1303,14 +1485,19 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
                     "attached": attach_response.get("attached"),
                 }
             else:
-                downloads_before = _object_to_str_list(state.get("downloads_before"))
-                result = _run_flow_desktop_control(
-                    pid,
-                    sentence_number,
-                    mode="download-attach",
-                    downloads_before=downloads_before,
-                    download_timeout_seconds=45,
+                paths = _latest_flow_asset_paths(DEFAULT_DOWNLOADS_DIR, limit=1, since_minutes=180)
+                attach_response = _json_request(
+                    "POST",
+                    f"/api/flow/assets/{pid}/attach-local",
+                    payload={"paths": paths, "start_sentence_number": sentence_number},
+                    timeout=60,
                 )
+                result = {
+                    "ok": True,
+                    "mode": "latest-download-attach",
+                    "downloaded": paths[0] if paths else "",
+                    "attached": attach_response.get("attached"),
+                }
         except NewautoError as exc:
             return (
                 "4단계 대기: Flow 결과 다운로드/연결을 아직 끝내지 못했어.\n\n"
@@ -1339,6 +1526,7 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
                     "next_step": "flow_generate",
                     "active_sentence_number": 0,
                     "downloads_before": [],
+                    "flow_after_generate_url": "",
                     "flow_generate_started_at": "",
                     "flow_generate_screenshots": [],
                 },
@@ -1359,6 +1547,7 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
                 "next_step": "tts",
                 "active_sentence_number": 0,
                 "downloads_before": [],
+                "flow_after_generate_url": "",
                 "flow_generate_started_at": "",
                 "flow_generate_screenshots": [],
             },
@@ -1377,7 +1566,16 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
         backend = _flow_backend()
         project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
         sentence_count, attached_count, missing = _project_sentence_asset_status(project)
-        if backend in {"uivision", "assisted"}:
+        if not missing:
+            _set_next_step(state, "tts")
+            return (
+                "5단계 완료: Flow 이미지가 이미 모든 문장에 연결되어 있어.\n\n"
+                f"- project_id: {pid}\n"
+                f"- coverage: {attached_count}/{sentence_count}\n\n"
+                "다음 단계: OmniVoice 음성 생성.\n"
+                "`진행`이라고 말하면 음성 생성만 실행하고 다시 멈출게."
+            )
+        if backend == "assisted":
             try:
                 attach_response = _json_request(
                     "POST",
@@ -1393,7 +1591,7 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
                     f"- coverage: {attached_count}/{sentence_count}\n"
                     f"- missing: {missing}\n"
                     f"- reason: {exc}\n\n"
-                    "Ui.Vision 매크로가 다운로드 직후 파일명을 `flow_s001_...`처럼 바꾸도록 실행해줘. "
+                    "다운로드 파일명을 `flow_s001_...`처럼 맞춰줘. "
                     "끝나면 `진행`이라고 말하면 같은 단계에서 다시 첨부할게."
             )
             attached = attach_response.get("attached")
@@ -1411,7 +1609,7 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
                     f"- attached this run: {attached if isinstance(attached, list) else []}\n"
                     f"- coverage: {attached_count}/{sentence_count}\n"
                     f"- missing: {missing}\n\n"
-                    "남은 문장도 Ui.Vision으로 생성/다운로드/rename한 뒤 `진행`이라고 말해줘."
+                    "남은 문장도 Flow에서 생성/다운로드/rename한 뒤 `진행`이라고 말해줘."
                 )
             _set_next_step(state, "tts")
             return (
@@ -1536,7 +1734,7 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
                 "7단계 완료: 최종 렌더링이 이미 끝나 있었어.\n\n"
                 f"- project_id: {pid}\n"
                 f"- render_state: {completed_project.get('render_state')} {completed_project.get('render_progress')}%\n"
-                f"- output: {BASE_URL}/api/projects/{pid}/output\n"
+                f"- output: {_output_url(pid, completed_project)}\n"
                 f"- newauto: {_project_url(pid, step=4)}"
             )
         try:
@@ -1590,7 +1788,7 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
             "7단계 완료: 최종 렌더링이 끝났어.\n\n"
             f"- project_id: {pid}\n"
             f"- render_state: {render_project.get('render_state')} {render_project.get('render_progress')}%\n"
-            f"- output: {BASE_URL}/api/projects/{pid}/output\n"
+            f"- output: {_output_url(pid, render_project)}\n"
             f"- newauto: {_project_url(pid, step=4)}"
         )
 
@@ -1598,7 +1796,7 @@ def _continue_stepwise_hpsl_video_workflow_impl(project_id: str = "") -> str:
         return (
             "이 워크플로우는 이미 완료됐어.\n\n"
             f"- project_id: {pid}\n"
-            f"- output: {BASE_URL}/api/projects/{pid}/output\n"
+            f"- output: {_output_url(pid)}\n"
             f"- newauto: {_project_url(pid, step=4)}"
         )
 
@@ -1618,6 +1816,7 @@ def continue_stepwise_hpsl_video_workflow(project_id: str = "") -> str:
     except Exception:
         next_step_before = ""
     message = _continue_stepwise_hpsl_video_workflow_impl(project_id)
+    message = _record_wait_repeat(pid, next_step_before, message)
     return _append_debug_footer(message, project_id=pid, next_step_before=next_step_before)
 
 
@@ -1639,8 +1838,9 @@ def diagnose_newauto_runtime(project_id: str = "") -> str:
         f"FLOW_AUTOMATION_BACKEND: {snapshot.get('flow_automation_backend')}\n"
         f"FLOW_MODE: {snapshot.get('flow_mode')}\n"
         f"api_server_ok: {snapshot.get('api_server_ok')}\n"
-        f"api_server_pid_9001: {snapshot.get('api_server_pid_9001')}\n"
-        f"api_server_command_9001: {snapshot.get('api_server_command_9001')}\n"
+        f"api_port: {snapshot.get('api_port')}\n"
+        f"api_server_pid: {snapshot.get('api_server_pid')}\n"
+        f"api_server_command: {snapshot.get('api_server_command')}\n"
         f"resolved_omnivoice_python: {snapshot.get('resolved_omnivoice_python')}\n"
         f"mcp_processes: {snapshot.get('mcp_processes')}\n"
         f"flow_windows: {snapshot.get('flow_windows')}\n"
@@ -1648,6 +1848,157 @@ def diagnose_newauto_runtime(project_id: str = "") -> str:
         f"asset_coverage: {snapshot.get('asset_coverage')}\n"
         f"diagnostic_json: {RUNTIME_DIAGNOSTICS_LATEST}"
     )
+
+
+def _load_flow_generate_pace() -> dict[str, object]:
+    try:
+        raw = json.loads(FLOW_GENERATE_PACE_PATH.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _save_flow_generate_pace(state: dict[str, object]) -> None:
+    FLOW_GENERATE_PACE_PATH.parent.mkdir(parents=True, exist_ok=True)
+    FLOW_GENERATE_PACE_PATH.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _acquire_flow_generate_lock(project_id: str) -> Path:
+    STEPWISE_DIR.mkdir(parents=True, exist_ok=True)
+    deadline = time.time() + 3
+    while True:
+        try:
+            FLOW_GENERATE_LOCK_DIR.mkdir()
+            marker = FLOW_GENERATE_LOCK_DIR / "owner.json"
+            marker.write_text(
+                json.dumps(
+                    {
+                        "project_id": project_id,
+                        "pid": os.getpid(),
+                        "created_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                    },
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                encoding="utf-8",
+            )
+            return FLOW_GENERATE_LOCK_DIR
+        except FileExistsError:
+            try:
+                age = time.time() - FLOW_GENERATE_LOCK_DIR.stat().st_mtime
+                if age > FLOW_GENERATE_LOCK_STALE_SECONDS:
+                    for child in FLOW_GENERATE_LOCK_DIR.glob("*"):
+                        child.unlink(missing_ok=True)
+                    FLOW_GENERATE_LOCK_DIR.rmdir()
+                    continue
+            except OSError:
+                pass
+            if time.time() >= deadline:
+                raise NewautoError(
+                    "FLOW_GENERATE_ALREADY_RUNNING: another Flow Generate click is already in progress. "
+                    "Wait for that call to finish, then check assets before retrying."
+                )
+            time.sleep(0.25)
+
+
+def _release_flow_generate_lock(lock_dir: Path) -> None:
+    try:
+        for child in lock_dir.glob("*"):
+            child.unlink(missing_ok=True)
+        lock_dir.rmdir()
+    except OSError:
+        pass
+
+
+def _enforce_flow_generate_pace(project_id: str) -> int:
+    state = _load_flow_generate_pace()
+    project_state = state.get(project_id)
+    if not isinstance(project_state, dict):
+        return 0
+    last_at_raw = project_state.get("last_generate_at")
+    try:
+        last_at = float(last_at_raw)
+    except (TypeError, ValueError):
+        return 0
+    elapsed = time.monotonic() - last_at
+    wait_seconds = max(0.0, FLOW_GENERATE_COOLDOWN_SECONDS - elapsed)
+    if wait_seconds <= 0:
+        return 0
+    rounded_wait = int(wait_seconds) + (0 if wait_seconds.is_integer() else 1)
+    time.sleep(wait_seconds)
+    return rounded_wait
+
+
+def _record_flow_generate_pace(project_id: str, sentence_number: int) -> None:
+    state = _load_flow_generate_pace()
+    state[project_id] = {
+        "last_generate_at": time.monotonic(),
+        "last_sentence_number": sentence_number,
+        "cooldown_seconds": FLOW_GENERATE_COOLDOWN_SECONDS,
+    }
+    _save_flow_generate_pace(state)
+
+
+def _flow_generate_all_status_path(project_id: str) -> Path:
+    return ROOT_DIR / "storage" / "projects" / project_id / "flow_generate_all_status.json"
+
+
+def _load_flow_generate_all_status(project_id: str) -> dict[str, object]:
+    path = _flow_generate_all_status_path(project_id)
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return raw if isinstance(raw, dict) else {}
+
+
+def _flow_generate_all_worker_running(status: dict[str, object]) -> bool:
+    if str(status.get("status") or "") != "running":
+        return False
+    try:
+        pid = int(status.get("pid") or 0)
+    except (TypeError, ValueError):
+        return False
+    return _pid_exists(pid)
+
+
+def _start_flow_generate_all_worker(project_id: str, *, start_sentence_number: int = 1, limit: int = 0) -> dict[str, object]:
+    status = _load_flow_generate_all_status(project_id)
+    if _flow_generate_all_worker_running(status):
+        return status
+    log_dir = ROOT_DIR / "storage" / "logs"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    log_handle = (log_dir / f"flow_generate_all_{project_id}.log").open("a", encoding="utf-8")
+    args = [
+        sys.executable,
+        str(FLOW_GENERATE_ALL_WORKER_SCRIPT),
+        "--project-id",
+        project_id,
+        "--start-sentence-number",
+        str(max(1, start_sentence_number)),
+        "--limit",
+        str(max(0, limit)),
+    ]
+    process = subprocess.Popen(
+        args,
+        cwd=str(ROOT_DIR),
+        stdout=log_handle,
+        stderr=log_handle,
+        stdin=subprocess.DEVNULL,
+        creationflags=(
+            subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
+            if sys.platform.startswith("win")
+            else 0
+        ),
+    )
+    log_handle.close()
+    return {
+        "status": "running",
+        "project_id": project_id,
+        "pid": process.pid,
+        "started_by": "newauto_mcp",
+        "log_path": str(log_dir / f"flow_generate_all_{project_id}.log"),
+    }
 
 
 @mcp.tool()
@@ -1671,20 +2022,45 @@ def flow_asset_coverage(project_id: str) -> str:
 
 @mcp.tool()
 def flow_generate_one_sentence(project_id: str, sentence_number: int) -> str:
-    """Diagnostic-only: click Generate for one Flow sentence prompt without waiting for download."""
+    """Diagnostic-only: generate one Flow sentence prompt through the Playwright path."""
     _configure_stdout()
     _ensure_server()
     pid = project_id.strip()
     target_sentence = max(1, int(sentence_number or 1))
-    result = _run_flow_desktop_control(pid, target_sentence, mode="click-generate")
+    lock_dir = _acquire_flow_generate_lock(pid)
+    try:
+        project = _json_request("GET", f"/api/projects/{pid}", timeout=30)
+        if _project_has_sentence_asset(project, target_sentence):
+            sentence_count, attached_count, missing = _project_sentence_asset_status(project)
+            return _append_debug_footer(
+                (
+                    "Flow one-sentence Generate skipped.\n\n"
+                    f"- project_id: {pid}\n"
+                    f"- sentence: {target_sentence}\n"
+                    "- reason: this sentence already has an attached Flow asset\n"
+                    f"- coverage: {attached_count}/{sentence_count}\n"
+                    f"- missing: {missing}\n\n"
+                    "Use continue_video_workflow to advance the next missing sentence."
+                ),
+                project_id=pid,
+            )
+        waited_seconds = _enforce_flow_generate_pace(pid)
+        result = _run_flow_browser_script(
+            ["generate", "--project-id", pid, "--start-sentence-number", str(target_sentence), "--limit", "1"],
+            timeout_sec=240,
+        )
+        _record_flow_generate_pace(pid, target_sentence)
+    finally:
+        _release_flow_generate_lock(lock_dir)
     return _append_debug_footer(
         (
-            "Flow one-sentence Generate click completed.\n\n"
+            "Flow one-sentence generation completed.\n\n"
             f"- project_id: {pid}\n"
             f"- sentence: {target_sentence}\n"
-            f"- window_title: {result.get('window_title')}\n"
-            f"- screenshots: {result.get('screenshots')}\n\n"
-            "Flow 결과 이미지가 보이면 `flow_download_one_sentence`로 다운로드/attach만 테스트해."
+            f"- enforced_wait_seconds_before_click: {waited_seconds}\n"
+            f"- pacing_rule: one prompt, then wait at least {FLOW_GENERATE_COOLDOWN_SECONDS} seconds before the next prompt\n"
+            f"- result: {result.get('message') or result}\n\n"
+            "Stop here. Do not generate another sentence until the user explicitly asks to continue."
         ),
         project_id=pid,
     )
@@ -1692,38 +2068,36 @@ def flow_generate_one_sentence(project_id: str, sentence_number: int) -> str:
 
 @mcp.tool()
 def flow_download_one_sentence(project_id: str, sentence_number: int) -> str:
-    """Diagnostic-only: download and attach one currently visible/generated Flow result for a sentence."""
+    """Diagnostic-only: attach the latest downloaded Flow result for one sentence."""
     _configure_stdout()
     _ensure_server()
     pid = project_id.strip()
     target_sentence = max(1, int(sentence_number or 1))
-    result = _run_flow_desktop_control(
-        pid,
-        target_sentence,
-        mode="download-attach",
-        downloads_before=[],
-        download_timeout_seconds=45,
-    )
-    if result.get("ok") is not True:
+    paths = _latest_flow_asset_paths(DEFAULT_DOWNLOADS_DIR, limit=1, since_minutes=180)
+    if not paths:
         return _append_debug_footer(
             (
-                "Flow one-sentence download/attach did not complete.\n\n"
+                "Flow one-sentence attach did not complete.\n\n"
                 f"- project_id: {pid}\n"
                 f"- sentence: {target_sentence}\n"
-                f"- downloaded: {result.get('downloaded')}\n"
-                f"- pending_attach: {result.get('pending_attach')}\n"
-                f"- error: {result.get('error')}"
+                f"- downloads_dir: {DEFAULT_DOWNLOADS_DIR}\n"
+                "- error: no recent Flow asset download found"
             ),
             project_id=pid,
         )
+    response = _json_request(
+        "POST",
+        f"/api/flow/assets/{pid}/attach-local",
+        payload={"paths": paths, "start_sentence_number": target_sentence},
+        timeout=60,
+    )
     return _append_debug_footer(
         (
-            "Flow one-sentence download/attach completed.\n\n"
+            "Flow one-sentence attach completed.\n\n"
             f"- project_id: {pid}\n"
             f"- sentence: {target_sentence}\n"
-            f"- downloaded: {result.get('downloaded')}\n"
-            f"- attached: {result.get('attached')}\n"
-            f"- screenshots: {result.get('screenshots')}"
+            f"- downloaded: {paths[0]}\n"
+            f"- attached: {response.get('attached')}"
         ),
         project_id=pid,
     )
@@ -1733,7 +2107,7 @@ def flow_download_one_sentence(project_id: str, sentence_number: int) -> str:
 def make_hpsl_flow_short_video(
     keyword_or_url: str,
     title: str = "",
-    target_minutes: int = 1,
+    target_minutes: int = 0,
     tone: str = "설명형",
 ) -> str:
     """Compatibility wrapper. Do not answer date objections yourself; start the stepwise workflow with the full request string."""
@@ -1775,7 +2149,7 @@ def automate_flow_generation(
         timeout_sec=240,
     )
     if result.get("ok") is not True:
-        webbrowser.open(FLOW_URL)
+        _open_flow_url()
         return (
             "Flow 자동화가 사용자 확인 지점에서 멈췄어.\n\n"
             f"- project_id: {pid}\n"
@@ -1837,15 +2211,6 @@ def open_flow_for_auth(project_id: str = "") -> str:
     """Open a persistent Playwright Flow browser profile for the user to authenticate once."""
     _configure_stdout()
     pid = project_id.strip() or "manual"
-    if _flow_backend() == "uivision":
-        webbrowser.open(FLOW_URL)
-        return (
-            "Flow 페이지를 열었어.\n"
-            f"- project_id: {pid}\n"
-            f"- Flow: {FLOW_URL}\n\n"
-            "Ui.Vision/데스크톱 제어 모드에서는 CDP 연결을 기다리지 않아. "
-            "로그인/권한승인이 끝났으면 LM Studio에 `진행`이라고 말해줘."
-        )
     result = _run_flow_browser_script(["open", "--project-id", pid], timeout_sec=60)
     return (
         "Flow 인증용 브라우저를 열었어.\n"
@@ -1859,7 +2224,7 @@ def open_flow_for_auth(project_id: str = "") -> str:
 def start_hpsl_flow_workflow(
     request: str,
     title: str = "",
-    target_minutes: int = 1,
+    target_minutes: int = 0,
     tone: str = "설명형",
 ) -> str:
     """Compatibility wrapper for older LM Studio calls. Starts the approval-gated workflow only."""
@@ -1933,33 +2298,6 @@ def get_single_flow_prompt(project_id: str, sentence_number: int) -> str:
 
 
 @mcp.tool()
-def prepare_uivision_flow_batch(project_id: str) -> str:
-    """Prepare CSV/TXT files for Ui.Vision to generate Google Flow assets without dumping all prompts into chat."""
-    _configure_stdout()
-    _ensure_server()
-    pid = project_id.strip()
-    if not pid:
-        return "project_id가 필요해."
-    payload = _prepare_uivision_payload(pid)
-    prompt_paths = payload.get("prompt_paths")
-    prompt_count = len(prompt_paths) if isinstance(prompt_paths, list) else 0
-    webbrowser.open(FLOW_URL)
-    return (
-        "Ui.Vision용 Flow 프롬프트 파일을 준비했어.\n\n"
-        f"- project_id: {pid}\n"
-        f"- prompts: {prompt_count}\n"
-        f"- csv_path: {payload.get('csv_path')}\n"
-        f"- folder: {payload.get('directory')}\n\n"
-        "다음 행동:\n"
-        "1. Flow 로그인/권한승인이 필요하면 사용자님이 승인\n"
-        "2. Ui.Vision에서 Flow_Generate_One 매크로로 1번 문장부터 테스트\n"
-        "3. 다운로드 파일명이 `flow_s001_...` 형식인지 확인\n"
-        "4. 끝나면 `진행` 또는 `Flow 다운로드 끝났어`라고 말해줘\n\n"
-        "매크로 실행 중에는 Flow 브라우저를 건드리지 말고, 결제/4K 업그레이드/유료 크레딧 버튼은 누르지 마."
-    )
-
-
-@mcp.tool()
 def open_newauto_project(project_id: str, step: int = 2) -> str:
     """Open a newauto project in the browser so the user can click only the required UI actions."""
     _ensure_server()
@@ -1971,24 +2309,6 @@ def open_newauto_project(project_id: str, step: int = 2) -> str:
 @mcp.tool()
 def open_flow() -> str:
     """Open Google Flow for the user. Use this when the next step is user authentication or clicking Generate in Flow."""
-    if _flow_backend() == "uivision":
-        try:
-            state = _load_stepwise_state("")
-            pid = str(state.get("project_id") or "manual")
-            if str(state.get("next_step") or "") == "flow_auth":
-                _set_next_step(state, "flow_generate")
-        except Exception:
-            pid = "manual"
-        webbrowser.open(FLOW_URL)
-        return (
-            "Flow 페이지를 열었어.\n\n"
-            f"- project_id: {pid}\n"
-            f"- Flow: {FLOW_URL}\n"
-            f"- backend: {_flow_backend()}\n\n"
-            "이 모드에서는 CDP/Playwright 연결을 기다리지 않아서 timeout이 나지 않아. "
-            "로그인/권한승인이 끝났거나 이미 로그인되어 있으면 `진행`이라고 말해줘. "
-            "다음 단계에서는 Generate 클릭만 빠르게 실행할게."
-        )
     try:
         state = _load_stepwise_state("")
         pid = str(state.get("project_id") or "manual")
@@ -2003,7 +2323,7 @@ def open_flow() -> str:
             "로그인/권한승인이 끝났으면 `진행`이라고 말해줘. 다음에는 프롬프트 입력과 생성 버튼 클릭을 자동 시도할게."
         )
     except Exception as exc:
-        webbrowser.open(FLOW_URL)
+        _open_flow_url()
         return (
             f"Opened Flow fallback: {FLOW_URL}\n"
             f"CDP 자동화 브라우저를 열지 못했어: {exc}\n"
@@ -2068,7 +2388,7 @@ def attach_latest_flow_downloads(
     source_dir = Path(downloads_dir).expanduser() if downloads_dir.strip() else DEFAULT_DOWNLOADS_DIR
     paths = _latest_flow_asset_paths(source_dir, limit=needed, since_minutes=since_minutes)
     if len(paths) < needed:
-        webbrowser.open(FLOW_URL)
+        _open_flow_url()
         return (
             "다운로드 폴더에서 붙일 Flow 파일을 충분히 찾지 못했어.\n"
             f"- folder: {source_dir}\n"
@@ -2115,7 +2435,7 @@ def attach_renamed_flow_downloads(
     downloads_dir: str = "",
     since_minutes: int = 480,
 ) -> str:
-    """Attach Ui.Vision-renamed Flow downloads like flow_s001_*.png by parsing the sentence number from filenames."""
+    """Attach renamed Flow downloads like flow_s001_*.png by parsing the sentence number from filenames."""
     _configure_stdout()
     _ensure_server()
     pid = project_id.strip()
@@ -2146,7 +2466,7 @@ def attach_renamed_flow_downloads(
         + (
             "이제 `continue_after_flow_assets` 또는 단계형 `진행`으로 OmniVoice/TTS 단계로 넘어갈 수 있어."
             if not missing
-            else "아직 빠진 문장이 있어. 남은 문장을 Ui.Vision으로 생성/다운로드/rename한 뒤 다시 알려줘."
+            else "아직 빠진 문장이 있어. 남은 문장을 Flow에서 생성/다운로드/rename한 뒤 다시 알려줘."
         )
     )
 
@@ -2176,7 +2496,7 @@ def continue_after_flow_assets(project_id: str, voice_preset: str = "male-announ
     state = {
         "project_id": pid,
         "request": str(project.get("title") or ""),
-        "target_minutes": 1,
+        "target_minutes": "auto",
         "voice_preset": voice_preset,
         "next_step": next_step,
         "source_mode": "existing project",
@@ -2189,6 +2509,43 @@ def continue_after_flow_assets(project_id: str, voice_preset: str = "male-announ
 
 def main() -> None:
     _configure_stdout()
+    if len(sys.argv) > 1:
+        parser = argparse.ArgumentParser(description="Run newauto workflow commands or start the MCP stdio server.")
+        parser.add_argument(
+            "command",
+            nargs="?",
+            choices=(
+                "continue_video_workflow",
+                "continue-video-workflow",
+                "continue_stepwise_hpsl_video_workflow",
+                "continue-stepwise-hpsl-video-workflow",
+            ),
+            help="Optional command alias for agent runners that pass tool names as positional arguments.",
+        )
+        parser.add_argument(
+            "--action",
+            choices=(
+                "continue_video_workflow",
+                "continue-video-workflow",
+                "continue_stepwise_hpsl_video_workflow",
+                "continue-stepwise-hpsl-video-workflow",
+            ),
+            help="Command alias used by Cline and other shell runners.",
+        )
+        parser.add_argument("--project-id", default="", help="newauto project id to continue.")
+        args = parser.parse_args()
+
+        action = args.action or args.command
+        if action in {
+            "continue_video_workflow",
+            "continue-video-workflow",
+            "continue_stepwise_hpsl_video_workflow",
+            "continue-stepwise-hpsl-video-workflow",
+        }:
+            print(continue_stepwise_hpsl_video_workflow(args.project_id))
+            return
+        parser.error("No CLI action requested. Use no arguments to run as an MCP stdio server.")
+
     mcp.run(transport="stdio")
 
 

@@ -7,6 +7,7 @@ import subprocess
 import sys
 import time
 import ctypes
+import urllib.request
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -24,7 +25,7 @@ APPROVAL_MESSAGE = (
 )
 
 INSTRUCTIONS = """
-You are the OpenClaw-style local operator MCP for LM Studio + Gemma4.
+You are the OpenClaw-style local operator MCP for LM Studio + Qwen.
 
 This server intentionally grants broad local authority similar to the user's
 OpenClaw sandbox=off/tools=full setup. Use it only when the user explicitly
@@ -40,7 +41,7 @@ Available authority:
 
 Rules:
 - Do not say you cannot click browsers or GUI buttons. If browser/GUI control is needed,
-  use control_flow_desktop or run_powershell with an existing automation script.
+  use the Playwright Flow workflow or run_powershell with an existing automation script.
 - Prefer purpose-built workflow tools first when they exist.
 - Use this operator when the workflow MCP is broken, missing, or needs local repair.
 - Keep commands scoped and explain the result in Korean.
@@ -265,6 +266,35 @@ def _run(command: str, cwd: str, timeout_sec: int, force_approve: bool = False) 
     return exit_code, stdout, stderr, log_path
 
 
+def _cdp_status(cdp_url: str = "http://127.0.0.1:9225") -> dict[str, object]:
+    endpoint = cdp_url.rstrip("/") + "/json/version"
+    try:
+        with urllib.request.urlopen(endpoint, timeout=2.0) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except Exception as exc:
+        return {
+            "ok": False,
+            "endpoint": endpoint,
+            "failure_class": "cdp_endpoint_unavailable",
+            "message": f"{type(exc).__name__}: {exc}",
+            "next_action_suggestion": r"start C:\Users\petbl\newauto\start-cline-browser.cmd or use text/search fallback",
+        }
+    if not isinstance(payload, dict):
+        return {
+            "ok": False,
+            "endpoint": endpoint,
+            "failure_class": "cdp_invalid_response",
+            "message": "CDP /json/version did not return a JSON object.",
+            "next_action_suggestion": "restart the shared CDP browser",
+        }
+    return {
+        "ok": True,
+        "endpoint": endpoint,
+        "browser": str(payload.get("Browser") or ""),
+        "websocket_debugger_url": str(payload.get("webSocketDebuggerUrl") or ""),
+    }
+
+
 @mcp.tool()
 def operator_status() -> str:
     """Show the local operator authority surface and current runtime identity."""
@@ -277,8 +307,9 @@ def operator_status() -> str:
         f"pid: {os.getpid()}\n"
         "authority: OpenClaw-style local full operator via MCP\n"
         "tools: run_powershell, read_text_file, write_text_file, list_directory, open_target, "
-        "control_flow_desktop, recent_operator_logs\n"
+        "recent_operator_logs\n"
         "secret_policy: secret-like lines are redacted in read_text_file and recent logs\n"
+        f"cdp_9225: {json.dumps(_cdp_status(), ensure_ascii=False, sort_keys=True)}\n"
         f"desktop_state: {_desktop_locked_text()}"
     )
 
@@ -396,29 +427,33 @@ def open_target(target: str) -> str:
 
 
 @mcp.tool()
-def control_flow_desktop(
+def legacy_flow_desktop(
     project_id: str,
     sentence_number: int,
     mode: str = "generate-one",
     wait_seconds: int = 60,
     download_timeout_seconds: int = 45,
 ) -> str:
-    """Control the authenticated Google Flow desktop UI for one sentence."""
+    """Retired compatibility wrapper for the old desktop Flow path."""
     _configure_stdout()
     allowed_modes = {"generate-one", "click-generate", "download-attach"}
     selected_mode = mode.strip()
     if selected_mode not in allowed_modes:
-        return f"control_flow_desktop error: mode must be one of {sorted(allowed_modes)}"
+        return f"legacy_flow_desktop error: mode must be one of {sorted(allowed_modes)}"
     if sentence_number < 1:
-        return "control_flow_desktop error: sentence_number must be >= 1"
+        return "legacy_flow_desktop error: sentence_number must be >= 1"
+    return (
+        "legacy_flow_desktop is retired for the current workflow. "
+        "Use the newauto Playwright Flow workflow tools instead."
+    )
     desktop_state = _desktop_state_payload()
     if desktop_state.get("desktop_locked") is True:
         return (
-            "control_flow_desktop blocked: desktop_locked=true. "
+            "legacy_flow_desktop blocked: desktop_locked=true. "
             "화면 잠금이 감지되어 GUI 클릭이 불가능합니다. 화면 잠금을 해제하고 Flow 창을 전면에 둔 뒤 진행이라고 말해주세요.\n"
             f"desktop_state: {json.dumps(desktop_state, ensure_ascii=False, sort_keys=True)}"
         )
-    script_path = ROOT_DIR / "scripts" / "flow_desktop_control.py"
+    script_path = ROOT_DIR / "scripts" / "flow_browser_automation.py"
     command = (
         f"& {json.dumps(str(sys.executable))} {json.dumps(str(script_path))} "
         f"{json.dumps(project_id)} --sentence {sentence_number} "
@@ -428,7 +463,7 @@ def control_flow_desktop(
     )
     exit_code, stdout, stderr, log_path = _run(command, str(ROOT_DIR), max(wait_seconds + download_timeout_seconds + 30, 60))
     return (
-        "=== control_flow_desktop result ===\n"
+        "=== legacy_flow_desktop result ===\n"
         f"project_id: {project_id}\n"
         f"sentence_number: {sentence_number}\n"
         f"mode: {selected_mode}\n"

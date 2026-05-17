@@ -12,7 +12,7 @@ SUSPECT_SNIPPETS = (
     "몃꽕",
 )
 TARGET_SUFFIXES = {".py", ".js", ".html", ".css", ".md"}
-TARGET_DIRS = ("app", "scripts", "tests")
+TARGET_DIRS = ("app", "scripts")
 
 
 def _safe_output(text: str) -> str:

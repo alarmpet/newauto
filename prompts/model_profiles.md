@@ -4,24 +4,26 @@ This file defines model roles for the `newauto` agentic stack. A model can be ad
 
 ## operator-fast
 
-- Model: `google/gemma-4-e4b`
+- Model: `qwen/qwen3.5-9b`
 - Current runtime: LM Studio local
-- Current context target: `72000`
+- Current context target: `131072`
 - Quantization observed: `Q4_K_M`
-- Hardware fit: good for RTX 4060 Laptop 8GB at the current operating profile
+- Hardware fit: usable on RTX 4060 Laptop 8GB only when Cline tasks stay compact
 - Purpose:
   - Stepwise video workflow
   - Short diagnostics
   - Flow GUI orchestration
   - Web-search triage
+- Simple Q&A policy:
+  - Answer directly without tools.
+  - Do not inspect files, create todos, or run MCP for identity/config/explanation questions.
 - Required smoke:
   - `python scripts\agent_eval_smoke.py`
 
 ## planner-reviewer
 
 - Candidate models:
-  - Gemma4 26B `Q4_K_S`
-  - Gemma4 26B `IQ4_XS`
+  - Qwen3.5 9B `Q4_K_M`
 - Hardware fit:
   - RTX 4060 Laptop 8GB cannot reliably full-offload 26B at long context.
   - Use shorter context and partial offload, or run remotely.
@@ -54,7 +56,7 @@ This file defines model roles for the `newauto` agentic stack. A model can be ad
 - Candidate:
   - API/OpenRouter/remote LM Studio model selected per task
 - Purpose:
-  - Cases where local Gemma4 cannot reliably reason or code
+  - Cases where the local LM Studio model cannot reliably reason or code
 - Constraints:
   - Requires explicit API/provider setup
   - Do not send secrets, local credentials, or private tokens
@@ -63,7 +65,7 @@ This file defines model roles for the `newauto` agentic stack. A model can be ad
 ## openrouter-reviewer
 
 - Runtime: OpenRouter
-- Role: fallback-cloud reviewer/planner/coder for cases where local Gemma4 and Cline repeat failures or need external review.
+- Role: fallback-cloud reviewer/planner/coder for cases where local LM Studio and Cline repeat failures or need external review.
 - Key source:
   - Preferred: `OPENROUTER_API_KEY`
   - Fallback: first non-comment line of `C:\Users\petbl\newauto\openrouter.txt`
@@ -71,9 +73,11 @@ This file defines model roles for the `newauto` agentic stack. A model can be ad
   - Use `:free` models only.
   - Primary reviewer/debug/planner/code_patch model: `google/gemma-4-31b-it:free`.
   - Preferred fallback model: `google/gemma-4-26b-a4b-it:free`.
-  - Last-resort fallback model: `openai/gpt-oss-20b:free`, kept as a safety net when the preferred Google Gemma free endpoints are rate-limited.
+  - Last-resort fallback model: `openai/gpt-oss-20b:free`, kept as a safety net when the preferred Gemma free endpoints are rate-limited.
+  - Vision fallback chain: `google/gemma-4-31b-it:free` -> `google/gemma-4-26b-a4b-it:free` -> `nvidia/nemotron-nano-12b-v2-vl:free` -> `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` -> `baidu/qianfan-ocr-fast:free` -> `openrouter/free`.
   - Configure mode-specific models with `OPENROUTER_MODEL_REVIEWER`, `OPENROUTER_MODEL_PLANNER`, `OPENROUTER_MODEL_DEBUGGER`, and `OPENROUTER_MODEL_CODER`.
-  - Configure fallback with `OPENROUTER_FALLBACK_MODEL` only if the default DeepSeek fallback should change.
+  - Configure vision-specific models with `OPENROUTER_VISION_MODEL`, `OPENROUTER_VISION_FALLBACK_MODEL`, and `OPENROUTER_VISION_LAST_RESORT_MODEL` only if the verified free image-capable endpoints change.
+  - Configure fallback with `OPENROUTER_FALLBACK_MODEL` only if the default Gemma 26B fallback should change.
   - Configure last-resort fallback with `OPENROUTER_LAST_RESORT_MODEL` only if the verified available free endpoint changes.
   - Do not import or share `music-auto` OpenRouter runtime state. Keep budget/config/cache local to `newauto`.
 - Free-model quota:
@@ -83,6 +87,7 @@ This file defines model roles for the `newauto` agentic stack. A model can be ad
   - Hard guard: 950/day for non-essential calls.
 - Required validation:
   - `python scripts\openrouter_subagent_harness.py --dry-run --mode review --task "smoke" --json-output`
+  - For real Cline calls with Korean/multiline prompts, use `--task-stdin` or `--task-file`; reserve direct `--task "..."` for short smoke text only.
   - `python scripts\agent_eval_smoke.py --skip-openrouter` for local smoke without spending quota.
 - Constraints:
   - No raw secrets.
