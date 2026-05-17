@@ -1,0 +1,55 @@
+{
+  "mcpServers": {
+    "git": {
+      "type": "stdio",
+      "command": "C:\\Users\\petbl\\local-rag\\.venv\\Scripts\\mcp-server-git.exe",
+      "args": [
+        "--repository",
+        "C:\\Users\\petbl\\newauto"
+      ]
+    },
+    "playwright": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@playwright/mcp@latest"
+      ],
+      "env": {
+        "PLAYWRIGHT_BROWSERS_PATH": "0"
+      }
+    },
+    "context7": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@upstash/context7-mcp@latest"
+      ]
+    },
+    "newauto-stepwise": {
+      "type": "stdio",
+      "command": "C:\\Users\\petbl\\newauto\\run-newauto-stepwise-mcp.cmd",
+      "args": []
+    },
+    "sequential-thinking": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sequential-thinking@latest"
+      ]
+    },
+    "memory": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-memory@latest"
+      ],
+      "env": {
+        "MEMORY_FILE_PATH": "C:\\Users\\petbl\\newauto\\.mcp\\memory.jsonl"
+      }
+    }
+  }
+}

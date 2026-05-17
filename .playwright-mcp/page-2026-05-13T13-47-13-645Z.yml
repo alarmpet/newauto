@@ -1,0 +1,798 @@
+- generic [ref=e2]:
+  - link "본문 바로가기" [ref=e3] [cursor=pointer]:
+    - /url: "#ct"
+  - banner [ref=e4]:
+    - generic [ref=e5]:
+      - generic [ref=e8]:
+        - generic [ref=e9]:
+          - link "NAVER" [ref=e11] [cursor=pointer]:
+            - /url: https://m.naver.com/
+            - generic [ref=e12]: NAVER
+          - generic [ref=e13]:
+            - heading "선택됨 뉴스" [level=1] [ref=e14]:
+              - link "선택됨 뉴스" [ref=e15] [cursor=pointer]:
+                - /url: https://m.news.naver.com
+                - generic [ref=e16]: 선택됨 뉴스
+            - link "엔터" [ref=e18] [cursor=pointer]:
+              - /url: https://m.entertain.naver.com
+              - generic [ref=e19]: 엔터
+            - link "스포츠" [ref=e21] [cursor=pointer]:
+              - /url: https://m.sports.naver.com
+              - generic [ref=e22]: 스포츠
+            - link "날씨" [ref=e24] [cursor=pointer]:
+              - /url: https://weather.naver.com
+              - generic [ref=e25]: 날씨
+            - link "프리미엄" [ref=e27] [cursor=pointer]:
+              - /url: https://contents.premium.naver.com
+              - generic [ref=e28]: 프리미엄
+            - link "지방선거" [ref=e30] [cursor=pointer]:
+              - /url: https://news.naver.com/election/region2026
+              - generic [ref=e31]: 지방선거
+        - link "검색" [ref=e34] [cursor=pointer]:
+          - /url: javascript:;
+          - generic [ref=e35]: 검색
+      - generic [ref=e38]:
+        - tablist [ref=e39]:
+          - tab "언론사별" [ref=e40] [cursor=pointer]:
+            - generic [ref=e41]: 언론사별
+          - tab "정치" [ref=e42] [cursor=pointer]:
+            - generic [ref=e43]: 정치
+          - tab "경제" [ref=e44] [cursor=pointer]:
+            - generic [ref=e45]: 경제
+          - tab "사회" [ref=e46] [cursor=pointer]:
+            - generic [ref=e47]: 사회
+          - tab "생활/문화" [ref=e48] [cursor=pointer]:
+            - generic [ref=e49]: 생활/문화
+          - tab "IT/과학" [ref=e50] [cursor=pointer]:
+            - generic [ref=e51]: IT/과학
+          - tab "세계" [selected] [ref=e52] [cursor=pointer]:
+            - generic [ref=e53]: 세계
+          - tab "랭킹" [ref=e54] [cursor=pointer]:
+            - generic [ref=e55]: 랭킹
+          - tab "신문보기" [ref=e56] [cursor=pointer]:
+            - generic [ref=e57]: 신문보기
+          - tab "오피니언" [ref=e58] [cursor=pointer]:
+            - generic [ref=e59]: 오피니언
+          - tab "TV" [ref=e60] [cursor=pointer]:
+            - generic [ref=e61]: TV
+          - tab "팩트체크" [ref=e62] [cursor=pointer]:
+            - generic [ref=e63]: 팩트체크
+          - tab "알고리즘 안내" [ref=e64] [cursor=pointer]:
+            - generic [ref=e65]: 알고리즘 안내
+          - tab "정정보도 모음" [ref=e66] [cursor=pointer]:
+            - generic [ref=e67]: 정정보도 모음
+        - generic [ref=e68]:
+          - link "MY" [ref=e69] [cursor=pointer]:
+            - /url: https://media.naver.com/my/home
+            - generic [ref=e70]: MY
+          - tooltip "뉴스 이용 설정을 할 수 있어요" [ref=e71]:
+            - paragraph [ref=e72]: 뉴스 이용 설정을 할 수 있어요
+  - generic [ref=e74]:
+    - main [ref=e75]:
+      - generic [ref=e76]:
+        - generic [ref=e77]:
+          - link "서울경제 서울경제" [ref=e79] [cursor=pointer]:
+            - /url: http://www.sedaily.com
+            - img "서울경제" [ref=e81]
+            - generic [ref=e82]: 서울경제
+          - heading "마우스 움직이면 제미나이 뜬다...AI 무장한 ‘구글북’ 공개" [level=2] [ref=e84]
+          - generic [ref=e85]:
+            - generic [ref=e86]:
+              - img "김창영 기자" [ref=e88]
+              - generic [ref=e89]:
+                - link "김창영 기자" [ref=e91] [cursor=pointer]:
+                  - /url: https://media.naver.com/journalist/011/56891
+                  - emphasis [ref=e92]: 김창영 기자
+                - generic [ref=e93]:
+                  - generic [ref=e96]:
+                    - emphasis [ref=e97]: 입력
+                    - generic [ref=e98]: 2026.05.13. 오후 2:37
+                  - link "기사원문" [ref=e99] [cursor=pointer]:
+                    - /url: https://www.sedaily.com/article/20043576?ref=naver
+            - generic [ref=e100]:
+              - link "댓글 반응" [ref=e104] [cursor=pointer]:
+                - /url: /mnews/article/comment/011/0004620376
+                - text: 댓글
+                - generic [ref=e105]: 반응
+              - generic [ref=e106]:
+                - button "텍스트 음성 변환 서비스 사용하기" [ref=e108] [cursor=pointer]:
+                  - generic [ref=e109]: 텍스트 음성 변환 서비스 사용하기
+                - link "글자 크기 변경하기" [ref=e111] [cursor=pointer]:
+                  - /url: "#"
+                  - generic [ref=e112]: 글자 크기 변경하기
+                - link "SNS 보내기" [ref=e114] [cursor=pointer]:
+                  - /url: "#"
+                  - generic [ref=e116]: SNS 보내기
+                - link "인쇄하기" [ref=e118] [cursor=pointer]:
+                  - /url: "#"
+                  - generic [ref=e119]: 인쇄하기
+        - generic [ref=e120]:
+          - article [ref=e122]:
+            - strong [ref=e123]: 제미나이 통합해 매직 포인터 구현
+            - generic [ref=e124]:
+              - generic [ref=e126]:
+                - img "구글북 실행 예시. 구글 블로그 캡처"
+              - emphasis [ref=e127]: 구글북 실행 예시. 구글 블로그 캡처
+            - text: 구글의 인공지능(AI) 모델인 제미나이를 통합한 노트북이 출시된다. 마우스 커서만 움직이면 AI가 실행된다.
+            - text: 구글은 12일(현지 시간) 안드로이드와 크롬 운영체제(OS)에 제미나이 모델을 통합한 ‘구글북’을 공개했다.
+            - text: 구글북은 크롬북의 뒤를 잇는 새로운 노트북 브랜드다. 알렉스 쿠셔 구글 수석 이사는 블로그 게시글에서 “15년 전 선보인 크롬북이 클라우드 중심이었다면 구글북은 AI가 중심인 새로운 노트북”이라고 소개했다.
+            - text: 구글북의 핵심은 ‘매직 포인터(Magic Pointer)’다. 사용자가 화면에서 마우스 커서를 흔들면 제미나이가 활성화되고 화면 특정 위치를 가리킬 때마다 상황에 맞는 제안을 한다. 이메일 날짜를 고려해 회의 일정을 잡거나 거실과 새 소파처럼 두 이미지를 결합해 시각화할 수 있다. 몇 번의 클릭만으로 아이디어를 구체화하고 작업을 완료할 수도 있다.
+            - text: 매직 포인터 기능에 대해 구글은 커서가 노트북에서 가장 자주 사용하는 도구이지만 마우스 오른쪽 클릭 기능 이후 큰 변화가 없었다면서 구글 딥마인드 팀과 함께 개발한 새 기능으로 환경이 크게 바뀔 것이라고 강조했다.
+            - text: 구글은 에이서·에이수스·델·HP·레노버 등 주요 하드웨어 기업들과 협력해 올 가을께 구글북을 선보일 계획이다. 악시오스는 애플이 저가형 맥북 네오를 출시하며 인기몰이 중인 가운데 구글도 크롬북 뛰어넘는 모델 내놓으며 노트북 사업에서 승부수를 던졌다고 설명했다.
+          - paragraph [ref=e129]:
+            - generic [ref=e130]: 실리콘밸리=김창영 특파원(kcy@sedaily.com)
+          - paragraph [ref=e133]: Copyright ⓒ 서울경제. All rights reserved. 무단 전재 및 재배포 금지.
+          - link "이 기사는 언론사에서 세계 , IT 섹션으로 분류했습니다." [ref=e135] [cursor=pointer]:
+            - /url: "#"
+            - text: 이 기사는 언론사에서
+            - emphasis [ref=e136]: 세계
+            - text: ","
+            - emphasis [ref=e137]: IT
+            - text: 섹션으로 분류했습니다.
+          - generic [ref=e139]:
+            - heading "기자 프로필" [level=4] [ref=e140]
+            - generic [ref=e144]:
+              - generic [ref=e147]:
+                - generic [ref=e148]:
+                  - link "김창영 기자" [ref=e149] [cursor=pointer]:
+                    - /url: https://media.naver.com/journalist/011/56891
+                    - img "김창영 기자" [ref=e151]
+                  - generic [ref=e152]:
+                    - link "김창영 기자":
+                      - /url: https://media.naver.com/journalist/011/56891
+                      - emphasis [ref=e155] [cursor=pointer]: 김창영 기자
+                    - generic [ref=e156]: 서울경제
+                - link "구독" [ref=e158] [cursor=pointer]:
+                  - /url: "#"
+                  - generic [ref=e159]: 구독
+              - list [ref=e161]:
+                - listitem [ref=e162]:
+                  - link "젠슨 황 “AI가 아니라 AI 잘 쓰는 사람이 당신의 일자리 대체할 것”" [ref=e163] [cursor=pointer]:
+                    - /url: /mnews/article/011/0004619512?type=journalists
+                - listitem [ref=e164]:
+                  - link "입력보다 6배 비싼 출력…토큰 과금으로 수익화 나선 실리콘밸리" [ref=e165] [cursor=pointer]:
+                    - /url: /mnews/article/011/0004618892?type=journalists
+          - generic [ref=e168]:
+            - link "서울경제 구독 서울경제 구독하고 메인에서 바로 만나보세요!" [ref=e169] [cursor=pointer]:
+              - /url: "#"
+              - img "서울경제" [ref=e172]
+              - generic [ref=e173]:
+                - paragraph [ref=e174]: 구독
+                - paragraph [ref=e175]:
+                  - generic [ref=e176]:
+                    - strong [ref=e177]: 서울경제 구독하고
+                    - text: 메인에서 바로 만나보세요!
+            - link "언론사홈" [ref=e178] [cursor=pointer]:
+              - /url: https://media.naver.com/press/011
+          - generic [ref=e179]:
+            - heading "서울경제 주요뉴스 해당 언론사에서 선정하며 언론사(아웃링크)로 이동합니다." [level=3] [ref=e180]:
+              - link "서울경제" [ref=e181] [cursor=pointer]:
+                - /url: http://www.sedaily.com
+                - generic [ref=e182]: 서울경제
+              - text: 주요뉴스
+              - generic [ref=e183]:
+                - text: 해당 언론사에서 선정하며
+                - emphasis [ref=e184]: 언론사(아웃링크)
+                - text: 로 이동합니다.
+            - list [ref=e185]:
+              - listitem [ref=e186]:
+                - link "아동·청소년 대상 디지털 성범죄, 10년 새 4배 급증" [ref=e187] [cursor=pointer]:
+                  - /url: https://www.sedaily.com/article/20043291?ref=naver
+              - listitem [ref=e188]:
+                - link "\"생기부 고쳐달라\" 집요한 민원에 안면마비 온 교감…법원 \"3000만원 배상하라\"" [ref=e189] [cursor=pointer]:
+                  - /url: https://www.sedaily.com/article/20043265?ref=naver
+              - listitem [ref=e190]:
+                - link "SK온, 국내 최초 EREV 배터리 양산…新 먹거리로 키운다 [biz-플러스]" [ref=e191] [cursor=pointer]:
+                  - /url: https://www.sedaily.com/article/20043271?ref=naver
+              - listitem [ref=e192]:
+                - link "\"혼자 도망갔냐\"는 말까지…광주 여고생 구하려다 다친 남학생 악플에 '고통'" [ref=e193] [cursor=pointer]:
+                  - /url: https://www.sedaily.com/article/20043264?ref=naver
+              - listitem [ref=e194]:
+                - link "신현송 BIS CGFS 의장 불발…\"한은 성과 부족 아닌 국제정치 변수\" [Pick코노미]" [ref=e195] [cursor=pointer]:
+                  - /url: https://www.sedaily.com/article/20043270?ref=naver
+          - list [ref=e197]:
+            - listitem [ref=e198]:
+              - button [ref=e199] [cursor=pointer]
+              - generic [ref=e200]:
+                - link "지능을 넘어, 산업의 새 엔진으로 [서울포럼 2026]" [ref=e201] [cursor=pointer]:
+                  - /url: https://www.seoulforum.kr/
+                - button "QR 코드를 클릭하면 크게 볼 수 있어요." [ref=e202] [cursor=pointer]
+            - listitem [ref=e203]:
+              - button [ref=e204] [cursor=pointer]
+              - generic [ref=e205]:
+                - link "핫이슈를 귀에 쏙쏙 [경제용 ON AIR]" [ref=e206] [cursor=pointer]:
+                  - /url: https://tv.naver.com/sedaily02?tab=clip&order=RECENT
+                - button "QR 코드를 클릭하면 크게 볼 수 있어요." [ref=e207] [cursor=pointer]
+          - generic [ref=e208]:
+            - heading "서울경제 언론사가 직접 선정한 이슈" [level=2] [ref=e210]:
+              - emphasis [ref=e211]: 서울경제
+              - text: 언론사가 직접 선정한 이슈
+            - generic [ref=e212]:
+              - list [ref=e215]:
+                - listitem [ref=e216]:
+                  - link "이슈 진격의 코스피 코스피 7844.01 최고치 경신…SK하이닉스 197만 6000원 코스피 7844.01 최고치 경신…SK하이닉스 197만 6000원" [ref=e217] [cursor=pointer]:
+                    - /url: https://media.naver.com/issue/011/2461
+                    - generic [ref=e218]:
+                      - generic [ref=e219]: 이슈
+                      - strong [ref=e220]: 진격의 코스피
+                    - generic [ref=e221]:
+                      - emphasis [ref=e223]: 코스피 7844.01 최고치 경신…SK하이닉스 197만 6000원
+                      - img "코스피 7844.01 최고치 경신…SK하이닉스 197만 6000원" [ref=e225]
+                - listitem [ref=e226]:
+                  - link "이슈 6·3 지방선거 오태완 의령군수, 국민의힘 탈당 후 무소속 3선 출마 오태완 의령군수, 국민의힘 탈당 후 무소속 3선 출마" [ref=e227] [cursor=pointer]:
+                    - /url: https://media.naver.com/issue/011/2462
+                    - generic [ref=e228]:
+                      - generic [ref=e229]: 이슈
+                      - strong [ref=e230]: 6·3 지방선거
+                    - generic [ref=e231]:
+                      - emphasis [ref=e233]: 오태완 의령군수, 국민의힘 탈당 후 무소속 3선 출마
+                      - img "오태완 의령군수, 국민의힘 탈당 후 무소속 3선 출마" [ref=e235]
+                - listitem [ref=e236]:
+                  - link "이슈 美-이란 전쟁 조현 “나무호 공격 주체, 이란 민병대일 수도” 조현 “나무호 공격 주체, 이란 민병대일 수도”" [ref=e237] [cursor=pointer]:
+                    - /url: https://media.naver.com/issue/011/2464
+                    - generic [ref=e238]:
+                      - generic [ref=e239]: 이슈
+                      - strong [ref=e240]: 美-이란 전쟁
+                    - generic [ref=e241]:
+                      - emphasis [ref=e243]: 조현 “나무호 공격 주체, 이란 민병대일 수도”
+                      - img "조현 “나무호 공격 주체, 이란 민병대일 수도”" [ref=e245]
+                - listitem [ref=e246]:
+                  - link "이슈 李정부 부동산 대책 다주택자 양도세 중과 임박...증여도 최고치 다주택자 양도세 중과 임박...증여도 최고치" [ref=e247] [cursor=pointer]:
+                    - /url: https://media.naver.com/issue/011/1726
+                    - generic [ref=e248]:
+                      - generic [ref=e249]: 이슈
+                      - strong [ref=e250]: 李정부 부동산 대책
+                    - generic [ref=e251]:
+                      - emphasis [ref=e253]: 다주택자 양도세 중과 임박...증여도 최고치
+                      - img "다주택자 양도세 중과 임박...증여도 최고치" [ref=e255]
+                - listitem [ref=e256]:
+                  - link "이슈 3대 특검 2차 종합특검, 김관영 전북지사 내란방조혐의 불기소 처분 2차 종합특검, 김관영 전북지사 내란방조혐의 불기소 처분" [ref=e257] [cursor=pointer]:
+                    - /url: https://media.naver.com/issue/011/1741
+                    - generic [ref=e258]:
+                      - generic [ref=e259]: 이슈
+                      - strong [ref=e260]: 3대 특검
+                    - generic [ref=e261]:
+                      - emphasis [ref=e263]: 2차 종합특검, 김관영 전북지사 내란방조혐의 불기소 처분
+                      - img "2차 종합특검, 김관영 전북지사 내란방조혐의 불기소 처분" [ref=e265]
+              - button "다음" [ref=e266] [cursor=pointer]:
+                - generic [ref=e267]: 다음
+          - generic [ref=e268]:
+            - generic [ref=e269]:
+              - strong [ref=e270]: 이 기사를 추천합니다
+              - button "기사 추천 안내" [ref=e271] [cursor=pointer]
+            - menu [ref=e273]:
+              - menuitem "쏠쏠정보 0" [ref=e274]:
+                - button "쏠쏠정보 0"
+              - menuitem "흥미진진 0" [ref=e275]:
+                - button "흥미진진 0"
+              - menuitem "공감백배 0" [ref=e276]:
+                - button "공감백배 0"
+              - menuitem "분석탁월 0" [ref=e277]:
+                - button "분석탁월 0"
+              - menuitem "후속강추 0" [ref=e278]:
+                - button "후속강추 0"
+      - generic [ref=e280]:
+        - heading "가치있는 소비, 해피빈 펀딩" [level=4] [ref=e281]
+        - generic [ref=e282]:
+          - link "섬네일 이미지" [ref=e283] [cursor=pointer]:
+            - /url: https://happybean.naver.com/fundings/detail/F2545
+            - img "섬네일 이미지" [ref=e284]
+          - link "디저트 대회 수상작! 전남 식재료로 빚은 케이크 농부의 딸이 직접 개발한 레시피, 단짠쫄깃 디저트를 펀딩에서 만나보세요" [ref=e285] [cursor=pointer]:
+            - /url: https://happybean.naver.com/fundings/detail/F2545
+            - strong [ref=e286]: 디저트 대회 수상작! 전남 식재료로 빚은 케이크
+            - paragraph [ref=e287]: 농부의 딸이 직접 개발한 레시피, 단짠쫄깃 디저트를 펀딩에서 만나보세요
+      - generic [ref=e288]:
+        - generic [ref=e289]:
+          - generic [ref=e290]:
+            - generic [ref=e293]:
+              - heading "함께 볼만한 뉴스" [level=2] [ref=e294]
+              - button "안내" [ref=e295] [cursor=pointer]:
+                - generic [ref=e296]: 안내
+            - list [ref=e297]:
+              - listitem [ref=e298]:
+                - link "“삼전을 21만원에 사?” 침착맨 물렸다고 우려·조롱 쏟아졌는데…두 달만에 대반전 헤럴드경제 헤럴드경제" [ref=e299] [cursor=pointer]:
+                  - /url: /mnews/article/016/0002643028
+                  - generic [ref=e302]:
+                    - generic [ref=e304]: “삼전을 21만원에 사?” 침착맨 물렸다고 우려·조롱 쏟아졌는데…두 달만에 대반전
+                    - generic [ref=e305]:
+                      - img "헤럴드경제" [ref=e307]
+                      - generic [ref=e308]: 헤럴드경제
+              - listitem [ref=e309]:
+                - link "북한산 오른 뒤 사라진 50대 여성…경찰, 27일째 수색 중 뉴스1 뉴스1" [ref=e310] [cursor=pointer]:
+                  - /url: /mnews/article/421/0008943108
+                  - generic [ref=e313]:
+                    - generic [ref=e315]: 북한산 오른 뒤 사라진 50대 여성…경찰, 27일째 수색 중
+                    - generic [ref=e316]:
+                      - img "뉴스1" [ref=e318]
+                      - generic [ref=e319]: 뉴스1
+              - listitem [ref=e320]:
+                - link "“신동 맞아?”…은혁·이특과 비슷해진 몸매, 비결은 ‘위고비’ 서울신문 서울신문" [ref=e321] [cursor=pointer]:
+                  - /url: /mnews/article/081/0003643284
+                  - generic [ref=e324]:
+                    - generic [ref=e326]: “신동 맞아?”…은혁·이특과 비슷해진 몸매, 비결은 ‘위고비’
+                    - generic [ref=e327]:
+                      - img "서울신문" [ref=e329]
+                      - generic [ref=e330]: 서울신문
+              - listitem [ref=e331]:
+                - link "동영상 02:30 라인 멈추면 '웨이퍼' 수만 장 폐기‥\"고객들 경쟁업체 갈 것\" MBC MBC" [ref=e332] [cursor=pointer]:
+                  - /url: /mnews/article/214/0001498747
+                  - generic [ref=e335]:
+                    - emphasis [ref=e336]: 동영상
+                    - text: 02:30
+                  - generic [ref=e337]:
+                    - generic [ref=e339]: 라인 멈추면 '웨이퍼' 수만 장 폐기‥"고객들 경쟁업체 갈 것"
+                    - generic [ref=e340]:
+                      - img "MBC" [ref=e342]
+                      - generic [ref=e343]: MBC
+          - list [ref=e345]:
+            - listitem [ref=e346]:
+              - link "\"무려 1천억 원어치 저장된 곳\"…드러난 충격 실체 SBS SBS" [ref=e347] [cursor=pointer]:
+                - /url: /mnews/article/055/0001355930
+                - generic [ref=e350]:
+                  - generic [ref=e352]: "\"무려 1천억 원어치 저장된 곳\"…드러난 충격 실체"
+                  - generic [ref=e353]:
+                    - img "SBS" [ref=e355]
+                    - generic [ref=e356]: SBS
+            - listitem [ref=e357]:
+              - link "삼성 노조, '영업이익 12%' 40조 성과급도 거절…이유 뭐길래 머니투데이 머니투데이" [ref=e358] [cursor=pointer]:
+                - /url: /mnews/article/008/0005357263
+                - generic [ref=e361]:
+                  - generic [ref=e363]: 삼성 노조, '영업이익 12%' 40조 성과급도 거절…이유 뭐길래
+                  - generic [ref=e364]:
+                    - img "머니투데이" [ref=e366]
+                    - generic [ref=e367]: 머니투데이
+            - listitem [ref=e368]:
+              - link "“5만원 땐 외면하더니”… 삼성전자 10兆 쓸어담은 개미군단 조선일보 조선일보" [ref=e369] [cursor=pointer]:
+                - /url: /mnews/article/023/0003976221
+                - generic [ref=e372]:
+                  - generic [ref=e374]: “5만원 땐 외면하더니”… 삼성전자 10兆 쓸어담은 개미군단
+                  - generic [ref=e375]:
+                    - img "조선일보" [ref=e377]
+                    - generic [ref=e378]: 조선일보
+          - list [ref=e380]:
+            - listitem [ref=e381]:
+              - link "“한강 라면·분식집 전 세계에 알릴 것”…마흔 살 ‘1등 라면’의 새 각오 KBS KBS" [ref=e382] [cursor=pointer]:
+                - /url: /mnews/article/056/0012180295
+                - generic [ref=e385]:
+                  - generic [ref=e387]: “한강 라면·분식집 전 세계에 알릴 것”…마흔 살 ‘1등 라면’의 새 각오
+                  - generic [ref=e388]:
+                    - img "KBS" [ref=e390]
+                    - generic [ref=e391]: KBS
+            - listitem [ref=e392]:
+              - link "\"예뻐서 만졌는데 온몸이 타들어 가는 고통\"...초록 벌레의 소름 돋는 반전 [헬스톡] 파이낸셜뉴스 파이낸셜뉴스" [ref=e393] [cursor=pointer]:
+                - /url: /mnews/article/014/0005520941
+                - generic [ref=e396]:
+                  - generic [ref=e398]: "\"예뻐서 만졌는데 온몸이 타들어 가는 고통\"...초록 벌레의 소름 돋는 반전 [헬스톡]"
+                  - generic [ref=e399]:
+                    - img "파이낸셜뉴스" [ref=e401]
+                    - generic [ref=e402]: 파이낸셜뉴스
+            - listitem [ref=e403]:
+              - link "고유가 지원금 받아도 1인당 30만원 또 준다…18일부터 신청 '이 지역' 어디? 아시아경제 아시아경제" [ref=e404] [cursor=pointer]:
+                - /url: /mnews/article/277/0005762007
+                - generic [ref=e407]:
+                  - generic [ref=e409]: 고유가 지원금 받아도 1인당 30만원 또 준다…18일부터 신청 '이 지역' 어디?
+                  - generic [ref=e410]:
+                    - img "아시아경제" [ref=e412]
+                    - generic [ref=e413]: 아시아경제
+            - listitem [ref=e414]:
+              - link "“국정 안정, 여당 당선돼야” 53.3%…“정부 견제, 야당 뽑아야” 34.1% 한겨레 한겨레" [ref=e415] [cursor=pointer]:
+                - /url: /mnews/article/028/0002804963
+                - generic [ref=e418]:
+                  - generic [ref=e420]: “국정 안정, 여당 당선돼야” 53.3%…“정부 견제, 야당 뽑아야” 34.1%
+                  - generic [ref=e421]:
+                    - img "한겨레" [ref=e423]
+                    - generic [ref=e424]: 한겨레
+          - list [ref=e426]:
+            - listitem [ref=e427]:
+              - link "“콘돔 구멍나 임신” 속여 1000만원 뜯은 20대女, 교제때부터 범행 계획 동아일보 동아일보" [ref=e428] [cursor=pointer]:
+                - /url: /mnews/article/020/0003719364
+                - generic [ref=e431]:
+                  - generic [ref=e433]: “콘돔 구멍나 임신” 속여 1000만원 뜯은 20대女, 교제때부터 범행 계획
+                  - generic [ref=e434]:
+                    - img "동아일보" [ref=e436]
+                    - generic [ref=e437]: 동아일보
+            - listitem [ref=e438]:
+              - link "“23년 된 차가 전재산”... 가장 가난한 대통령 무히카 조선일보 조선일보" [ref=e439] [cursor=pointer]:
+                - /url: /mnews/article/023/0003976143
+                - generic [ref=e442]:
+                  - generic [ref=e444]: “23년 된 차가 전재산”... 가장 가난한 대통령 무히카
+                  - generic [ref=e445]:
+                    - img "조선일보" [ref=e447]
+                    - generic [ref=e448]: 조선일보
+            - listitem [ref=e449]:
+              - link "휴일 자전거 타던 경찰관, 행주대교서 투신 시도 여성 구조 연합뉴스 연합뉴스" [ref=e450] [cursor=pointer]:
+                - /url: /mnews/article/001/0016075214
+                - generic [ref=e453]:
+                  - generic [ref=e455]: 휴일 자전거 타던 경찰관, 행주대교서 투신 시도 여성 구조
+                  - generic [ref=e456]:
+                    - img "연합뉴스" [ref=e458]
+                    - generic [ref=e459]: 연합뉴스
+          - list [ref=e461]:
+            - listitem [ref=e462]:
+              - link "“세종대왕이 창살에…” 오세훈표 207억 ‘받들어 총’ 비판 봇물 한겨레 한겨레" [ref=e463] [cursor=pointer]:
+                - /url: /mnews/article/028/0002804839
+                - generic [ref=e466]:
+                  - generic [ref=e468]: “세종대왕이 창살에…” 오세훈표 207억 ‘받들어 총’ 비판 봇물
+                  - generic [ref=e469]:
+                    - img "한겨레" [ref=e471]
+                    - generic [ref=e472]: 한겨레
+            - listitem [ref=e473]:
+              - link "\"전학 와 친구 많지 않았어요\"…주왕산 숨진 초등생 또래들의 기억 뉴스1 뉴스1" [ref=e474] [cursor=pointer]:
+                - /url: /mnews/article/421/0008942528
+                - generic [ref=e477]:
+                  - generic [ref=e479]: "\"전학 와 친구 많지 않았어요\"…주왕산 숨진 초등생 또래들의 기억"
+                  - generic [ref=e480]:
+                    - img "뉴스1" [ref=e482]
+                    - generic [ref=e483]: 뉴스1
+            - listitem [ref=e484]:
+              - link "\"닭 가슴살보다 단백질 많아\" 간식으로 먹어도 좋은 '이것', 뭘까? 헬스조선 헬스조선" [ref=e485] [cursor=pointer]:
+                - /url: /mnews/article/346/0000109608
+                - generic [ref=e488]:
+                  - generic [ref=e490]: "\"닭 가슴살보다 단백질 많아\" 간식으로 먹어도 좋은 '이것', 뭘까?"
+                  - generic [ref=e491]:
+                    - img "헬스조선" [ref=e493]
+                    - generic [ref=e494]: 헬스조선
+        - generic [ref=e495]:
+          - generic [ref=e496]:
+            - heading "서울경제 클립" [level=2] [ref=e500]:
+              - emphasis [ref=e501]: 서울경제
+              - text: 클립
+            - list [ref=e502]:
+              - listitem [ref=e503]:
+                - link "삼전·닉스 수익을 뺏겠다? 삼전·닉스 수익을 뺏겠다?" [ref=e504] [cursor=pointer]:
+                  - /url: https://m.naver.com/shorts/?mediaId=C30F0CC16361A04298FF60021DCE7ABAA5D9&serviceType=NEWS&recType=NEWS&recId=011_147780_articleRead&mediaType=VOD&panelType=vs_news
+                  - img "삼전·닉스 수익을 뺏겠다?" [ref=e507]
+                  - generic [ref=e511]: 삼전·닉스 수익을 뺏겠다?
+              - listitem [ref=e512]:
+                - link "대만에 상륙한 한타 바이러스 대만에 상륙한 한타 바이러스" [ref=e513] [cursor=pointer]:
+                  - /url: https://m.naver.com/shorts/?mediaId=F0288169E0F9EA8CA6E567F4D583F88AC018&serviceType=NEWS&recType=NEWS&recId=011_147805_articleRead&mediaType=VOD&panelType=vs_news
+                  - img "대만에 상륙한 한타 바이러스" [ref=e516]
+                  - generic [ref=e520]: 대만에 상륙한 한타 바이러스
+              - listitem [ref=e521]:
+                - link "24시간 라인 멈춘다? 삼성전자 총파업 24시간 라인 멈춘다? 삼성전자 총파업" [ref=e522] [cursor=pointer]:
+                  - /url: https://m.naver.com/shorts/?mediaId=F7A65779BB3BFF006B677E788E22A210D8B9&serviceType=NEWS&recType=NEWS&recId=011_147582_articleRead&mediaType=VOD&panelType=vs_news
+                  - img "24시간 라인 멈춘다? 삼성전자 총파업" [ref=e525]
+                  - generic [ref=e529]: 24시간 라인 멈춘다? 삼성전자 총파업
+              - listitem [ref=e530]:
+                - link "정원오 \"여종업원 외박 강요\" 주장에 반박 정원오 \"여종업원 외박 강요\" 주장에 반박" [ref=e531] [cursor=pointer]:
+                  - /url: https://m.naver.com/shorts/?mediaId=81AE47884B671CBE481775F847DFF0025B8B&serviceType=NEWS&recType=NEWS&recId=011_147643_articleRead&mediaType=VOD&panelType=vs_news
+                  - img "정원오 \"여종업원 외박 강요\" 주장에 반박" [ref=e534]
+                  - generic [ref=e538]: 정원오 "여종업원 외박 강요" 주장에 반박
+          - generic [ref=e539]:
+            - generic [ref=e541]:
+              - heading "서울경제 댓글 많은 뉴스" [level=2] [ref=e543]:
+                - emphasis [ref=e544]: 서울경제
+                - text: 댓글 많은 뉴스
+              - text: 오후 7시~10시까지 집계한 결과입니다.
+            - list [ref=e545]:
+              - listitem [ref=e546]:
+                - link "1위 하루만 멈춰도 웨이퍼 2.2만장 버려야…1분마다 수십억 증발[삼성전자 파국 초읽기]" [ref=e547] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620483?ntype=RANKING
+                  - generic [ref=e551]: 1위
+                  - generic [ref=e554]: 하루만 멈춰도 웨이퍼 2.2만장 버려야…1분마다 수십억 증발[삼성전자 파국 초읽기]
+              - listitem [ref=e555]:
+                - link "2위 “밥 해먹기 귀찮아서 자주 하는데”…외식 많이 하면 살 찐다는 연구 결과 나왔다 [헬시타임]" [ref=e556] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620416?ntype=RANKING
+                  - generic [ref=e560]: 2위
+                  - generic [ref=e563]: “밥 해먹기 귀찮아서 자주 하는데”…외식 많이 하면 살 찐다는 연구 결과 나왔다 [헬시타임]
+              - listitem [ref=e564]:
+                - link "3위 230명 식사 예약, 당일 취소 ‘날벼락’…“재료 싹 버렸다” 사장님 울린 ‘노쇼’" [ref=e565] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620530?ntype=RANKING
+                  - generic [ref=e569]: 3위
+                  - generic [ref=e572]: 230명 식사 예약, 당일 취소 ‘날벼락’…“재료 싹 버렸다” 사장님 울린 ‘노쇼’
+              - listitem [ref=e573]:
+                - link "4위 정원오는 우클릭 오세훈은 좌클릭…‘중도층 겨냥’ 서울시장 선거전" [ref=e574] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620517?ntype=RANKING
+                  - generic [ref=e578]: 4위
+                  - generic [ref=e581]: 정원오는 우클릭 오세훈은 좌클릭…‘중도층 겨냥’ 서울시장 선거전
+              - listitem [ref=e582]:
+                - link "5위 ‘대표 친명’ 입법부 수장으로…개혁 입법 가속도 붙나" [ref=e583] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620515?ntype=RANKING
+                  - generic [ref=e587]: 5위
+                  - generic [ref=e590]: ‘대표 친명’ 입법부 수장으로…개혁 입법 가속도 붙나
+              - listitem [ref=e591]:
+                - link "6위 HLB제약, 1200억 주주배정 유증 결정…생산 기반 강화" [ref=e592] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620522?ntype=RANKING
+                  - generic [ref=e596]: 6위
+                  - generic [ref=e599]: HLB제약, 1200억 주주배정 유증 결정…생산 기반 강화
+            - link "랭킹 뉴스 더보기" [ref=e601] [cursor=pointer]:
+              - /url: https://media.naver.com/press/011/ranking?type=comment
+              - generic [ref=e602]: 랭킹 뉴스 더보기
+          - list [ref=e604]:
+            - listitem [ref=e605]:
+              - link "[속보] 트럼프, 베이징 도착…2박3일 국빈 방문 돌입 KBS KBS" [ref=e606] [cursor=pointer]:
+                - /url: /mnews/article/056/0012180467
+                - generic [ref=e609]:
+                  - generic [ref=e611]: "[속보] 트럼프, 베이징 도착…2박3일 국빈 방문 돌입"
+                  - generic [ref=e612]:
+                    - img "KBS" [ref=e614]
+                    - generic [ref=e615]: KBS
+            - listitem [ref=e616]:
+              - link "2주택자 정용진, 한남동 주택 팔았다…양도세 36억 아껴 동아일보 동아일보" [ref=e617] [cursor=pointer]:
+                - /url: /mnews/article/020/0003719381
+                - generic [ref=e620]:
+                  - generic [ref=e622]: 2주택자 정용진, 한남동 주택 팔았다…양도세 36억 아껴
+                  - generic [ref=e623]:
+                    - img "동아일보" [ref=e625]
+                    - generic [ref=e626]: 동아일보
+            - listitem [ref=e627]:
+              - link "“연세 드실수록 왕비같이 드셔야” 82세 선우용여가 꼭 챙긴 ‘장수 식재료’ [라이프+] 세계일보 세계일보" [ref=e628] [cursor=pointer]:
+                - /url: /mnews/article/022/0004127934
+                - generic [ref=e631]:
+                  - generic [ref=e633]: “연세 드실수록 왕비같이 드셔야” 82세 선우용여가 꼭 챙긴 ‘장수 식재료’ [라이프+]
+                  - generic [ref=e634]:
+                    - img "세계일보" [ref=e636]
+                    - generic [ref=e637]: 세계일보
+            - listitem [ref=e638]:
+              - link "“물에 엎드린 채 떠 있다”…목욕탕서 잇단 사망 사고, 무슨 일 중앙일보 중앙일보" [ref=e639] [cursor=pointer]:
+                - /url: /mnews/article/025/0003522972
+                - generic [ref=e642]:
+                  - generic [ref=e644]: “물에 엎드린 채 떠 있다”…목욕탕서 잇단 사망 사고, 무슨 일
+                  - generic [ref=e645]:
+                    - img "중앙일보" [ref=e647]
+                    - generic [ref=e648]: 중앙일보
+          - list [ref=e650]:
+            - listitem [ref=e651]:
+              - link "“코스피 1만 ‘깜짝’ 전망, 새 관심종목은 ‘이것’”…11번째 ‘황제주’ 등극한 삼성전기 헤럴드경제 헤럴드경제" [ref=e652] [cursor=pointer]:
+                - /url: /mnews/article/016/0002643037
+                - generic [ref=e655]:
+                  - generic [ref=e657]: “코스피 1만 ‘깜짝’ 전망, 새 관심종목은 ‘이것’”…11번째 ‘황제주’ 등극한 삼성전기
+                  - generic [ref=e658]:
+                    - img "헤럴드경제" [ref=e660]
+                    - generic [ref=e661]: 헤럴드경제
+            - listitem [ref=e662]:
+              - link "술 마시고 테슬라 자율주행 켠 만취운전자···음주운전일까? 아닐까? 경향신문 경향신문" [ref=e663] [cursor=pointer]:
+                - /url: /mnews/article/032/0003445544
+                - generic [ref=e666]:
+                  - generic [ref=e668]: 술 마시고 테슬라 자율주행 켠 만취운전자···음주운전일까? 아닐까?
+                  - generic [ref=e669]:
+                    - img "경향신문" [ref=e671]
+                    - generic [ref=e672]: 경향신문
+            - listitem [ref=e673]:
+              - link "“선물인지, 쓰레기 준 건지”…고객에게 유통기한 지난 음식 받은 점검원 매일경제 매일경제" [ref=e674] [cursor=pointer]:
+                - /url: /mnews/article/009/0005679644
+                - generic [ref=e677]:
+                  - generic [ref=e679]: “선물인지, 쓰레기 준 건지”…고객에게 유통기한 지난 음식 받은 점검원
+                  - generic [ref=e680]:
+                    - img "매일경제" [ref=e682]
+                    - generic [ref=e683]: 매일경제
+          - list [ref=e685]:
+            - listitem [ref=e686]:
+              - link "“SK하이닉스, 고마워” 자산 몰빵한 日투자자 수익률 인증 화제 문화일보 문화일보" [ref=e687] [cursor=pointer]:
+                - /url: /mnews/article/021/0002791066
+                - generic [ref=e690]:
+                  - generic [ref=e692]: “SK하이닉스, 고마워” 자산 몰빵한 日투자자 수익률 인증 화제
+                  - generic [ref=e693]:
+                    - img "문화일보" [ref=e695]
+                    - generic [ref=e696]: 문화일보
+            - listitem [ref=e697]:
+              - link "\"아내 찾아주세요\"…50대 여성 북한산 입산 후 27일째 실종 이데일리 이데일리" [ref=e698] [cursor=pointer]:
+                - /url: /mnews/article/018/0006280408
+                - generic [ref=e701]:
+                  - generic [ref=e703]: "\"아내 찾아주세요\"…50대 여성 북한산 입산 후 27일째 실종"
+                  - generic [ref=e704]:
+                    - img "이데일리" [ref=e706]
+                    - generic [ref=e707]: 이데일리
+            - listitem [ref=e708]:
+              - link "[속보] “트럼프, 中베이징 도착…2박3일 국빈방문 돌입” 국제신문 국제신문" [ref=e709] [cursor=pointer]:
+                - /url: /mnews/article/658/0000143804
+                - generic [ref=e712]:
+                  - generic [ref=e714]: "[속보] “트럼프, 中베이징 도착…2박3일 국빈방문 돌입”"
+                  - generic [ref=e715]:
+                    - img "국제신문" [ref=e717]
+                    - generic [ref=e718]: 국제신문
+          - list [ref=e720]:
+            - listitem [ref=e721]:
+              - link "삼성전자 노조위원장 \"중노위, '조합원 투표' 헛소리\"…중대국면 속 잇단 과격 발언 논란 뉴시스 뉴시스" [ref=e722] [cursor=pointer]:
+                - /url: /mnews/article/003/0013943087
+                - generic [ref=e725]:
+                  - generic [ref=e727]: 삼성전자 노조위원장 "중노위, '조합원 투표' 헛소리"…중대국면 속 잇단 과격 발언 논란
+                  - generic [ref=e728]:
+                    - img "뉴시스" [ref=e730]
+                    - generic [ref=e731]: 뉴시스
+            - listitem [ref=e732]:
+              - link "박지원 “조정식 축하…일상 돌아가 지방선거 승리 위해 전심전력” 경향신문 경향신문" [ref=e733] [cursor=pointer]:
+                - /url: /mnews/article/032/0003445534
+                - generic [ref=e736]:
+                  - generic [ref=e738]: 박지원 “조정식 축하…일상 돌아가 지방선거 승리 위해 전심전력”
+                  - generic [ref=e739]:
+                    - img "경향신문" [ref=e741]
+                    - generic [ref=e742]: 경향신문
+            - listitem [ref=e743]:
+              - link "위성락 \"나무호 피격, 드론 단정할 근거 없어…미사일 가능성도\"(종합) 연합뉴스 연합뉴스" [ref=e744] [cursor=pointer]:
+                - /url: /mnews/article/001/0016075311
+                - generic [ref=e747]:
+                  - generic [ref=e749]: 위성락 "나무호 피격, 드론 단정할 근거 없어…미사일 가능성도"(종합)
+                  - generic [ref=e750]:
+                    - img "연합뉴스" [ref=e752]
+                    - generic [ref=e753]: 연합뉴스
+          - generic [ref=e754]:
+            - heading "서울경제 헤드라인" [level=2] [ref=e758]:
+              - emphasis [ref=e759]: 서울경제
+              - text: 헤드라인
+            - list [ref=e760]:
+              - listitem [ref=e761]:
+                - link "트럼프 베이징 도착...2박3일 방중 일정 돌입" [ref=e762] [cursor=pointer]:
+                  - /url: /mnews/article/011/0004620538
+                  - generic [ref=e767]: 트럼프 베이징 도착...2박3일 방중 일정 돌입
+              - listitem [ref=e768]:
+                - link "[단독] 키움운용, 국내 최초 ‘코스닥 액티브커버드콜 ETF’ 출시한다" [ref=e769] [cursor=pointer]:
+                  - /url: /mnews/article/011/0004620489
+                  - generic [ref=e774]: "[단독] 키움운용, 국내 최초 ‘코스닥 액티브커버드콜 ETF’ 출시한다"
+              - listitem [ref=e775]:
+                - link "“밥 해먹기 귀찮아서 자주 하는데”…외식 많이 하면 살 찐다는 연구 결과 나왔다 [헬시타임]" [ref=e776] [cursor=pointer]:
+                  - /url: /mnews/article/011/0004620416
+                  - generic [ref=e781]: “밥 해먹기 귀찮아서 자주 하는데”…외식 많이 하면 살 찐다는 연구 결과 나왔다 [헬시타임]
+              - listitem [ref=e782]:
+                - link "“1600만원이 모르는 계좌로 갑자기 이체” 퍼지자…토스뱅크 “명백한 허위사실” 법적 대응" [ref=e783] [cursor=pointer]:
+                  - /url: /mnews/article/011/0004620542
+                  - generic [ref=e788]: “1600만원이 모르는 계좌로 갑자기 이체” 퍼지자…토스뱅크 “명백한 허위사실” 법적 대응
+              - listitem [ref=e789]:
+                - link "“딱 3만원만 쓰려다 10만원 순삭”…영수증 보고 놀란 2030, 발길 돌려 향한 곳은" [ref=e790] [cursor=pointer]:
+                  - /url: /mnews/article/011/0004620528
+                  - generic [ref=e795]: “딱 3만원만 쓰려다 10만원 순삭”…영수증 보고 놀란 2030, 발길 돌려 향한 곳은
+              - listitem [ref=e796]:
+                - link "K-주식 ‘종목 토론’ 시작한 외국인들 “하이닉스 얼마나 갈까?”…문턱 낮춘 ‘외국인 통합계좌’" [ref=e797] [cursor=pointer]:
+                  - /url: /mnews/article/011/0004620394
+                  - generic [ref=e802]: K-주식 ‘종목 토론’ 시작한 외국인들 “하이닉스 얼마나 갈까?”…문턱 낮춘 ‘외국인 통합계좌’
+    - generic [ref=e803]:
+      - text: pc
+      - generic [ref=e804]:
+        - generic [ref=e805]:
+          - generic [ref=e806]:
+            - generic [ref=e808]:
+              - heading "서울경제 많이 본 뉴스" [level=2] [ref=e810]:
+                - emphasis [ref=e811]: 서울경제
+                - text: 많이 본 뉴스
+              - text: 오후 9시~10시까지 집계한 결과입니다.
+            - list [ref=e812]:
+              - listitem [ref=e813]:
+                - link "1위 “밥 해먹기 귀찮아서 자주 하는데”…외식 많이 하면 살 찐다는 연구 결과 나왔다 [헬시타임]" [ref=e814] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620416?ntype=RANKING
+                  - generic [ref=e818]: 1위
+                  - generic [ref=e821]: “밥 해먹기 귀찮아서 자주 하는데”…외식 많이 하면 살 찐다는 연구 결과 나왔다 [헬시타임]
+              - listitem [ref=e822]:
+                - link "2위 “딱 3만원만 쓰려다 10만원 순삭”…영수증 보고 놀란 2030, 발길 돌려 향한 곳은" [ref=e823] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620528?ntype=RANKING
+                  - generic [ref=e827]: 2위
+                  - generic [ref=e830]: “딱 3만원만 쓰려다 10만원 순삭”…영수증 보고 놀란 2030, 발길 돌려 향한 곳은
+              - listitem [ref=e831]:
+                - link "3위 K-주식 ‘종목 토론’ 시작한 외국인들 “하이닉스 얼마나 갈까?”…문턱 낮춘 ‘외국인 통합계좌’" [ref=e832] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620394?ntype=RANKING
+                  - generic [ref=e836]: 3위
+                  - generic [ref=e839]: K-주식 ‘종목 토론’ 시작한 외국인들 “하이닉스 얼마나 갈까?”…문턱 낮춘 ‘외국인 통합계좌’
+              - listitem [ref=e840]:
+                - link "4위 “북한산서 실종된 50대女 찾습니다”…27일째 행방 묘연" [ref=e841] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620533?ntype=RANKING
+                  - generic [ref=e845]: 4위
+                  - generic [ref=e848]: “북한산서 실종된 50대女 찾습니다”…27일째 행방 묘연
+              - listitem [ref=e849]:
+                - link "5위 230명 식사 예약, 당일 취소 ‘날벼락’…“재료 싹 버렸다” 사장님 울린 ‘노쇼’" [ref=e850] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620530?ntype=RANKING
+                  - generic [ref=e854]: 5위
+                  - generic [ref=e857]: 230명 식사 예약, 당일 취소 ‘날벼락’…“재료 싹 버렸다” 사장님 울린 ‘노쇼’
+              - listitem [ref=e858]:
+                - link "6위 하루만 멈춰도 웨이퍼 2.2만장 버려야…1분마다 수십억 증발[삼성전자 파국 초읽기]" [ref=e859] [cursor=pointer]:
+                  - /url: /mnews/ranking/article/011/0004620483?ntype=RANKING
+                  - generic [ref=e863]: 6위
+                  - generic [ref=e866]: 하루만 멈춰도 웨이퍼 2.2만장 버려야…1분마다 수십억 증발[삼성전자 파국 초읽기]
+            - link "랭킹 뉴스 더보기" [ref=e868] [cursor=pointer]:
+              - /url: https://media.naver.com/press/011/ranking
+              - generic [ref=e869]: 랭킹 뉴스 더보기
+          - link "네이버 AI 뉴스 알고리즘 뉴스 추천 알고리즘이 궁금하다면?" [ref=e873] [cursor=pointer]:
+            - /url: https://media.naver.com/algorithm
+            - paragraph [ref=e875]: 네이버 AI 뉴스 알고리즘 뉴스 추천 알고리즘이 궁금하다면?
+          - generic [ref=e876]:
+            - heading "서울경제 클립" [level=2] [ref=e880]:
+              - emphasis [ref=e881]: 서울경제
+              - text: 클립
+            - list [ref=e882]:
+              - listitem [ref=e883]:
+                - link "포장비 1,000원? 교묘하게 지갑 털린다 포장비 1,000원? 교묘하게 지갑 털린다" [ref=e884] [cursor=pointer]:
+                  - /url: https://m.naver.com/shorts/?mediaId=D7656CC71D279FB47F5615131BD9DADFA538&serviceType=NEWS&recType=NEWS&recId=011_147610_articleRead&mediaType=VOD&panelType=vs_news
+                  - img "포장비 1,000원? 교묘하게 지갑 털린다" [ref=e887]
+                  - generic [ref=e891]: 포장비 1,000원? 교묘하게 지갑 털린다
+              - listitem [ref=e892]:
+                - link "살아남으려면 이 3가지만 보세요 살아남으려면 이 3가지만 보세요" [ref=e893] [cursor=pointer]:
+                  - /url: https://m.naver.com/shorts/?mediaId=0FAD19CF2721D12D8F3A9FC1F1A2314428AA&serviceType=NEWS&recType=NEWS&recId=011_147673_articleRead&mediaType=VOD&panelType=vs_news
+                  - img "살아남으려면 이 3가지만 보세요" [ref=e896]
+                  - generic [ref=e900]: 살아남으려면 이 3가지만 보세요
+              - listitem [ref=e901]:
+                - link "노조 있으면 망한다? TSMC 창업자의 경고 노조 있으면 망한다? TSMC 창업자의 경고" [ref=e902] [cursor=pointer]:
+                  - /url: https://m.naver.com/shorts/?mediaId=E70F4CACFDAE966330C8E2294550FF364E1F&serviceType=NEWS&recType=NEWS&recId=011_147680_articleRead&mediaType=VOD&panelType=vs_news
+                  - img "노조 있으면 망한다? TSMC 창업자의 경고" [ref=e905]
+                  - generic [ref=e909]: 노조 있으면 망한다? TSMC 창업자의 경고
+              - listitem [ref=e910]:
+                - link "블룸버그도 경악한 한국 증시 블룸버그도 경악한 한국 증시" [ref=e911] [cursor=pointer]:
+                  - /url: https://m.naver.com/shorts/?mediaId=293ED83E2F0BB5383FF9F9A17E2A61D42712&serviceType=NEWS&recType=NEWS&recId=011_147803_articleRead&mediaType=VOD&panelType=vs_news
+                  - img "블룸버그도 경악한 한국 증시" [ref=e914]
+                  - generic [ref=e918]: 블룸버그도 경악한 한국 증시
+        - generic [ref=e920]:
+          - generic [ref=e921]:
+            - generic [ref=e923]:
+              - heading "이슈 NOW" [level=2] [ref=e924]
+              - button "안내" [ref=e925] [cursor=pointer]:
+                - generic [ref=e926]: 안내
+            - link "내 구독 이슈" [ref=e928] [cursor=pointer]:
+              - /url: https://media.naver.com/channel/issueSetting
+          - generic [ref=e929]:
+            - tablist [ref=e932]:
+              - tab "이슈" [selected] [ref=e933] [cursor=pointer]
+              - tab "중동전쟁" [ref=e934] [cursor=pointer]
+              - tab "부동산" [ref=e935] [cursor=pointer]
+              - tab "정책" [ref=e936] [cursor=pointer]
+              - tab "인공지능" [ref=e937] [cursor=pointer]
+              - tab "AI" [ref=e938] [cursor=pointer]
+              - tab "쿠팡" [ref=e939] [cursor=pointer]
+              - tab "서울시장" [ref=e940] [cursor=pointer]
+              - tab "개인정보유출" [ref=e941] [cursor=pointer]
+              - tab "내란" [ref=e942] [cursor=pointer]
+            - button "다음" [ref=e943] [cursor=pointer]:
+              - generic [ref=e944]: 다음
+          - tabpanel [ref=e945]:
+            - generic [ref=e946]:
+              - link "# 이슈" [ref=e947] [cursor=pointer]:
+                - /url: https://media.naver.com/issue/tag/76
+                - generic [ref=e948]: "#"
+                - heading "이슈" [level=4] [ref=e949]
+              - generic [ref=e950]:
+                - generic [ref=e951]: 3개 언론사
+                - generic [ref=e952]: 1,077개 기사
+            - list [ref=e953]:
+              - listitem [ref=e954]:
+                - generic [ref=e955]:
+                  - generic [ref=e956]:
+                    - link "이충재의 인사이트" [ref=e957] [cursor=pointer]:
+                      - /url: https://media.naver.com/issue/047/1334
+                      - strong [ref=e959]: 이충재의 인사이트
+                    - button "구독" [ref=e960] [cursor=pointer]:
+                      - generic [ref=e961]: 구독
+                  - link "[이충재의 인사이트] 주택 공급, 왜 이렇게 더딜까" [ref=e962] [cursor=pointer]:
+                    - /url: https://n.news.naver.com/article/047/0002515434?iid=1334
+                    - generic [ref=e963]: "[이충재의 인사이트] 주택 공급, 왜 이렇게 더딜까"
+              - listitem [ref=e965]:
+                - generic [ref=e966]:
+                  - generic [ref=e967]:
+                    - link "이슈&탐사" [ref=e968] [cursor=pointer]:
+                      - /url: https://media.naver.com/issue/005/2564
+                      - strong [ref=e970]: 이슈&탐사
+                    - button "구독" [ref=e971] [cursor=pointer]:
+                      - generic [ref=e972]: 구독
+                  - link "10대 AI채팅에 불륜, 감금, 모텔… “애들 상대로 자극적 돈벌이”" [ref=e973] [cursor=pointer]:
+                    - /url: https://n.news.naver.com/article/005/0001848539?iid=2564
+                    - generic [ref=e974]: 10대 AI채팅에 불륜, 감금, 모텔… “애들 상대로 자극적 돈벌이”
+              - listitem [ref=e976]:
+                - generic [ref=e977]:
+                  - generic [ref=e978]:
+                    - link "1%를 위한 제1보" [ref=e979] [cursor=pointer]:
+                      - /url: https://media.naver.com/issue/047/2609
+                      - strong [ref=e981]: 1%를 위한 제1보
+                    - button "구독" [ref=e982] [cursor=pointer]:
+                      - generic [ref=e983]: 구독
+                  - link "막 달리는 AI, 빅테크 대신 인간이 주인 되는 논의" [ref=e984] [cursor=pointer]:
+                    - /url: https://n.news.naver.com/article/047/0002515292?iid=2609
+                    - generic [ref=e985]: 막 달리는 AI, 빅테크 대신 인간이 주인 되는 논의
+    - complementary [ref=e987]:
+      - heading "구독" [level=3] [ref=e989]
+  - contentinfo [ref=e992]:
+    - paragraph [ref=e993]:
+      - generic [ref=e994]:
+        - link "로그인" [ref=e996] [cursor=pointer]:
+          - /url: https://nid.naver.com/nidlogin.login?svctype=262144
+        - link "전체서비스" [ref=e998] [cursor=pointer]:
+          - /url: https://m.naver.com/services.html?f=svc.news
+      - generic [ref=e999]:
+        - link "서비스안내" [ref=e1001] [cursor=pointer]:
+          - /url: https://news.naver.com/ombudsman
+        - link "오류신고" [ref=e1003] [cursor=pointer]:
+          - /url: https://help.naver.com/alias/news/news_001.naver
+        - link "고객센터" [ref=e1005] [cursor=pointer]:
+          - /url: https://help.naver.com/alias/news/news_007.naver
+      - generic [ref=e1006]:
+        - 'link "기사배열 책임자 : 김수향" [ref=e1007] [cursor=pointer]':
+          - /url: https://news.naver.com/ombudsman/edit
+        - generic [ref=e1008]: "청소년 보호 책임자 : 이정규"
+      - generic [ref=e1009]: 각 언론사가 직접 콘텐츠를 편집합니다. ⓒ 서울경제
+      - generic [ref=e1010]: 이 콘텐츠의 저작권은 저작권자 또는 제공처에 있으며, 이를 무단 이용하는 경우 저작권법 등에 따라 법적 책임을 질 수 있습니다.
+      - link "NAVER" [ref=e1012] [cursor=pointer]:
+        - /url: https://www.navercorp.com

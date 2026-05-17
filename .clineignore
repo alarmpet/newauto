@@ -1,0 +1,66 @@
+# Cline checkpoint and file access exclusions
+
+# Python virtual environments
+omnivoice_env/
+.venv/
+venv/
+
+# Generated runtime outputs and browser profiles
+storage/
+data/
+
+# Node packages
+node_modules/
+
+# Large local reference artifacts
+browser_use_quickstart.html
+research.md
+timeline.md
+*-plan.md
+*-review.md
+*-feedback.md
+cline-*.md
+lmstudio-*.md
+lmstudio_*.md
+openrouter-*.md
+makelens-*.md
+completed-video-*.md
+docs/archive/
+
+# Temporary prompt scratch files
+temp_prompts/
+
+# Caches
+.mypy_cache/
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+.tox/
+.coverage
+.cache/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Logs
+logs/
+*.log
+_run_stdout.log
+_run_stderr.log
+
+# Models and checkpoints
+*.safetensors
+*.ckpt
+*.gguf
+*.bin
+*.pth
+*.onnx
+
+# IDE and OS
+.idea/
+.vs/
+Thumbs.db
+.DS_Store
