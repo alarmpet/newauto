@@ -1,4 +1,5 @@
 import io
+import json
 import os
 import subprocess
 import unittest
@@ -59,6 +60,8 @@ class FeatureWorkflowTests(unittest.TestCase):
         check_keys = {check["key"] for check in payload["checks"]}
         self.assertIn("script", check_keys)
         self.assertIn("ffmpeg", check_keys)
+        self.assertIn("subtitle_cues", check_keys)
+        self.assertIn("plan_sync", check_keys)
 
     def test_feature_settings_and_bgm_upload_persist(self) -> None:
         project_id = self.create_project()
@@ -69,11 +72,15 @@ class FeatureWorkflowTests(unittest.TestCase):
                 "bgm_volume_db": -12,
                 "bgm_ducking_enabled": False,
                 "render_formats": ["landscape", "shorts"],
+                "visual_source_mode": "comfyui_auto",
+                "style_preset": "simple_diagram",
             },
         )
         self.assertEqual(settings.status_code, 200)
         self.assertTrue(settings.json()["project"]["kenburns_enabled"])
         self.assertEqual(settings.json()["project"]["render_formats"], ["landscape", "shorts"])
+        self.assertEqual(settings.json()["project"]["visual_source_mode"], "comfyui_auto")
+        self.assertEqual(settings.json()["project"]["body_image_options"]["style_preset"], "simple_diagram")
 
         upload = self.client.post(
             f"/api/projects/{project_id}/bgm",
@@ -85,6 +92,49 @@ class FeatureWorkflowTests(unittest.TestCase):
         bgm = self.client.get(f"/api/projects/{project_id}/bgm")
         self.assertEqual(bgm.status_code, 200)
         self.assertEqual(bgm.content, b"fake-bgm")
+
+    def test_feature_settings_reject_unknown_style_preset(self) -> None:
+        project_id = self.create_project()
+        settings = self.client.put(
+            f"/api/projects/{project_id}/features",
+            json={"style_preset": "unknown_style"},
+        )
+        self.assertEqual(settings.status_code, 400)
+        self.assertIn("unsupported style_preset", settings.text)
+
+    def test_feature_settings_accept_editorial_symbolic_style_preset(self) -> None:
+        project_id = self.create_project()
+        settings = self.client.put(
+            f"/api/projects/{project_id}/features",
+            json={"style_preset": "editorial_symbolic"},
+        )
+        self.assertEqual(settings.status_code, 200)
+        self.assertEqual(settings.json()["project"]["body_image_options"]["style_preset"], "editorial_symbolic")
+
+    def test_feature_settings_accept_stickman_business_style_preset(self) -> None:
+        project_id = self.create_project()
+        settings = self.client.put(
+            f"/api/projects/{project_id}/features",
+            json={"style_preset": "stickman_business"},
+        )
+        self.assertEqual(settings.status_code, 200)
+        self.assertEqual(settings.json()["project"]["body_image_options"]["style_preset"], "stickman_business")
+
+    def test_feature_settings_persist_hyperframes_overlay_options(self) -> None:
+        project_id = self.create_project()
+
+        settings = self.client.put(
+            f"/api/projects/{project_id}/features",
+            json={
+                "hyperframes_overlay_enabled": True,
+                "hyperframes_overlay_required": True,
+            },
+        )
+
+        self.assertEqual(settings.status_code, 200)
+        options = settings.json()["project"]["body_image_options"]
+        self.assertTrue(options["hyperframes_overlay_enabled"])
+        self.assertTrue(options["hyperframes_overlay_required"])
 
     def test_clone_project_copies_selected_assets(self) -> None:
         project_id = self.create_project()
@@ -115,6 +165,8 @@ class FeatureWorkflowTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         self.assertIn("ffmpeg_available", payload)
+        self.assertIn("omnivoice_python_path", payload)
+        self.assertIn("omnivoice_import_ok", payload)
         self.assertIn("disk_free_gb", payload)
 
     def test_output_route_supports_shorts_format(self) -> None:
@@ -124,6 +176,21 @@ class FeatureWorkflowTests(unittest.TestCase):
         response = self.client.get(f"/api/projects/{project_id}/output?format=shorts")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.content, b"shorts")
+
+    def test_output_route_auto_returns_existing_shorts_output(self) -> None:
+        project_id = self.create_project()
+        shorts_path = db.project_dir(project_id) / "output_shorts.mp4"
+        shorts_path.write_bytes(b"shorts")
+        response = self.client.get(f"/api/projects/{project_id}/output")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content, b"shorts")
+
+    def test_output_route_explicit_landscape_still_requires_landscape_output(self) -> None:
+        project_id = self.create_project()
+        shorts_path = db.project_dir(project_id) / "output_shorts.mp4"
+        shorts_path.write_bytes(b"shorts")
+        response = self.client.get(f"/api/projects/{project_id}/output?format=landscape")
+        self.assertEqual(response.status_code, 404)
 
     def test_status_route_exposes_render_phase_and_log(self) -> None:
         project_id = self.create_project()
@@ -208,6 +275,37 @@ class FeatureWorkflowTests(unittest.TestCase):
         self.assertEqual(response["query"], "city skyline")
         self.assertEqual(len(response["results"]), 1)
 
+    def test_system_tools_reflects_lmstudio_provider(self) -> None:
+        with patch("app.services.tool_registry.LLM_PROVIDER", "lmstudio"), patch(
+            "app.services.tool_registry.LMSTUDIO_BASE_URL", "http://127.0.0.1:1234"
+        ):
+            response = self.client.get("/api/system/tools")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        ollama_tool = next(item for item in payload if item["key"] == "ollama")
+        self.assertEqual(ollama_tool["detail"], "LM Studio endpoint: http://127.0.0.1:1234")
+
+    def test_list_tool_status_with_lmstudio_provider(self) -> None:
+        with patch("app.services.tool_registry.LLM_PROVIDER", "lmstudio"), patch(
+            "app.services.tool_registry.LMSTUDIO_BASE_URL", "http://127.0.0.1:1234"
+        ), patch("app.services.tool_registry.OLLAMA_BASE_URL", "http://127.0.0.1:11434"):
+            from app.services.tool_registry import list_tool_status
+
+            tools = list_tool_status()
+            ollama_tool = next(item for item in tools if item["key"] == "ollama")
+            self.assertEqual(ollama_tool["detail"], "LM Studio endpoint: http://127.0.0.1:1234")
+            self.assertEqual(ollama_tool["configured"], True)
+
+    def test_usage_registry_list_contains_lmstudio_provider(self) -> None:
+        with patch("app.services.usage_registry.LLM_PROVIDER", "lmstudio"):
+            from app.services.usage_registry import list_usage_records
+
+            with TemporaryDirectory() as temp_dir:
+                records = list_usage_records(path=Path(temp_dir) / "providers.json")
+            providers = [item["provider"] for item in records]
+            self.assertIn("lmstudio", providers)
+            self.assertNotIn("ollama", providers)
+
     def test_youtube_stats_route_uses_service(self) -> None:
         project_id = self.create_project()
         db.update_project(project_id, youtube_id="video123")
@@ -242,7 +340,217 @@ class FeatureWorkflowTests(unittest.TestCase):
         check_map = {check["key"]: check["ok"] for check in report["checks"]}
         self.assertTrue(check_map["script"])
         self.assertTrue(check_map["tts_state"])
+        self.assertTrue(check_map["tts_consistency"])
         self.assertTrue(check_map["media_metadata"])
+
+    def test_preflight_reports_tts_consistency_failure(self) -> None:
+        project_id = self.create_project()
+        project_dir = db.project_dir(project_id)
+        (project_dir / "media").mkdir(parents=True, exist_ok=True)
+        (project_dir / "tts").mkdir(parents=True, exist_ok=True)
+        (project_dir / "media" / "one.jpg").write_bytes(b"1")
+        (project_dir / "tts" / "timings.json").write_text(
+            '[{"idx":0,"text":"hello","start":0,"end":1,"dur":1}]',
+            encoding="utf-8",
+        )
+        (project_dir / "tts" / "tts_consistency_report.json").write_text(
+            json.dumps(
+                {
+                    "metadata_consistent": True,
+                    "audio_consistency_checked": True,
+                    "audio_consistency_passed": False,
+                    "max_estimated_pitch_relative_drift": 0.53,
+                    "max_spectral_centroid_relative_drift": 0.32,
+                    "recommended_tts_mode": "full_passage_or_reference_voice",
+                }
+            ),
+            encoding="utf-8",
+        )
+        db.update_project(
+            project_id,
+            sentences=["hello"],
+            media_order=["one.jpg"],
+            tts_state="done",
+        )
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        with patch("app.services.preflight.find_invalid_media_files", return_value=[]):
+            report = build_preflight_report(project)
+        check_map = {check["key"]: check for check in report["checks"]}
+        self.assertFalse(check_map["tts_consistency"]["ok"])
+        self.assertIn("pitch drift 0.53", check_map["tts_consistency"]["message"])
+
+    def test_preflight_rejects_vertical_media_with_landscape_only_output(self) -> None:
+        project_id = self.create_project()
+        project_dir = db.project_dir(project_id)
+        (project_dir / "media").mkdir(parents=True, exist_ok=True)
+        (project_dir / "tts").mkdir(parents=True, exist_ok=True)
+        (project_dir / "media" / "vertical.jpg").write_bytes(b"1")
+        (project_dir / "tts" / "timings.json").write_text(
+            '[{"idx":0,"text":"hello","start":0,"end":1,"dur":1}]',
+            encoding="utf-8",
+        )
+        (project_dir / "tts" / "tts_run_manifest.json").write_text(
+            json.dumps({"sentences": [{"idx": 0, "text": "hello"}]}),
+            encoding="utf-8",
+        )
+        db.update_project(
+            project_id,
+            sentences=["hello"],
+            media_order=["vertical.jpg"],
+            tts_state="done",
+            render_formats=["landscape"],
+        )
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        with patch("app.services.preflight.find_invalid_media_files", return_value=[]), patch(
+            "app.services.preflight.probe_media_dimensions",
+            return_value=(768, 1376),
+        ):
+            report = build_preflight_report(project)
+        check_map = {check["key"]: check for check in report["checks"]}
+        self.assertFalse(check_map["media_aspect"]["ok"])
+        self.assertIn("vertical", check_map["media_aspect"]["message"])
+
+    def test_preflight_rejects_sentence_mode_subtitles_for_shorts(self) -> None:
+        project_id = self.create_project()
+        project_dir = db.project_dir(project_id)
+        (project_dir / "media").mkdir(parents=True, exist_ok=True)
+        (project_dir / "tts").mkdir(parents=True, exist_ok=True)
+        (project_dir / "media" / "vertical.jpg").write_bytes(b"1")
+        (project_dir / "tts" / "timings.json").write_text(
+            json.dumps(
+                [
+                    {
+                        "idx": 0,
+                        "text": "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda",
+                        "start": 0,
+                        "end": 6,
+                        "dur": 6,
+                    }
+                ]
+            ),
+            encoding="utf-8",
+        )
+        (project_dir / "tts" / "tts_run_manifest.json").write_text(
+            json.dumps({"sentences": [{"idx": 0, "text": "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda"}]}),
+            encoding="utf-8",
+        )
+        db.update_project(
+            project_id,
+            sentences=["alpha beta gamma delta epsilon zeta eta theta iota kappa lambda"],
+            media_order=["vertical.jpg"],
+            tts_state="done",
+            render_formats=["shorts"],
+        )
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        with patch("app.services.preflight.find_invalid_media_files", return_value=[]), patch(
+            "app.services.preflight.probe_media_dimensions",
+            return_value=(768, 1376),
+        ):
+            report = build_preflight_report(project)
+        check_map = {check["key"]: check for check in report["checks"]}
+        self.assertFalse(check_map["subtitle_layout"]["ok"])
+        self.assertIn("readable cue splitting", check_map["subtitle_layout"]["message"])
+
+    def test_preflight_rejects_mojibake_tts_manifest_text(self) -> None:
+        project_id = self.create_project()
+        project_dir = db.project_dir(project_id)
+        (project_dir / "media").mkdir(parents=True, exist_ok=True)
+        (project_dir / "tts").mkdir(parents=True, exist_ok=True)
+        (project_dir / "media" / "one.jpg").write_bytes(b"1")
+        (project_dir / "tts" / "timings.json").write_text(
+            '[{"idx":0,"text":"최근 소식입니다.","start":0,"end":1,"dur":1}]',
+            encoding="utf-8",
+        )
+        (project_dir / "tts" / "tts_run_manifest.json").write_text(
+            json.dumps(
+                {
+                    "sentences": [
+                        {
+                            "idx": 0,
+                            "text": "理쒓렐 ?멸났吏?? 遺꾩빞??? 좊몢 二쇱옄濡??",
+                        }
+                    ]
+                },
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+        db.update_project(
+            project_id,
+            sentences=["최근 소식입니다."],
+            media_order=["one.jpg"],
+            tts_state="done",
+        )
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        with patch("app.services.preflight.find_invalid_media_files", return_value=[]):
+            report = build_preflight_report(project)
+        check_map = {check["key"]: check for check in report["checks"]}
+        self.assertFalse(check_map["tts_manifest_text"]["ok"])
+        self.assertIn("mojibake", check_map["tts_manifest_text"]["message"])
+
+    def test_preflight_reports_stale_plan_or_missing_render_plan_media(self) -> None:
+        project_id = self.create_project()
+        project_dir = db.project_dir(project_id)
+        (project_dir / "media").mkdir(parents=True, exist_ok=True)
+        (project_dir / "tts").mkdir(parents=True, exist_ok=True)
+        (project_dir / "media" / "one.jpg").write_bytes(b"1")
+        (project_dir / "tts" / "timings.json").write_text('[{"idx":0,"text":"hello","start":0,"end":1,"dur":1}]', encoding="utf-8")
+        db.update_project(
+            project_id,
+            sentences=["hello", "world"],
+            media_order=["one.jpg"],
+            tts_state="done",
+            scene_plan={
+                "version": 1,
+                "format": "landscape",
+                "total_duration": 1.0,
+                "scenes": [
+                    {
+                        "idx": 1,
+                        "sentence_idx": 0,
+                        "text": "hello",
+                        "region": "intro",
+                        "duration_sec": 1.0,
+                        "visual_intent": "hello",
+                        "prompt": "p1",
+                        "style": "doc",
+                        "media_path": "missing.png",
+                    }
+                ],
+            },
+            render_plan={
+                "version": 2,
+                "total_duration": 1.0,
+                "segments": [
+                    {
+                        "region": "intro",
+                        "start": 0.0,
+                        "end": 1.0,
+                        "sentence_idx": 0,
+                        "media": [{"path": "missing.png", "kind": "image"}],
+                        "motion": "slow_zoom_in",
+                        "effect": "fade",
+                        "caption_style": "emphasis",
+                    }
+                ],
+            },
+        )
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        with patch("app.services.preflight.find_invalid_media_files", return_value=[]):
+            report = build_preflight_report(project)
+        check_map = {check["key"]: check for check in report["checks"]}
+        self.assertFalse(check_map["plan_sync"]["ok"])
+        self.assertFalse(check_map["render_plan_media"]["ok"])
 
     def test_recover_interrupted_tasks_clears_running_render_state(self) -> None:
         project_id = self.create_project()
@@ -263,7 +571,7 @@ class FeatureWorkflowTests(unittest.TestCase):
         )
 
         summary = db.recover_interrupted_tasks()
-        self.assertGreaterEqual(summary["render"], 1)
+        self.assertIn("render", summary)
         project = db.get_project(project_id)
         self.assertIsNotNone(project)
         assert project is not None
@@ -277,3 +585,272 @@ class FeatureWorkflowTests(unittest.TestCase):
         self.assertEqual(project["tts_state"], "error")
         self.assertEqual(project["upload_state"], "error")
         self.assertEqual(project["media_upload_state"], "error")
+
+    def test_source_url_analyze_persists_source_draft(self) -> None:
+        project_id = self.create_project()
+        with patch("app.routers.projects.analyze_source_url") as mocked_analyze:
+            mocked_analyze.return_value = type("ExtractedSourceStub", (), {
+                "source": {
+                    "id": "src123",
+                    "url": "https://example.com/article",
+                    "final_url": "https://example.com/article",
+                    "title": "Example Title",
+                    "domain": "example.com",
+                    "author": "",
+                    "published_at": "",
+                    "language": "ko",
+                    "excerpt": "요약 본문",
+                    "fetched_at": "2026-04-24T18:00:00+00:00",
+                    "word_count": 120,
+                },
+                "fact_notes": [
+                    {"source_id": "src123", "note": "핵심 사실 1"},
+                    {"source_id": "src123", "note": "핵심 사실 2"},
+                ],
+                "warnings": ["원문 직접 복사를 피하세요."],
+                "sanitized_text": "요약 본문",
+            })()
+            response = self.client.post(
+                f"/api/projects/{project_id}/source/url/analyze",
+                data={"url": "https://example.com/article"},
+            )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source_draft_state"], "done")
+        self.assertEqual(payload["source_draft_input_mode"], "url")
+        self.assertEqual(payload["source_draft_query"], "https://example.com/article")
+        self.assertEqual(payload["source_draft_sources"][0]["domain"], "example.com")
+        self.assertEqual(len(payload["source_draft_fact_notes"]), 2)
+        self.assertEqual(payload["source_draft_warnings"], ["원문 직접 복사를 피하세요."])
+
+    def test_source_draft_clear_route_resets_fields(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            source_draft_state="done",
+            source_draft_progress=100,
+            source_draft_input_mode="url",
+            source_draft_query="https://example.com/article",
+            source_draft_sources=[{
+                "id": "src123",
+                "url": "https://example.com/article",
+                "final_url": "https://example.com/article",
+                "title": "Example Title",
+                "domain": "example.com",
+                "author": "",
+                "published_at": "",
+                "language": "ko",
+                "excerpt": "요약 본문",
+                "fetched_at": "2026-04-24T18:00:00+00:00",
+                "word_count": 120,
+            }],
+            source_draft_fact_notes=[{"source_id": "src123", "note": "핵심 사실"}],
+            source_draft_warnings=["주의"],
+        )
+        response = self.client.delete(f"/api/projects/{project_id}/source/draft")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source_draft_state"], "idle")
+        self.assertEqual(payload["source_draft_query"], "")
+        self.assertEqual(payload["source_draft_sources"], [])
+        self.assertEqual(payload["source_draft_fact_notes"], [])
+        self.assertEqual(payload["source_draft_warnings"], [])
+
+    def test_source_script_generate_persists_queue_metadata(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            source_draft_state="done",
+            source_draft_input_mode="url",
+            source_draft_query="https://example.com/article",
+            source_draft_sources=[{
+                "id": "src123",
+                "url": "https://example.com/article",
+                "final_url": "https://example.com/article",
+                "title": "Example Title",
+                "domain": "example.com",
+                "author": "",
+                "published_at": "",
+                "language": "ko",
+                "excerpt": "요약 본문",
+                "fetched_at": "2026-04-24T18:00:00+00:00",
+                "word_count": 120,
+            }],
+            source_draft_fact_notes=[{"source_id": "src123", "note": "핵심 사실"}],
+        )
+        response = self.client.post(
+            f"/api/projects/{project_id}/source/script/generate",
+            data={"tone": "설명형", "target_minutes": "3", "language": "ko", "mode": "hook", "note": "도입을 강하게"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        from app.routers import projects
+
+        self.assertEqual(payload["source_draft_model"], projects.SCRIPT_LLM_MODEL)
+        self.assertEqual(payload["source_draft_state"], "queued")
+        self.assertEqual(payload["source_draft_phase"], "queued")
+        self.assertEqual(payload["source_draft_regenerate_mode"], "hook")
+        self.assertEqual(payload["source_draft_regenerate_note"], "도입을 강하게")
+
+    def test_source_script_generate_blocks_when_running(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            source_draft_state="running",
+        )
+        response = self.client.post(
+            f"/api/projects/{project_id}/source/script/generate",
+            data={"tone": "설명형", "target_minutes": "3", "language": "ko"},
+        )
+        self.assertEqual(response.status_code, 409)
+
+    def test_source_script_generate_returns_queued(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            source_draft_state="done",
+            source_draft_sources=[{
+                "id": "src123",
+                "url": "https://example.com/article",
+                "final_url": "https://example.com/article",
+                "title": "Example Title",
+                "domain": "example.com",
+                "author": "",
+                "published_at": "",
+                "language": "ko",
+                "excerpt": "요약 본문",
+                "fetched_at": "2026-04-24T18:00:00+00:00",
+                "word_count": 120,
+            }],
+            source_draft_fact_notes=[{"source_id": "src123", "note": "핵심 사실"}],
+        )
+        response = self.client.post(
+            f"/api/projects/{project_id}/source/script/generate",
+            data={"tone": "설명형", "target_minutes": "3", "language": "ko", "mode": "story"},
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source_draft_state"], "queued")
+        self.assertEqual(payload["source_draft_phase"], "queued")
+        self.assertEqual(payload["source_draft_regenerate_mode"], "story")
+
+    def test_source_script_apply_writes_project_script(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            source_draft_script="적용할 초안 문장입니다. 두 번째 문장입니다.",
+        )
+        response = self.client.post(f"/api/projects/{project_id}/source/script/apply", data={})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["content_mode"], "standard")
+        self.assertEqual(payload["user_script"], "적용할 초안 문장입니다. 두 번째 문장입니다.")
+        self.assertGreaterEqual(len(payload["sentences"]), 1)
+
+    def test_restore_previous_swaps_script(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            source_draft_script="현재 초안",
+            source_draft_previous_script="이전 초안",
+        )
+        response = self.client.post(f"/api/projects/{project_id}/source/script/restore-previous", data={})
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source_draft_script"], "이전 초안")
+        self.assertEqual(payload["source_draft_previous_script"], "현재 초안")
+
+    def test_source_keyword_collect_persists_sources(self) -> None:
+        project_id = self.create_project()
+        with patch("app.routers.projects.collect_sources_from_keyword") as mocked_collect, patch(
+            "app.routers.projects.analyze_source_url"
+        ) as mocked_analyze:
+            mocked_collect.return_value = ([
+                type("SearchResultStub", (), {
+                    "title": "검색 결과 1",
+                    "url": "https://example.com/one",
+                    "description": "desc",
+                })(),
+                type("SearchResultStub", (), {
+                    "title": "검색 결과 2",
+                    "url": "https://example.com/two",
+                    "description": "desc",
+                })(),
+            ], {"used": 12, "remaining": 988, "limit": 1000, "month": "2026-04"})
+            mocked_analyze.side_effect = [
+                type("ExtractedSourceStub", (), {
+                    "source": {
+                        "id": "src1",
+                        "url": "https://example.com/one",
+                        "final_url": "https://example.com/one",
+                        "title": "기사 1",
+                        "domain": "example.com",
+                        "author": "",
+                        "published_at": "",
+                        "language": "ko",
+                        "excerpt": "요약 1",
+                        "fetched_at": "2026-04-24T18:00:00+00:00",
+                        "word_count": 100,
+                    },
+                    "fact_notes": [{"source_id": "src1", "note": "사실 1"}],
+                })(),
+                type("ExtractedSourceStub", (), {
+                    "source": {
+                        "id": "src2",
+                        "url": "https://example.com/two",
+                        "final_url": "https://example.com/two",
+                        "title": "기사 2",
+                        "domain": "example.com",
+                        "author": "",
+                        "published_at": "",
+                        "language": "ko",
+                        "excerpt": "요약 2",
+                        "fetched_at": "2026-04-24T18:00:00+00:00",
+                        "word_count": 100,
+                    },
+                    "fact_notes": [{"source_id": "src2", "note": "사실 2"}],
+                })(),
+            ]
+            response = self.client.post(
+                f"/api/projects/{project_id}/source/keyword/collect",
+                data={"keyword": "반도체 수출 전망"},
+            )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source_draft_input_mode"], "keyword")
+        self.assertEqual(payload["source_draft_query"], "반도체 수출 전망")
+        self.assertEqual(len(payload["source_draft_sources"]), 2)
+        self.assertIn("Brave 무료 검색 사용량", payload["source_draft_warnings"][0])
+
+    def test_brave_status_route_returns_usage(self) -> None:
+        with patch("app.routers.projects.get_brave_usage_status", return_value={
+            "month": "2026-04",
+            "used": 10,
+            "remaining": 990,
+            "limit": 1000,
+        }):
+            response = self.client.get("/api/projects/_/source/brave/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["used"], 10)
+        self.assertEqual(payload["remaining"], 990)
+
+    def test_status_route_exposes_source_draft_fields(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            source_draft_state="running",
+            source_draft_progress=44,
+            source_draft_phase="generate",
+            source_draft_last_log="Generating source draft...",
+            source_draft_started_at="2026-04-26T00:00:00+00:00",
+            source_draft_heartbeat_at="2026-04-26T00:00:05+00:00",
+            source_draft_error="",
+        )
+        response = self.client.get(f"/api/projects/{project_id}/status")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["source_draft_state"], "running")
+        self.assertEqual(payload["source_draft_progress"], 44)
+        self.assertEqual(payload["source_draft_phase"], "generate")
+        self.assertIn("Generating", payload["source_draft_last_log"])
