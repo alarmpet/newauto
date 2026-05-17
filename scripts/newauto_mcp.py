@@ -623,7 +623,7 @@ def _runtime_snapshot(project_id: str = "") -> dict[str, object]:
         "cwd": str(ROOT_DIR),
         "base_url": BASE_URL,
         "api_port": API_PORT,
-        "flow_automation_backend": _flow_backend(),
+        "flow_browser_backend": _flow_backend(),
         "flow_mode": _flow_mode(),
         "api_server_ok": _health_ok(),
         "api_server_pid": api_pid,
@@ -1835,7 +1835,7 @@ def diagnose_newauto_runtime(project_id: str = "") -> str:
         f"python_executable: {snapshot.get('python_executable')}\n"
         f"cwd: {snapshot.get('cwd')}\n"
         f"BASE_URL: {snapshot.get('base_url')}\n"
-        f"FLOW_AUTOMATION_BACKEND: {snapshot.get('flow_automation_backend')}\n"
+        f"FLOW_BROWSER_BACKEND: {snapshot.get('flow_browser_backend')}\n"
         f"FLOW_MODE: {snapshot.get('flow_mode')}\n"
         f"api_server_ok: {snapshot.get('api_server_ok')}\n"
         f"api_port: {snapshot.get('api_port')}\n"

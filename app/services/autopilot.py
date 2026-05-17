@@ -8,9 +8,8 @@ from typing import cast
 from fastapi import HTTPException
 
 from .. import db
-from ..services.image_prompting import save_image_prompt_manifest, suggest_image_prompt_batch
+from ..services.image_generation_disabled import IMAGE_GEN_DISABLED_CODE, IMAGE_GEN_DISABLED_MESSAGE
 from ..services.preflight import build_preflight_report
-from ..services.prompt_quality import build_prompt_quality_report, save_prompt_quality_report
 from ..services.render_plan import build_render_plan
 from ..services.render_report import load_render_report
 from ..services.scene_plan import build_scene_plan
@@ -22,7 +21,7 @@ from ..tts_profiles import normalize_tts_profile
 from ..services import gpu_guard
 from ..types import PreflightCheck, RenderFormat, TtsProfile
 from ..services.script_compile import compile_script, flatten_regional_sentences
-from ..config import COMFYUI_INSTALL_DIR, SCRIPT_LLM_MODEL
+from ..config import SCRIPT_LLM_MODEL
 from ..types import (
     AutopilotDebugSnapshot,
     AutopilotEvent,
@@ -39,37 +38,7 @@ from ..types import (
 MAX_EVENT_LINES = 2000
 MAX_RECENT_EVENTS = 10
 POLL_WAIT_SEC = 2.0
-DEFAULT_IMAGE_CHECKPOINT = "sd_xl_base_1.0.safetensors"
-DEFAULT_STICKMAN_LORA_STRENGTH = 0.8
 AUTOPILOT_DEFAULT_VOICE_PRESET = "male-announcer-40s-50s"
-_STICKMAN_BLOCKED_DOMAIN_SET = {"ev_battery", "news_explainer", "ai_policy_conflict", "tech"}
-_STICKMAN_TRIGGER_TERMS = (
-    "Flipchartvisu, Stick figure, ",
-    "Flipchartvisu, Stick figure",
-    "Flipchartvisu",
-    "Stick figure",
-    "minimalist 2d stickman explainer poster",
-    "stickman",
-)
-_STICKMAN_BLOCKED_SUB_STRATEGIES = {
-    "semiconductor_business_news",
-    "political_business_delegation",
-    "executive_travel_diplomacy",
-}
-_STICKMAN_BLOCKED_NEEDLES = (
-    "jensen huang",
-    "nvidia",
-    "trump",
-    "donald trump",
-    "delegation",
-    "business delegation",
-    "economic delegation",
-    "air force one",
-    "beijing",
-    "alaska",
-    "china trip",
-    "ceo",
-)
 
 
 def _autopilot_dir(pid: str) -> Path:
@@ -122,7 +91,7 @@ def _coerce_regenerate_mode(value: object) -> SourceRegenerateMode:
 
 
 def _coerce_visual_source_mode(value: object) -> VisualSourceMode:
-    if value in {"upload_only", "hybrid", "comfyui_auto", "flow_assisted", "flow_auto", "flow_then_comfyui_fallback"}:
+    if value in {"upload_only", "hybrid", "comfyui_auto"}:
         return cast(VisualSourceMode, value)
     return "comfyui_auto"
 
@@ -515,193 +484,6 @@ def _effective_autopilot_tts_profile(project: ProjectRecord) -> tuple[str, TtsPr
         script_text,
     )
     return autopilot_preset, autopilot_profile, True
-
-
-def _find_stickfigures_lora_name() -> str:
-    loras_dir = COMFYUI_INSTALL_DIR / "models" / "loras"
-    if not loras_dir.exists():
-        return ""
-    for path in sorted(loras_dir.rglob("*")):
-        if not path.is_file():
-            continue
-        lowered = path.name.lower()
-        if "stickfigure" in lowered or "stickfigures" in lowered:
-            return path.name
-    return ""
-
-
-def _candidate_total_for_prompt(prompt: dict[str, object], quality_mode: QualityMode) -> int:
-    if quality_mode == "fast":
-        return 1
-    visual_plan = prompt.get("visual_plan")
-    subject_modes: list[str] = []
-    if isinstance(visual_plan, dict):
-        raw_subject_modes = visual_plan.get("subject_modes")
-        if isinstance(raw_subject_modes, list):
-            subject_modes = [item for item in raw_subject_modes if isinstance(item, str)]
-    abstract_scene = any(mode in {"environment", "object_metaphor", "symbolic"} for mode in subject_modes)
-    if quality_mode == "balanced":
-        return 2 if abstract_scene else 1
-    return 3 if abstract_scene else 2
-
-
-def _int_from_object(value: object, default: int) -> int:
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, str):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    return default
-
-
-def _float_from_object(value: object, default: float) -> float:
-    if isinstance(value, bool):
-        return float(int(value))
-    if isinstance(value, (int, float)):
-        return float(value)
-    if isinstance(value, str):
-        try:
-            return float(value)
-        except ValueError:
-            return default
-    return default
-
-
-def _lowered_prompt_haystack(prompt: dict[str, object]) -> str:
-    parts: list[str] = []
-    for key in ("sentence", "positive_prompt", "prompt", "prompt_g", "prompt_l"):
-        value = prompt.get(key)
-        if isinstance(value, str):
-            parts.append(value)
-    for key in ("visual_brief", "visual_plan"):
-        value = prompt.get(key)
-        if isinstance(value, dict):
-            parts.extend(str(item) for item in value.values() if isinstance(item, (str, int, float)))
-            for list_value in value.values():
-                if isinstance(list_value, list):
-                    parts.extend(str(item) for item in list_value if isinstance(item, str))
-    return " ".join(parts).lower()
-
-
-def _stickman_lora_blocked_for_prompt(prompt: dict[str, object]) -> bool:
-    visual_brief = prompt.get("visual_brief")
-    visual_plan = prompt.get("visual_plan")
-    domain = ""
-    sub_strategy = ""
-    lora_policy = ""
-    if isinstance(visual_brief, dict):
-        domain = str(visual_brief.get("domain") or "").strip().lower()
-    if isinstance(visual_plan, dict):
-        domain = domain or str(visual_plan.get("domain") or "").strip().lower()
-        sub_strategy = str(visual_plan.get("sub_strategy") or "").strip().lower()
-        lora_policy = str(visual_plan.get("lora_policy") or "").strip().lower()
-    if lora_policy == "none":
-        return True
-    if domain in _STICKMAN_BLOCKED_DOMAIN_SET:
-        return True
-    if sub_strategy in _STICKMAN_BLOCKED_SUB_STRATEGIES:
-        return True
-    haystack = _lowered_prompt_haystack(prompt)
-    return any(needle in haystack for needle in _STICKMAN_BLOCKED_NEEDLES)
-
-
-def _strip_stickman_trigger_terms(value: str) -> str:
-    cleaned = value
-    for term in _STICKMAN_TRIGGER_TERMS:
-        cleaned = cleaned.replace(term, "")
-    return " ".join(cleaned.replace(",,", ",").split()).strip(" ,")
-
-
-def _build_image_batch_items(project: ProjectRecord, options: AutopilotOptions) -> list[dict[str, object]]:
-    count = _resolve_image_count(options, len(project["sentences"]))
-    prompts = suggest_image_prompt_batch(project, start_idx=0, count=count)
-    stickfigures_lora_name = _find_stickfigures_lora_name()
-    items: list[dict[str, object]] = []
-    quality_mode = options.get("quality_mode", "fast")
-    for offset, prompt in enumerate(prompts):
-        raw_sentence_idx = prompt.get("sentence_idx", 0)
-        if isinstance(raw_sentence_idx, bool):
-            sentence_idx = int(raw_sentence_idx)
-        elif isinstance(raw_sentence_idx, int):
-            sentence_idx = raw_sentence_idx
-        elif isinstance(raw_sentence_idx, float):
-            sentence_idx = int(raw_sentence_idx)
-        elif isinstance(raw_sentence_idx, str):
-            try:
-                sentence_idx = int(raw_sentence_idx)
-            except ValueError:
-                sentence_idx = 0
-        else:
-            sentence_idx = 0
-        positive_prompt = str(prompt.get("positive_prompt", "")).strip()
-        prompt_g = str(prompt.get("prompt_g", "")).strip()
-        prompt_l = str(prompt.get("prompt_l", "")).strip()
-        negative_prompt = str(prompt.get("negative_prompt", "")).strip()
-        if not positive_prompt:
-            continue
-        prompt_template_id = str(prompt.get("template_id", "")).strip() or "txt2img_sdxl_basic"
-        prompt_lora_name = str(prompt.get("lora_name", "")).strip()
-        stickman_blocked = _stickman_lora_blocked_for_prompt(prompt)
-        if prompt_template_id == "txt2img_sdxl_stickman_lora" and stickman_blocked:
-            prompt_template_id = "txt2img_sdxl_basic"
-            prompt_lora_name = ""
-            positive_prompt = _strip_stickman_trigger_terms(positive_prompt)
-            prompt_g = _strip_stickman_trigger_terms(prompt_g)
-            prompt_l = _strip_stickman_trigger_terms(prompt_l)
-        if prompt_template_id == "txt2img_sdxl_stickman_lora" and not prompt_lora_name:
-            prompt_lora_name = stickfigures_lora_name
-        prompt_lora_strength = _float_from_object(
-            prompt.get("lora_strength", DEFAULT_STICKMAN_LORA_STRENGTH),
-            DEFAULT_STICKMAN_LORA_STRENGTH,
-        )
-        if prompt_template_id == "txt2img_sdxl_basic":
-            prompt_lora_name = ""
-            prompt_lora_strength = 0.0
-        candidate_total = _candidate_total_for_prompt(prompt, quality_mode)
-        width = _int_from_object(prompt.get("width", 1024), 1024)
-        height = _int_from_object(prompt.get("height", 576), 576)
-        for candidate_index in range(candidate_total):
-            items.append(
-                {
-                    "template_id": prompt_template_id,
-                    "checkpoint": DEFAULT_IMAGE_CHECKPOINT,
-                    "positive_prompt": positive_prompt,
-                    "prompt_g": prompt_g,
-                    "prompt_l": prompt_l,
-                    "negative_prompt": negative_prompt,
-                    "width": width,
-                    "height": height,
-                    "steps": prompt.get("steps"),
-                    "cfg": prompt.get("cfg"),
-                    "sampler_name": prompt.get("sampler_name"),
-                    "scheduler": prompt.get("scheduler"),
-                    "denoise": prompt.get("denoise"),
-                    "generation_profile": prompt.get("generation_profile"),
-                    "score_version": prompt.get("score_version"),
-                    "quality_mode": prompt.get("quality_mode", quality_mode),
-                    "request_timeout_sec": prompt.get("request_timeout_sec"),
-                    "seed": 1 + offset * 10 + candidate_index,
-                    "filename_prefix": f"autopilot_scene_{sentence_idx:03d}",
-                    "client_id": "autopilot",
-                    "sentence_idx": sentence_idx,
-                    "prompt": positive_prompt,
-                    "visual_brief": prompt.get("visual_brief"),
-                    "visual_plan": prompt.get("visual_plan"),
-                    "visual_tokens": prompt.get("visual_tokens"),
-                    "sentence_hash": str(prompt.get("sentence_hash", "")),
-                    "lora_name": prompt_lora_name,
-                    "lora_strength": prompt_lora_strength,
-                    "candidate_index": candidate_index + 1,
-                    "candidate_total": candidate_total,
-                }
-            )
-    return items
 
 
 def _wait_for_state(
@@ -1118,66 +900,25 @@ def run_autopilot_job(pid: str) -> None:
         )
 
         if options["visual_source_mode"] in {"comfyui_auto", "hybrid"}:
-            batch_items = _build_image_batch_items(project, options)
-            if not batch_items:
-                raise RuntimeError("No image prompts were available for autopilot image generation.")
-            prompt_suggestions = suggest_image_prompt_batch(
-                project,
-                start_idx=0,
-                count=len(batch_items),
-            )
-            manifest_path = save_image_prompt_manifest(
-                db.project_dir(pid) / "image_prompts_manifest.json",
-                project=project,
-                source="autopilot",
-                prompts=prompt_suggestions,
-            )
-            prompt_quality_report = build_prompt_quality_report(prompt_suggestions)
-            prompt_quality_report_path = save_prompt_quality_report(
-                db.project_dir(pid) / "prompt_quality_report.json",
-                prompt_quality_report,
-            )
-            body_image_options = dict(project["body_image_options"])
-            body_image_options.update(
-                {
-                    "batch_items": batch_items,
-                    "auto_build_plans_after_image": True,
-                    "image_prompts_manifest_path": str(manifest_path),
-                    "prompt_quality_report_path": str(prompt_quality_report_path),
-                    "quality_mode": options.get("quality_mode", "fast"),
-                }
-            )
             db.update_project(
                 pid,
-                body_image_state="queued",
+                body_image_state="error",
                 body_image_progress=0,
-                body_image_error="",
-                body_image_phase="queued",
-                body_image_last_log=f"Queued {len(batch_items)} ComfyUI image jobs.",
+                body_image_error=IMAGE_GEN_DISABLED_CODE,
+                body_image_phase="disabled",
+                body_image_last_log=IMAGE_GEN_DISABLED_MESSAGE,
                 body_image_job_id="",
                 body_image_started_at="",
                 body_image_heartbeat_at="",
-                body_image_options=body_image_options,
             )
-            project = _require_project(pid)
-            project = _update_runtime(
+            _pause_with_failure(
                 pid,
                 project=project,
-                phase="image_enqueue",
-                progress=55,
-                last_log=f"Queued {len(batch_items)} image jobs.",
-                debug_summary="Waiting for image worker.",
-                event="phase_start",
+                error_code=IMAGE_GEN_DISABLED_CODE,
+                message=IMAGE_GEN_DISABLED_MESSAGE,
+                action_hint="Upload media manually or wait for the D2 Z-Image backend.",
             )
-            project = _wait_for_state(
-                pid,
-                field="body_image_state",
-                done_value="done",
-                phase="image_wait",
-                progress=70,
-                message="Waiting for image worker to complete.",
-                state_label="Image generation",
-            )
+            return
         elif not project["media_order"]:
             _pause_with_failure(
                 pid,

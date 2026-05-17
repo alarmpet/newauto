@@ -6,7 +6,6 @@ from typing import Any, cast
 
 from .. import db
 from ..types import ProjectRecord
-from .flow_prompting import load_flow_prompt_manifest
 from .render_report import load_render_report
 
 
@@ -70,62 +69,11 @@ def _detect_outputs(pid: str, render_report: dict[str, Any] | None) -> list[dict
 
 def _load_flow_log(project: ProjectRecord) -> tuple[dict[str, int], int, str]:
     path = db.project_dir(project["id"]) / "flow_run_log.json"
-    if not path.exists():
-        return {}, 0, str(path)
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {"unreadable_flow_log": 1}, 0, str(path)
-
-    items = raw if isinstance(raw, list) else raw.get("items", []) if isinstance(raw, dict) else []
-    counter: Counter[str] = Counter()
-    placeholder_count = 0
-    for item in items:
-        if not isinstance(item, dict):
-            continue
-        status = str(item.get("status") or "").strip().lower()
-        failure_class = str(item.get("failure_class") or "").strip()
-        runner = str(item.get("runner") or "").strip()
-        if failure_class:
-            counter[failure_class] += 1
-        elif status in {"failed", "error", "timeout"}:
-            counter["flow_generation_failed"] += 1
-        if "placeholder" in runner.lower() or str(item.get("asset_path") or "").lower().find("placeholder") >= 0:
-            placeholder_count += 1
-    return dict(counter), placeholder_count, str(path)
+    return {}, 0, str(path)
 
 
 def _load_generate_all_status(project: ProjectRecord) -> dict[str, object]:
-    path = db.project_dir(project["id"]) / "flow_generate_all_status.json"
-    if not path.exists():
-        return {}
-    try:
-        raw = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return {"status": "unreadable", "path": str(path)}
-    if not isinstance(raw, dict):
-        return {"status": "invalid", "path": str(path)}
-    compact: dict[str, object] = {
-        "status": str(raw.get("status") or ""),
-        "ok": raw.get("ok"),
-        "pid": raw.get("pid", 0),
-        "started_at": str(raw.get("started_at") or ""),
-        "updated_at": str(raw.get("updated_at") or ""),
-        "finished_at": str(raw.get("finished_at") or ""),
-        "path": str(path),
-    }
-    for key in ("coverage_before", "coverage_after"):
-        value = raw.get(key)
-        if isinstance(value, dict):
-            compact[key] = value
-    result = raw.get("result")
-    if isinstance(result, dict):
-        compact["result_message"] = str(result.get("message") or "")
-        compact["processed"] = result.get("processed", 0)
-        compact["requested"] = result.get("requested", 0)
-    if raw.get("error"):
-        compact["error"] = str(raw.get("error") or "")
-    return compact
+    return {"status": "disabled_d1", "path": str(db.project_dir(project["id"]) / "flow_generate_all_status.json")}
 
 
 def _project_error(project: ProjectRecord) -> tuple[str, str]:
@@ -175,8 +123,7 @@ def _stage_and_next(
 
 
 def build_operator_summary(project: ProjectRecord) -> dict[str, object]:
-    manifest = load_flow_prompt_manifest(project)
-    prompt_count = len(manifest["entries"])
+    prompt_count = len(project["sentences"])
     coverage = _asset_coverage(project, prompt_count)
     render_report = load_render_report(project["id"])
     render_report_dict = cast(dict[str, Any] | None, render_report)

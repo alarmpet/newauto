@@ -733,7 +733,7 @@ def _content_mode(value: object) -> ContentMode:
 
 
 def _visual_source_mode(value: object) -> VisualSourceMode:
-    if value in {"hybrid", "comfyui_auto", "flow_assisted", "flow_auto", "flow_then_comfyui_fallback"}:
+    if value in {"hybrid", "comfyui_auto"}:
         return cast(VisualSourceMode, value)
     return "upload_only"
 

@@ -137,17 +137,6 @@ def _copy_hyperframes_overlay(project_dir: Path, bundle_dir: Path) -> list[str]:
     return copied
 
 
-def _list_stickman_evidence(bundle_dir: Path) -> list[str]:
-    evidence_dir = bundle_dir / "stickman_evidence"
-    if not evidence_dir.exists():
-        return []
-    return [
-        str(path.relative_to(bundle_dir)).replace("\\", "/")
-        for path in sorted(evidence_dir.rglob("*"))
-        if path.is_file()
-    ]
-
-
 def collect_project_diagnostics(project_id: str) -> dict[str, Any]:
     project = db.get_project(project_id)
     if project is None:
@@ -178,7 +167,6 @@ def collect_project_diagnostics(project_id: str) -> dict[str, Any]:
         "diagnostic_contact_sheet.jpg": _copy_if_exists(contact_sheet_path, bundle_dir / "diagnostic_contact_sheet.jpg"),
     }
     hyperframes_overlay_files = _copy_hyperframes_overlay(project_dir, bundle_dir)
-    stickman_evidence_files = _list_stickman_evidence(bundle_dir)
     _write_json(bundle_dir / "operator_summary.json", operator_summary)
 
     manifest: dict[str, Any] = {
@@ -188,7 +176,6 @@ def collect_project_diagnostics(project_id: str) -> dict[str, Any]:
         "files": [],
         "copied": copied,
         "hyperframes_overlay_files": hyperframes_overlay_files,
-        "stickman_evidence_files": stickman_evidence_files,
     }
     _write_json(bundle_dir / "diagnostics_manifest.json", manifest)
     manifest["files"] = sorted(path.name for path in bundle_dir.iterdir() if path.is_file())

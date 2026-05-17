@@ -2,7 +2,6 @@ import json
 from typing import cast
 
 from .. import db
-from ..services.image_prompting import suggest_image_prompt
 from ..services.visual_planner import build_scene_visual_plan
 from ..services.visual_relevance import mapping_matches_current_sentence
 from ..types import ProjectRecord, Region, RenderFormat, ScenePlan, ScenePlanScene, TimingEntry, VisualPlanEntry
@@ -12,9 +11,7 @@ def _style_for_project(project: ProjectRecord) -> str:
     if project["content_mode"] == "bible_longform":
         return "reverent biblical illustration"
     if project["visual_source_mode"] == "comfyui_auto":
-        return "documentary cinematic"
-    if project["visual_source_mode"] in {"flow_assisted", "flow_auto", "flow_then_comfyui_fallback"}:
-        return "Flow cinematic editorial"
+        return "image generation disabled"
     if project["visual_source_mode"] == "hybrid":
         return "mixed uploaded and generated documentary"
     return "uploaded visual sequence"
@@ -73,8 +70,6 @@ def _scene_duration_from_timing(
 
 
 def _has_complete_current_mappings(project: ProjectRecord) -> bool:
-    if project["visual_source_mode"] not in {"flow_assisted", "flow_auto", "flow_then_comfyui_fallback"}:
-        return False
     mappings_by_idx = {item["sentence_idx"]: item for item in project["body_image_mappings"]}
     return bool(project["sentences"]) and all(
         (mapping := mappings_by_idx.get(sentence_idx)) is not None
@@ -106,7 +101,6 @@ def build_scene_plan(project: ProjectRecord, *, render_format: RenderFormat = "l
         if sentence_idx < len(regional_sentences):
             region = regional_sentences[sentence_idx]["region"]
         visual_plan_entry = visual_plan_by_idx.get(sentence_idx)
-        suggestion = None
         prompt = ""
         media_path = ""
         mapping = mappings_by_idx.get(sentence_idx)
@@ -114,14 +108,13 @@ def build_scene_plan(project: ProjectRecord, *, render_format: RenderFormat = "l
             prompt = mapping["prompt"]
             media_path = mapping["path"]
         else:
-            suggestion = suggest_image_prompt(project, sentence_idx, visual_plan_entry=visual_plan_entry)
-            prompt = str(suggestion["positive_prompt"])
+            prompt = (
+                visual_plan_entry["core_meaning"]
+                if visual_plan_entry is not None and visual_plan_entry["core_meaning"].strip()
+                else sentence
+            )
         duration_sec = _scene_duration_from_timing(timing, next_timing, sentence)
         visual_brief = None
-        if not skip_visual_planner:
-            if suggestion is None:
-                suggestion = suggest_image_prompt(project, sentence_idx, visual_plan_entry=visual_plan_entry)
-            visual_brief = suggestion.get("visual_brief")
         primary_prop = ""
         secondary_prop = ""
         scene_background = ""
@@ -155,12 +148,20 @@ def build_scene_plan(project: ProjectRecord, *, render_format: RenderFormat = "l
         }
         if primary_prop:
             scene["key_concept"] = primary_prop
+        elif visual_plan_entry is not None and visual_plan_entry["primary_keywords"]:
+            scene["key_concept"] = visual_plan_entry["primary_keywords"][0]
         if visual_metaphor:
             scene["visual_metaphor"] = visual_metaphor
         if subject:
             scene["subject"] = subject
+        elif visual_plan_entry is not None:
+            scene["subject"] = visual_plan_entry.get("hero_subject") or (
+                visual_plan_entry["primary_keywords"][0] if visual_plan_entry["primary_keywords"] else sentence
+            )
         if props:
             scene["props"] = props
+        elif visual_plan_entry is not None and visual_plan_entry["must_show"]:
+            scene["props"] = list(visual_plan_entry["must_show"][:2])
         if scene_background:
             scene["background"] = scene_background
         if avoid:
