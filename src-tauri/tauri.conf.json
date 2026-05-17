@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "newauto Studio",
+  "version": "0.1.0",
+  "identifier": "com.newauto.studio",
+  "build": {
+    "beforeDevCommand": "",
+    "beforeBuildCommand": "",
+    "frontendDist": "../app/static",
+    "devUrl": "http://127.0.0.1:9002"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "newauto Studio",
+        "width": 1280,
+        "height": 860,
+        "minWidth": 1040,
+        "minHeight": 720,
+        "resizable": true,
+        "visible": true,
+        "center": true,
+        "focus": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; img-src 'self' asset: http://127.0.0.1:* data: blob:; media-src 'self' asset: http://127.0.0.1:* data: blob:; connect-src 'self' http://127.0.0.1:* ws://127.0.0.1:*; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "resources": {
+      "../dist/newauto-sidecar": "newauto-sidecar"
+    },
+    "windows": {
+      "nsis": {
+        "installerIcon": null,
+        "installMode": "perMachine",
+        "displayLanguageSelector": false
+      }
+    }
+  }
+}

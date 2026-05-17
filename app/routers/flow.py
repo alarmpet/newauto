@@ -64,15 +64,6 @@ class LocalFlowAssetAttachResponse(BaseModel):
     skipped: list[str]
 
 
-class UiVisionPrepareResponse(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    manifest: FlowPromptManifest
-    directory: str
-    csv_path: str
-    prompt_paths: list[str]
-
-
 RENAMED_FLOW_ASSET_RE = re.compile(r"^flow_s(?P<sentence_number>\d{1,3})[_-].+", re.IGNORECASE)
 
 
@@ -95,12 +86,6 @@ def _infer_media_kind(filename: str) -> MediaKind | None:
 def _flow_media_name(sentence_idx: int, original_name: str) -> str:
     extension = Path(original_name).suffix.lower()
     return f"flow_sentence_{sentence_idx + 1:03d}{extension}"
-
-
-def _uivision_dir(pid: str) -> Path:
-    path = db.project_dir(pid) / "uivision"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def _mapping_for_asset(
@@ -148,18 +133,6 @@ def _flow_prompt_csv(manifest: FlowPromptManifest) -> str:
             }
         )
     return output.getvalue()
-
-
-def _write_uivision_files(pid: str, manifest: FlowPromptManifest) -> tuple[Path, list[Path]]:
-    directory = _uivision_dir(pid)
-    csv_path = directory / "flow_prompts.csv"
-    csv_path.write_text(_flow_prompt_csv(manifest), encoding="utf-8")
-    prompt_paths: list[Path] = []
-    for entry in sorted(manifest["entries"], key=lambda item: item["sentence_idx"]):
-        prompt_path = directory / f"prompt_{entry['sentence_idx'] + 1:03d}.txt"
-        prompt_path.write_text(entry["prompt"], encoding="utf-8")
-        prompt_paths.append(prompt_path)
-    return csv_path, prompt_paths
 
 
 def _renamed_sentence_idx(filename: str) -> int | None:
@@ -263,22 +236,6 @@ def get_single_flow_prompt_text(pid: str, sentence_number: int) -> PlainTextResp
     if not prompt:
         raise HTTPException(404, f"sentence {sentence_number} has no Flow prompt.")
     return PlainTextResponse(prompt)
-
-
-@router.post("/prompts/{pid}/uivision/prepare")
-def prepare_uivision_flow_files(pid: str) -> UiVisionPrepareResponse:
-    project = _require(pid)
-    manifest = generate_flow_prompt_manifest(project)
-    csv_path, prompt_paths = _write_uivision_files(pid, manifest)
-    return cast(
-        UiVisionPrepareResponse,
-        {
-            "manifest": manifest,
-            "directory": str(csv_path.parent),
-            "csv_path": str(csv_path),
-            "prompt_paths": [str(path) for path in prompt_paths],
-        },
-    )
 
 
 @router.get("/manifest/{pid}")
@@ -389,7 +346,7 @@ def attach_renamed_flow_assets(pid: str, payload: RenamedFlowAssetAttachPayload)
             media_order=media_order,
             source_path=source_path,
             sentence_idx=sentence_idx,
-            selected_reason="flow_uivision_renamed_download",
+            selected_reason="flow_renamed_download",
         )
         attached.append(saved_name)
         used_sentence_indexes.add(sentence_idx)

@@ -19,6 +19,7 @@ from .comfyui_prompt_adapter import normalize_dual_prompt
 from .domain_detection import (
     is_ai_policy_conflict_domain,
     is_agriculture_environment_domain,
+    is_ev_battery_domain,
     is_food_trend_domain,
     is_news_explainer_domain,
     is_science_materials_domain,
@@ -194,6 +195,25 @@ FOOD_TREND_EDITORIAL_TEMPLATE: StickmanTemplate = {
     "shot_hint": "medium wide editorial food shot",
 }
 
+EV_BATTERY_EXPLAINER_TEMPLATE: StickmanTemplate = {
+    "key": "ev_battery_explainer",
+    "label": "EV Battery Explainer",
+    "positive_core": (
+        "clean flat 2d electric vehicle battery explainer diagram, "
+        "large battery cell plus simple EV silhouette plus one oversized comparison icon, "
+        "clear symbolic price and safety shapes without readable text, "
+        "minimal industrial editorial composition, restrained technology palette"
+    ),
+    "negative_extra": (
+        "text, logo, watermark, blurry, low quality, unrelated human portrait, desert scene, aircraft, "
+        "warrior, medieval scene, fantasy creature, random road scene, animal, empty landscape, "
+        "generic office, clutter, tiny icons, unreadable labels, photorealistic product render, "
+        "glossy 3d cylinder battery only, isolated battery can, macro battery closeup, metallic canister"
+    ),
+    "trigger_hint": "",
+    "shot_hint": "wide clean EV battery explainer shot",
+}
+
 EDITORIAL_SYMBOLIC_TEMPLATE: StickmanTemplate = {
     "key": "editorial_symbolic",
     "label": "Editorial Symbolic",
@@ -251,6 +271,20 @@ STYLE_PRESET_OVERRIDES: dict[str, dict[str, str]] = {
             "unreadable text, logo, watermark, clutter"
         ),
         "shot_hint": "medium wide editorial symbolic shot",
+    },
+    "stickman_business": {
+        "label_suffix": "Stickman Business",
+        "positive_core": (
+            "flat vector stickman business explainer diagram, round white stickman business characters, navy suits "
+            "and red ties, concrete business metaphor object, blank signboards and blank chart panels, thick black "
+            "outlines, muted beige gray background, simple editorial cartoon, no readable text"
+        ),
+        "negative_extra": (
+            "readable text, fake letters, logo, watermark, photorealistic, realistic human face, realistic skin, "
+            "anime, manga, 3d render, cinematic lighting, dense background, clutter, tiny labels, subtitle bar, "
+            "youtube controls"
+        ),
+        "shot_hint": "wide 16:9 flat business explainer diagram shot",
     },
 }
 
@@ -359,6 +393,61 @@ def _select_template(text: str, project: ProjectRecord, *, is_tech: bool) -> Sti
     return _base_template_for_project(project)
 
 
+def _select_business_stickman_template(text: str) -> StickmanTemplate:
+    lowered = text.lower()
+    template_map = {item["key"]: item for item in STICKMAN_TEMPLATES}
+    if any(
+        needle in lowered
+        for needle in (
+            "bottleneck",
+            "infrastructure",
+            "power",
+            "electric",
+            "grid",
+            "data center",
+            "compute limit",
+        )
+    ):
+        return template_map["infrastructure_bottleneck"]
+    if any(
+        needle in lowered
+        for needle in (
+            "compare",
+            "comparison",
+            "versus",
+            "vs",
+            "competition",
+            "competitor",
+            "better",
+            "worse",
+            "scale",
+            "balance",
+        )
+    ):
+        return template_map["scale_comparison"]
+    return template_map["machine_pipeline"]
+
+
+def _stickman_business_visual_tokens(template_key: str) -> list[str]:
+    if template_key == "infrastructure_bottleneck":
+        return [
+            "electric grid cables entering a narrow funnel bottleneck",
+            "worried round white stickman businessman in navy suit and red tie",
+            "blue AI data center with sparks and blank label panel",
+        ]
+    if template_key == "scale_comparison":
+        return [
+            "two round white stickman business characters sitting on a balance scale",
+            "small blue blocks on one side and larger glowing blue blocks on the other side",
+            "blank label areas above both sides",
+        ]
+    return [
+        "central mechanical pipeline machine with two transparent chambers",
+        "gears in one chamber and glowing network nodes in the other chamber",
+        "round white stickman businessman in navy suit and red tie with blank label plates",
+    ]
+
+
 def _template_for_visual_plan(
     project: ProjectRecord,
     text: str,
@@ -366,8 +455,12 @@ def _template_for_visual_plan(
     *,
     is_tech: bool,
 ) -> StickmanTemplate:
+    if _style_preset_name(project) == "stickman_business":
+        return _apply_style_preset(project, _select_business_stickman_template(text))
     if visual_plan_entry is not None:
         visual_mode = str(visual_plan_entry.get("visual_mode") or "").strip().lower()
+        if visual_plan_entry["domain"] == "ev_battery":
+            return EV_BATTERY_EXPLAINER_TEMPLATE
         if _style_preset_name(project) == "editorial_symbolic":
             return _apply_style_preset(project, EDITORIAL_SYMBOLIC_TEMPLATE)
         if visual_plan_entry["domain"] == "ai_policy_conflict":
@@ -386,8 +479,18 @@ def _template_for_visual_plan(
             if visual_mode == "data_diagram":
                 return _apply_style_preset(project, ESSAY_DATA_DIAGRAM_TEMPLATE)
             return _apply_style_preset(project, ESSAY_EDITORIAL_TEMPLATE)
+        if visual_plan_entry["domain"] == "generic":
+            if visual_mode == "symbolic_concept":
+                return _apply_style_preset(project, ESSAY_SYMBOLIC_TEMPLATE)
+            if visual_mode == "simple_explainer":
+                return _apply_style_preset(project, ESSAY_EXPLAINER_TEMPLATE)
+            if visual_mode == "data_diagram":
+                return _apply_style_preset(project, ESSAY_DATA_DIAGRAM_TEMPLATE)
+            return _apply_style_preset(project, ESSAY_EDITORIAL_TEMPLATE)
     if is_food_trend_domain(project, text):
         return _apply_style_preset(project, FOOD_TREND_EDITORIAL_TEMPLATE)
+    if is_ev_battery_domain(project, text):
+        return EV_BATTERY_EXPLAINER_TEMPLATE
     if _style_preset_name(project) == "editorial_symbolic" or is_ai_policy_conflict_domain(project, text):
         return _apply_style_preset(project, EDITORIAL_SYMBOLIC_TEMPLATE)
     if is_agriculture_environment_domain(project, text) or is_science_materials_domain(project, text):
@@ -422,6 +525,8 @@ def _recommended_style_preset(project: ProjectRecord, sentence: str) -> str:
         return ""
     if is_food_trend_domain(project, sentence):
         return ""
+    if is_ev_battery_domain(project, sentence):
+        return "simple_diagram"
     if (
         not is_ai_policy_conflict_domain(project, sentence)
         and not is_tech_domain(project, sentence)
@@ -451,7 +556,7 @@ def _relax_keyword_coverage_for_style_preset(
     keyword_coverage: dict[str, object],
 ) -> dict[str, object]:
     preset_name = _style_preset_name(project)
-    if preset_name not in {"k_webtoon", "simple_diagram", "editorial_symbolic"}:
+    if preset_name not in {"k_webtoon", "simple_diagram", "editorial_symbolic", "stickman_business"}:
         return keyword_coverage
     issue_codes = keyword_coverage.get("issue_codes")
     if not isinstance(issue_codes, list):
@@ -482,7 +587,10 @@ def _apply_style_preset(project: ProjectRecord, template: StickmanTemplate) -> S
         updated["label"] = f"{template['label']} {label_suffix}".strip()
     positive_core = override.get("positive_core", "").strip()
     if positive_core:
-        updated["positive_core"] = positive_core
+        if preset_name == "stickman_business":
+            updated["positive_core"] = f"{template['positive_core']}, {positive_core}"
+        else:
+            updated["positive_core"] = positive_core
     negative_extra = override.get("negative_extra", "").strip()
     if negative_extra:
         updated["negative_extra"] = negative_extra
@@ -490,6 +598,28 @@ def _apply_style_preset(project: ProjectRecord, template: StickmanTemplate) -> S
     if shot_hint:
         updated["shot_hint"] = shot_hint
     return updated
+
+
+def _sanitize_stickman_business_prompt(value: str) -> str:
+    cleaned = value
+    for token in (
+        "cinematic technology documentary still",
+        "clean interface composition",
+        "monitor glow lighting",
+        "precise explainer visual",
+        "widescreen frame",
+        "technology interface scene",
+        "clean software workspace",
+        "gpu rack cluster with glowing interconnect lines",
+        "layered model workflow diagram",
+        "35mm lens",
+        "sharp focus",
+        "natural color",
+        "detailed real-world textures",
+    ):
+        cleaned = cleaned.replace(token, "")
+    cleaned = re.sub(r"(,\s*){2,}", ", ", cleaned)
+    return " ".join(cleaned.split()).strip(" ,")
 
 
 def _fallback_tokens(*, is_tech: bool, text: str) -> list[str]:
@@ -502,6 +632,9 @@ def _fallback_tokens(*, is_tech: bool, text: str) -> list[str]:
             "structured data table flowing out of a browser window",
             "gpu rack cluster with glowing interconnect lines",
         ]
+    ev_tokens = _extract_ev_battery_visual_tokens(text)
+    if ev_tokens:
+        return ev_tokens
     lowered = compact.lower()
     if any(needle in lowered for needle in ("quantum", "finance", "investment", "portfolio", "market", "bank")):
         return [
@@ -512,6 +645,59 @@ def _fallback_tokens(*, is_tech: bool, text: str) -> list[str]:
     if "?" in compact:
         return ["confused stickman thinking with a large question mark pose"]
     return ["grounded editorial scene with one dominant real-world subject"]
+
+
+def _extract_ev_battery_visual_tokens(text: str) -> list[str]:
+    lowered = text.lower()
+    rules: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = (
+        (
+            ("가성비", "cost", "lfp"),
+            ("electric vehicle beside a large LFP battery cell", "price tag and balanced value scale"),
+        ),
+        (
+            ("ncm", "성능", "performance"),
+            ("polished NCM battery cell under a focused spotlight", "high performance gauge behind the cell"),
+        ),
+        (
+            ("비싼", "가격", "대중화", "걸림돌", "expensive", "barrier"),
+            ("electric car stopped before a tall price barrier", "large price tag blocking mass adoption"),
+        ),
+        (
+            ("중국", "화재", "안전", "저렴", "주행", "range"),
+            ("LFP battery cell with a safety shield", "short range marker and low cost coin symbol"),
+        ),
+        (
+            ("테슬라", "현대차", "글로벌", "선택", "automaker"),
+            ("global automaker silhouettes selecting an LFP battery pack", "supply chain arrows converging on one battery cell"),
+        ),
+        (
+            ("3사", "반격", "한국 배터리", "k-배터리"),
+            ("three Korean battery factory silhouettes aligned behind battery cells", "strategy arrows pushing forward"),
+        ),
+        (
+            ("한국형 lfp", "에너지 밀도", "차별화"),
+            ("Korean LFP battery cross-section with higher energy density layers", "rising energy density gauge"),
+        ),
+        (
+            ("전고체", "solid-state", "solid state", "차세대"),
+            ("solid-state battery structure in a clean research lab", "next generation battery layers glowing inside the cell"),
+        ),
+        (
+            ("기술 주권", "주권", "효율", "승패"),
+            ("battery cell protected by a technology sovereignty shield", "efficient circuit path and safety marker"),
+        ),
+        (
+            ("물량", "공세", "세계 정상", "경쟁"),
+            ("K-battery cell standing against a wave of mass-produced battery packs", "supply chain pressure arrows from the background"),
+        ),
+    )
+    tokens: list[str] = []
+    for needles, values in rules:
+        if any(needle in lowered for needle in needles):
+            tokens.extend(value for value in values if value not in tokens)
+    if not tokens and any(needle in lowered for needle in ("전기차", "ev", "배터리", "battery", "lfp", "ncm")):
+        tokens.extend(["electric vehicle beside a large battery cell", "clean battery technology explainer setting"])
+    return tokens[:4]
 
 
 def _extract_tech_visual_tokens(text: str) -> list[str]:
@@ -560,6 +746,8 @@ def _extract_generic_visual_tokens(text: str) -> list[str]:
 
 def _extract_visual_tokens(project: ProjectRecord, text: str, *, is_tech: bool) -> list[str]:
     tokens: list[str] = []
+    if is_ev_battery_domain(project, text):
+        tokens.extend(_extract_ev_battery_visual_tokens(text))
     if is_tech:
         tokens.extend(_extract_tech_visual_tokens(text))
     else:
@@ -973,7 +1161,7 @@ def _repair_positive_prompt(
 ) -> str:
     must_show = list(brief["must_show"])
     if retry_index == 1:
-        strong_prefix = ", ".join(item for item in must_show[:3] if item.strip())
+        strong_prefix = ", ".join(item for item in must_show[:5] if item.strip())
         if strong_prefix:
             return f"{strong_prefix}, {positive_prompt}"
         return positive_prompt
@@ -982,7 +1170,7 @@ def _repair_positive_prompt(
     if isinstance(primary_keywords, list):
         focus_terms.extend(item for item in primary_keywords[:3] if isinstance(item, str) and item.strip())
     if must_show:
-        focus_terms.extend(item for item in must_show[:2] if item.strip())
+        focus_terms.extend(item for item in must_show[:5] if item.strip())
     unique_focus = ", ".join(dict.fromkeys(focus_terms))
     if unique_focus:
         return f"{unique_focus}, clear visual metaphor, {positive_prompt}"
@@ -1000,12 +1188,22 @@ def _repair_quality_issues(
     negative = negative_prompt
     is_simple_diagram = _is_simple_diagram_preset_from_brief(brief)
     is_editorial_symbolic = "style_preset=editorial_symbolic" in str(brief.get("rationale", "")).lower()
+    is_stickman_business = "style_preset=stickman_business" in str(brief.get("rationale", "")).lower()
     if "MISSING_FRAMING_SLOT" in issue_codes and "medium wide shot" not in positive.lower():
         positive = f"medium wide shot, {positive}"
-    if "MISSING_CAMERA_TECHNICAL_SLOT" in issue_codes and not is_simple_diagram and not is_editorial_symbolic:
+    if (
+        "MISSING_CAMERA_TECHNICAL_SLOT" in issue_codes
+        and not is_simple_diagram
+        and not is_editorial_symbolic
+        and not is_stickman_business
+    ):
         technical_anchor = "35mm lens, sharp focus, natural color, detailed real-world textures"
         if technical_anchor.lower() not in positive.lower():
             positive = f"{positive}, {technical_anchor}"
+    if "MISSING_CAMERA_TECHNICAL_SLOT" in issue_codes and is_stickman_business:
+        business_anchor = "flat vector diagram, thick black outlines, muted beige background, blank label plates"
+        if business_anchor.lower() not in positive.lower():
+            positive = f"{positive}, {business_anchor}"
     if "MISSING_CAMERA_TECHNICAL_SLOT" in issue_codes and is_editorial_symbolic:
         editorial_anchor = "premium editorial illustration, medium wide shot, clear foreground subject, real scene anchor"
         if editorial_anchor.lower() not in positive.lower():
@@ -1082,6 +1280,15 @@ def _template_runtime_settings(template: StickmanTemplate, project: ProjectRecor
             "height": 768,
             **profile_settings,
         }
+    if template["key"] == "ev_battery_explainer":
+        return {
+            "template_id": "txt2img_sdxl_basic",
+            "lora_name": "",
+            "lora_strength": 0.0,
+            "width": 1344,
+            "height": 768,
+            **profile_settings,
+        }
     profile_settings = {
         **profile_settings,
         **micro_conditioning_values(profile=profile, width=1024, height=576),
@@ -1096,6 +1303,159 @@ def _template_runtime_settings(template: StickmanTemplate, project: ProjectRecor
     }
 
 
+_NEWS_CARICATURE_NEGATIVE = (
+    "fantasy landscape, mountain valley, waterfall, medieval robe, warrior, sword, cliff, "
+    "dark cinematic scenery, tiny distant people, abstract fashion figure, surreal symbolic scene, "
+    "photorealistic stock photo, luxury travel ad, dense infographic, readable text, logo, watermark"
+)
+
+
+def _simple_news_caricature_spec(sentence: str) -> dict[str, object] | None:
+    lowered = sentence.lower()
+    has_jensen_context = any(token in lowered for token in ("jensen", "huang", "nvidia", "젠슨", "엔비디아"))
+    has_delegation_context = any(token in sentence for token in ("사절단", "방중", "트럼프", "합류", "요청", "에어포스원", "알래스카", "베이징"))
+    if not (has_jensen_context and has_delegation_context):
+        return None
+    if any(token in sentence for token in ("에어포스원", "알래스카", "탑승", "베이징")):
+        return {
+            "key": "airport_boarding",
+            "core_meaning": "Jensen Huang boards an aircraft from Alaska toward Beijing.",
+            "must_show": ["tech CEO caricature climbing airplane stairs", "airplane", "Alaska travel cue"],
+            "positive": (
+                "simple 2d caricature airport boarding news illustration, tech CEO caricature climbing airplane stairs, "
+                "tech CEO character in black jacket, airplane with official blue stripe and no readable markings, "
+                "snowy Alaska travel cue at the airport, small Beijing direction arrow icon without text, bright clean background, "
+                "large clear subjects, friendly editorial cartoon, no readable text"
+            ),
+            "prompt_g": "simple 2d caricature airport boarding news illustration, tech CEO caricature climbing airplane stairs, airplane, Alaska travel cue",
+            "prompt_l": "bright clean background, large clear subjects, friendly editorial cartoon, no readable text",
+        }
+    if any(token in sentence for token in ("전화", "걸어")):
+        return {
+            "key": "phone_request",
+            "core_meaning": "Trump directly calls Jensen Huang and asks him to join.",
+            "must_show": ["split-screen phone call", "presidential figure", "tech CEO caricature"],
+            "positive": (
+                "simple 2d caricature split-screen phone call news illustration, presidential figure on one side "
+                "holding a phone, tech CEO caricature character in black jacket on the other side surprised and nodding, "
+                "delegation invitation document icon between them, large phone receiver, bright clean background, "
+                "large simple shapes, no readable text"
+            ),
+            "prompt_g": "simple 2d caricature split-screen phone call news illustration, presidential figure holding phone, tech CEO character surprised and nodding",
+            "prompt_l": "delegation invitation document icon, bright clean background, large simple shapes, no readable text",
+        }
+    if any(token in sentence for token in ("CNBC", "외신", "공식 확인", "동행")):
+        return {
+            "key": "official_confirmation",
+            "core_meaning": "Foreign media confirms Nvidia CEO accompanies the China trip.",
+            "must_show": ["news camera", "confirmation document", "tech CEO and presidential figure icons"],
+            "positive": (
+                "simple 2d caricature TV news confirmation illustration, news camera and reporter silhouette, "
+                "large confirmation document with check mark and no readable text, tech CEO and presidential figure icons, "
+                "airplane and China route cue in background, bright clean newsroom cartoon, no readable text"
+            ),
+            "prompt_g": "simple 2d caricature TV news confirmation illustration, news camera, reporter silhouette, large check mark document",
+            "prompt_l": "confirmation document, tech CEO and presidential figure icons, airplane and China route cue, bright clean newsroom cartoon, no readable text",
+        }
+    return {
+        "key": "delegation_inclusion",
+        "core_meaning": "Jensen Huang joins a China business delegation after a Trump request.",
+        "must_show": ["tech CEO caricature", "formal delegation line", "presidential request gesture"],
+            "positive": (
+            "simple 2d caricature news illustration, middle-aged tech CEO caricature character in black leather jacket, "
+            "green chip company badge without readable logo, standing beside a formal business delegation line, "
+            "large handshake request gesture from presidential figure silhouette, China travel cue with red flag color accent, "
+            "bright clean background, large readable shapes, no readable text"
+        ),
+        "prompt_g": "simple 2d caricature news illustration, tech CEO caricature character in black leather jacket, formal business delegation line",
+        "prompt_l": "presidential request gesture, China travel cue, bright clean background, large readable shapes, no readable text",
+    }
+
+
+def _simple_news_caricature_prompt(
+    project: ProjectRecord,
+    sentence_idx: int,
+    sentence: str,
+) -> dict[str, object] | None:
+    spec = _simple_news_caricature_spec(sentence)
+    if spec is None:
+        return None
+    visual_brief: VisualBrief = {
+        "mode": "keyword_image",
+        "main_subject": "simple 2d news caricature scene",
+        "action": str(spec["core_meaning"]),
+        "primary_prop": cast(list[str], spec["must_show"])[0],
+        "secondary_prop": ", ".join(cast(list[str], spec["must_show"])[1:]),
+        "scene": "bright clean editorial cartoon background",
+        "emotion": "clear news explanation",
+        "must_show": cast(list[str], spec["must_show"]),
+        "avoid": _NEWS_CARICATURE_NEGATIVE.split(", "),
+        "rationale": f"template=news_caricature; source=deterministic; scene={spec['key']}",
+        "domain": "tech",
+        "core_meaning": str(spec["core_meaning"]),
+        "primary_keywords": cast(list[str], spec["must_show"]),
+        "secondary_keywords": ["Jensen Huang", "Nvidia", "Trump", "China delegation"],
+        "visual_mode": "simple_explainer",
+        "semantic_anchor_type": "generic",
+        "semantic_anchor_tokens": cast(list[str], spec["must_show"]),
+        "sub_strategy": "political_business_delegation",
+        "template_hint": "txt2img_sdxl_basic",
+        "lora_policy": "none",
+    }
+    positive_prompt = str(spec["positive"])
+    negative_prompt = _NEWS_CARICATURE_NEGATIVE
+    dual_prompt = normalize_dual_prompt(
+        {
+            "prompt_g": str(spec["prompt_g"]),
+            "prompt_l": str(spec["prompt_l"]),
+            "combined": positive_prompt,
+        }
+    )
+    keyword_coverage = build_keyword_coverage(
+        positive_prompt=positive_prompt,
+        negative_prompt=negative_prompt,
+        brief=visual_brief,
+    )
+    profile = profile_for_quality_mode(normalize_quality_mode(project["autopilot_options"].get("quality_mode")))
+    return {
+        "sentence_idx": sentence_idx,
+        "sentence": sentence,
+        "sentence_hash": sentence_hash(sentence),
+        "positive_prompt": positive_prompt,
+        "prompt_g": dual_prompt["prompt_g"],
+        "prompt_l": dual_prompt["prompt_l"],
+        "negative_prompt": negative_prompt,
+        "style_hint": "simple 2d caricature news illustration, bright clean background, large readable shapes",
+        "visual_source_mode": project["visual_source_mode"],
+        "visual_brief": visual_brief,
+        "visual_plan": visual_brief,
+        "visual_tokens": cast(list[str], spec["must_show"]),
+        "missing_must_show": [],
+        "keyword_coverage": keyword_coverage,
+        "retry_count": 0,
+        "template_key": "news_caricature",
+        "reference_names": [],
+        "requested_style_preset": _style_preset_name(project),
+        "recommended_style_preset": "news_caricature",
+        "template_id": "txt2img_sdxl_basic",
+        "lora_name": "",
+        "lora_strength": 0.0,
+        "width": 1344,
+        "height": 768,
+        "quality_mode": normalize_quality_mode(project["autopilot_options"].get("quality_mode")),
+        "generation_profile": profile["profile_name"],
+        "sampler_name": profile["sampler_name"],
+        "scheduler": profile["scheduler"],
+        "steps": profile["steps"],
+        "cfg": profile["cfg"],
+        "denoise": profile["denoise"],
+        "request_timeout_sec": profile["request_timeout_sec"],
+        "seed_policy": profile["seed_policy"],
+        "score_version": profile["score_version"],
+        **micro_conditioning_values(profile=profile, width=1344, height=768),
+    }
+
+
 def suggest_image_prompt(
     project: ProjectRecord,
     sentence_idx: int,
@@ -1105,6 +1465,9 @@ def suggest_image_prompt(
     sentence = _sentence_for_index(project, sentence_idx)
     if not sentence:
         raise ValueError("No sentence is available for image prompt suggestion.")
+    simple_news_prompt = _simple_news_caricature_prompt(project, sentence_idx, sentence)
+    if simple_news_prompt is not None:
+        return simple_news_prompt
 
     if visual_plan_entry is None:
         visual_plan_entry = _visual_plan_for_sentence(project, sentence_idx)
@@ -1119,7 +1482,10 @@ def suggest_image_prompt(
         prompt_visual_plan_entry = None
     is_tech = is_tech_domain(project, sentence)
     template = _template_for_visual_plan(project, sentence, prompt_visual_plan_entry, is_tech=is_tech)
-    visual_tokens = _extract_visual_tokens(project, sentence, is_tech=is_tech)
+    if _style_preset_name(project) == "stickman_business":
+        visual_tokens = _stickman_business_visual_tokens(template["key"])
+    else:
+        visual_tokens = _extract_visual_tokens(project, sentence, is_tech=is_tech)
     if prompt_visual_plan_entry is not None:
         domain = prompt_visual_plan_entry["domain"]
     elif is_agriculture_environment_domain(project, sentence):
@@ -1128,6 +1494,10 @@ def suggest_image_prompt(
         domain = "science_materials"
     elif is_food_trend_domain(project, sentence):
         domain = "food_trend"
+    elif is_ev_battery_domain(project, sentence):
+        domain = "ev_battery"
+    elif _style_preset_name(project) == "stickman_business":
+        domain = "generic"
     else:
         domain = "tech" if is_tech else "generic"
     visual_brief = (
@@ -1163,6 +1533,17 @@ def suggest_image_prompt(
     if _is_simple_diagram_preset_from_brief(visual_brief) and visual_brief.get("domain") == "ai_policy_conflict":
         dual_prompt = _compile_simple_policy_prompt(visual_brief)
     positive_prompt = dual_prompt["combined"]
+    if _style_preset_name(project) == "stickman_business":
+        trigger_hint = template.get("trigger_hint", "").strip()
+        if trigger_hint and trigger_hint not in positive_prompt:
+            positive_prompt = f"{trigger_hint}, {positive_prompt}"
+            dual_prompt = normalize_dual_prompt(
+                {
+                    "prompt_g": f"{trigger_hint}, {dual_prompt['prompt_g']}".strip(", "),
+                    "prompt_l": dual_prompt["prompt_l"],
+                    "combined": positive_prompt,
+                }
+            )
     negative_prompt = compile_negative_prompt(
         template_negative=template["negative_extra"],
         brief=visual_brief,
@@ -1219,6 +1600,15 @@ def suggest_image_prompt(
     runtime_settings = _template_runtime_settings(template, project)
     requested_style_preset = _style_preset_name(project)
     recommended_style_preset = _recommended_style_preset(project, sentence)
+    if requested_style_preset == "stickman_business":
+        positive_prompt = _sanitize_stickman_business_prompt(positive_prompt)
+        dual_prompt = normalize_dual_prompt(
+            {
+                "prompt_g": _sanitize_stickman_business_prompt(dual_prompt["prompt_g"]),
+                "prompt_l": _sanitize_stickman_business_prompt(dual_prompt["prompt_l"]),
+                "combined": positive_prompt,
+            }
+        )
 
     return {
         "sentence_idx": sentence_idx,
@@ -1250,12 +1640,16 @@ def suggest_image_prompt_batch(
     start_idx: int,
     count: int,
 ) -> list[dict[str, object]]:
-    safe_count = max(1, min(count, 48))
+    sentence_count = len(project["sentences"])
+    safe_start = max(0, start_idx)
+    if safe_start >= sentence_count:
+        return []
+    safe_count = max(1, min(count, 48, sentence_count - safe_start))
     plan_by_idx: dict[int, VisualPlanEntry] = {}
     visual_plan = build_scene_visual_plan(project)
     plan_by_idx = {item["sentence_idx"]: item for item in visual_plan}
     prompts: list[dict[str, object]] = []
-    for sentence_idx in range(max(0, start_idx), max(0, start_idx) + safe_count):
+    for sentence_idx in range(safe_start, safe_start + safe_count):
         try:
             prompts.append(
                 suggest_image_prompt(

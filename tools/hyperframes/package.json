@@ -1,0 +1,17 @@
+{
+  "private": true,
+  "name": "newauto-hyperframes-tools",
+  "version": "0.1.0",
+  "devDependencies": {
+    "hyperframes": "0.6.12"
+  },
+  "scripts": {
+    "doctor": "hyperframes doctor",
+    "lint": "hyperframes lint --json",
+    "inspect": "hyperframes inspect --json --samples 15",
+    "render:webm": "hyperframes render --format webm --output overlay.webm"
+  },
+  "dependencies": {
+    "tube-factory-frontend": "file:../.."
+  }
+}
