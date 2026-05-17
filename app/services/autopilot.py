@@ -8,9 +8,8 @@ from typing import cast
 from fastapi import HTTPException
 
 from .. import db
-from ..services.image_prompting import save_image_prompt_manifest, suggest_image_prompt_batch
+from ..services.image_generation_disabled import IMAGE_GEN_DISABLED_CODE, IMAGE_GEN_DISABLED_MESSAGE
 from ..services.preflight import build_preflight_report
-from ..services.prompt_quality import build_prompt_quality_report, save_prompt_quality_report
 from ..services.render_plan import build_render_plan
 from ..services.render_report import load_render_report
 from ..services.scene_plan import build_scene_plan
@@ -22,7 +21,7 @@ from ..tts_profiles import normalize_tts_profile
 from ..services import gpu_guard
 from ..types import PreflightCheck, RenderFormat, TtsProfile
 from ..services.script_compile import compile_script, flatten_regional_sentences
-from ..config import COMFYUI_INSTALL_DIR, SCRIPT_LLM_MODEL
+from ..config import SCRIPT_LLM_MODEL
 from ..types import (
     AutopilotDebugSnapshot,
     AutopilotEvent,
@@ -122,7 +121,7 @@ def _coerce_regenerate_mode(value: object) -> SourceRegenerateMode:
 
 
 def _coerce_visual_source_mode(value: object) -> VisualSourceMode:
-    if value in {"upload_only", "hybrid", "comfyui_auto", "flow_assisted", "flow_auto", "flow_then_comfyui_fallback"}:
+    if value in {"upload_only", "hybrid", "comfyui_auto"}:
         return cast(VisualSourceMode, value)
     return "comfyui_auto"
 
@@ -619,89 +618,7 @@ def _strip_stickman_trigger_terms(value: str) -> str:
 
 
 def _build_image_batch_items(project: ProjectRecord, options: AutopilotOptions) -> list[dict[str, object]]:
-    count = _resolve_image_count(options, len(project["sentences"]))
-    prompts = suggest_image_prompt_batch(project, start_idx=0, count=count)
-    stickfigures_lora_name = _find_stickfigures_lora_name()
-    items: list[dict[str, object]] = []
-    quality_mode = options.get("quality_mode", "fast")
-    for offset, prompt in enumerate(prompts):
-        raw_sentence_idx = prompt.get("sentence_idx", 0)
-        if isinstance(raw_sentence_idx, bool):
-            sentence_idx = int(raw_sentence_idx)
-        elif isinstance(raw_sentence_idx, int):
-            sentence_idx = raw_sentence_idx
-        elif isinstance(raw_sentence_idx, float):
-            sentence_idx = int(raw_sentence_idx)
-        elif isinstance(raw_sentence_idx, str):
-            try:
-                sentence_idx = int(raw_sentence_idx)
-            except ValueError:
-                sentence_idx = 0
-        else:
-            sentence_idx = 0
-        positive_prompt = str(prompt.get("positive_prompt", "")).strip()
-        prompt_g = str(prompt.get("prompt_g", "")).strip()
-        prompt_l = str(prompt.get("prompt_l", "")).strip()
-        negative_prompt = str(prompt.get("negative_prompt", "")).strip()
-        if not positive_prompt:
-            continue
-        prompt_template_id = str(prompt.get("template_id", "")).strip() or "txt2img_sdxl_basic"
-        prompt_lora_name = str(prompt.get("lora_name", "")).strip()
-        stickman_blocked = _stickman_lora_blocked_for_prompt(prompt)
-        if prompt_template_id == "txt2img_sdxl_stickman_lora" and stickman_blocked:
-            prompt_template_id = "txt2img_sdxl_basic"
-            prompt_lora_name = ""
-            positive_prompt = _strip_stickman_trigger_terms(positive_prompt)
-            prompt_g = _strip_stickman_trigger_terms(prompt_g)
-            prompt_l = _strip_stickman_trigger_terms(prompt_l)
-        if prompt_template_id == "txt2img_sdxl_stickman_lora" and not prompt_lora_name:
-            prompt_lora_name = stickfigures_lora_name
-        prompt_lora_strength = _float_from_object(
-            prompt.get("lora_strength", DEFAULT_STICKMAN_LORA_STRENGTH),
-            DEFAULT_STICKMAN_LORA_STRENGTH,
-        )
-        if prompt_template_id == "txt2img_sdxl_basic":
-            prompt_lora_name = ""
-            prompt_lora_strength = 0.0
-        candidate_total = _candidate_total_for_prompt(prompt, quality_mode)
-        width = _int_from_object(prompt.get("width", 1024), 1024)
-        height = _int_from_object(prompt.get("height", 576), 576)
-        for candidate_index in range(candidate_total):
-            items.append(
-                {
-                    "template_id": prompt_template_id,
-                    "checkpoint": DEFAULT_IMAGE_CHECKPOINT,
-                    "positive_prompt": positive_prompt,
-                    "prompt_g": prompt_g,
-                    "prompt_l": prompt_l,
-                    "negative_prompt": negative_prompt,
-                    "width": width,
-                    "height": height,
-                    "steps": prompt.get("steps"),
-                    "cfg": prompt.get("cfg"),
-                    "sampler_name": prompt.get("sampler_name"),
-                    "scheduler": prompt.get("scheduler"),
-                    "denoise": prompt.get("denoise"),
-                    "generation_profile": prompt.get("generation_profile"),
-                    "score_version": prompt.get("score_version"),
-                    "quality_mode": prompt.get("quality_mode", quality_mode),
-                    "request_timeout_sec": prompt.get("request_timeout_sec"),
-                    "seed": 1 + offset * 10 + candidate_index,
-                    "filename_prefix": f"autopilot_scene_{sentence_idx:03d}",
-                    "client_id": "autopilot",
-                    "sentence_idx": sentence_idx,
-                    "prompt": positive_prompt,
-                    "visual_brief": prompt.get("visual_brief"),
-                    "visual_plan": prompt.get("visual_plan"),
-                    "visual_tokens": prompt.get("visual_tokens"),
-                    "sentence_hash": str(prompt.get("sentence_hash", "")),
-                    "lora_name": prompt_lora_name,
-                    "lora_strength": prompt_lora_strength,
-                    "candidate_index": candidate_index + 1,
-                    "candidate_total": candidate_total,
-                }
-            )
-    return items
+    return []
 
 
 def _wait_for_state(
@@ -1118,66 +1035,25 @@ def run_autopilot_job(pid: str) -> None:
         )
 
         if options["visual_source_mode"] in {"comfyui_auto", "hybrid"}:
-            batch_items = _build_image_batch_items(project, options)
-            if not batch_items:
-                raise RuntimeError("No image prompts were available for autopilot image generation.")
-            prompt_suggestions = suggest_image_prompt_batch(
-                project,
-                start_idx=0,
-                count=len(batch_items),
-            )
-            manifest_path = save_image_prompt_manifest(
-                db.project_dir(pid) / "image_prompts_manifest.json",
-                project=project,
-                source="autopilot",
-                prompts=prompt_suggestions,
-            )
-            prompt_quality_report = build_prompt_quality_report(prompt_suggestions)
-            prompt_quality_report_path = save_prompt_quality_report(
-                db.project_dir(pid) / "prompt_quality_report.json",
-                prompt_quality_report,
-            )
-            body_image_options = dict(project["body_image_options"])
-            body_image_options.update(
-                {
-                    "batch_items": batch_items,
-                    "auto_build_plans_after_image": True,
-                    "image_prompts_manifest_path": str(manifest_path),
-                    "prompt_quality_report_path": str(prompt_quality_report_path),
-                    "quality_mode": options.get("quality_mode", "fast"),
-                }
-            )
             db.update_project(
                 pid,
-                body_image_state="queued",
+                body_image_state="error",
                 body_image_progress=0,
-                body_image_error="",
-                body_image_phase="queued",
-                body_image_last_log=f"Queued {len(batch_items)} ComfyUI image jobs.",
+                body_image_error=IMAGE_GEN_DISABLED_CODE,
+                body_image_phase="disabled",
+                body_image_last_log=IMAGE_GEN_DISABLED_MESSAGE,
                 body_image_job_id="",
                 body_image_started_at="",
                 body_image_heartbeat_at="",
-                body_image_options=body_image_options,
             )
-            project = _require_project(pid)
-            project = _update_runtime(
+            _pause_with_failure(
                 pid,
                 project=project,
-                phase="image_enqueue",
-                progress=55,
-                last_log=f"Queued {len(batch_items)} image jobs.",
-                debug_summary="Waiting for image worker.",
-                event="phase_start",
+                error_code=IMAGE_GEN_DISABLED_CODE,
+                message=IMAGE_GEN_DISABLED_MESSAGE,
+                action_hint="Upload media manually or wait for the D2 Z-Image backend.",
             )
-            project = _wait_for_state(
-                pid,
-                field="body_image_state",
-                done_value="done",
-                phase="image_wait",
-                progress=70,
-                message="Waiting for image worker to complete.",
-                state_label="Image generation",
-            )
+            return
         elif not project["media_order"]:
             _pause_with_failure(
                 pid,
