@@ -1,6 +1,7 @@
 import json
 import os
 import unittest
+from datetime import datetime, timedelta, timezone
 from typing import ClassVar
 from unittest.mock import patch
 
@@ -110,6 +111,7 @@ class TtsPipelineTests(unittest.TestCase):
         manifest_path = db.project_dir(project_id) / "tts" / "tts_run_manifest.json"
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
         self.assertEqual(manifest["voice_preset"], "male-deep-calm")
+        self.assertEqual(manifest["tts_profile"]["seed_mode"], "per_sentence")
         self.assertEqual(len(manifest["sentences"]), 2)
         seed = project["tts_profile"]["seed"]
         self.assertIsNotNone(seed)
@@ -119,6 +121,102 @@ class TtsPipelineTests(unittest.TestCase):
             manifest["sentences"][1]["seed"],
             seed + 1,
         )
+
+    def test_save_audio_file_removes_large_dc_offset_before_writing(self) -> None:
+        with patch("soundfile.write") as write_mock:
+            tts.save_audio_file([0.45, 0.5, 0.55], db.PROJECTS_DIR / "dc-test.wav")
+
+        written = write_mock.call_args.args[1]
+        self.assertAlmostEqual(float(sum(written)) / len(written), 0.0, places=5)
+        self.assertLessEqual(max(abs(float(value)) for value in written), 0.98)
+
+    def test_run_tts_job_keeps_same_seed_in_fixed_mode(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            script="Sentence one. Sentence two.",
+            sentences=["Sentence one.", "Sentence two."],
+            voice_preset="male-deep-calm",
+            tts_profile={"seed_mode": "fixed", "seed": 321},
+            tts_state="running",
+            tts_progress=0,
+        )
+        fake_model = FakeOmniVoiceModel()
+
+        with patch("app.services.tts._get_model", return_value=fake_model), patch(
+            "app.services.tts._apply_seed"
+        ), patch("soundfile.write"):
+            tts.run_tts_job(project_id)
+
+        manifest_path = db.project_dir(project_id) / "tts" / "tts_run_manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["tts_profile"]["seed_mode"], "fixed")
+        self.assertEqual(manifest["sentences"][0]["seed"], 321)
+        self.assertEqual(manifest["sentences"][1]["seed"], 321)
+        consistency_path = db.project_dir(project_id) / "tts" / "tts_consistency_report.json"
+        consistency = json.loads(consistency_path.read_text(encoding="utf-8"))
+        self.assertTrue(consistency["metadata_consistent"])
+        self.assertFalse(consistency["audio_consistency_checked"])
+        self.assertIn("max_estimated_pitch_relative_drift", consistency)
+
+    def test_run_tts_job_removes_latin_alias_after_korean_text(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            script="placeholder",
+            sentences=[
+                "젠슨 황(Jensen Huang) 엔비디아(Nvidia) CEO가 합류했다.",
+                "CNBC 등 외신은 공식 확인했다.",
+            ],
+            voice_preset="male-deep-calm",
+            tts_state="running",
+            tts_progress=0,
+        )
+        fake_model = FakeOmniVoiceModel()
+
+        with patch("app.services.tts._get_model", return_value=fake_model), patch(
+            "app.services.tts._apply_seed"
+        ), patch("soundfile.write"):
+            tts.run_tts_job(project_id)
+
+        self.assertEqual(
+            fake_model.seen,
+            ["젠슨 황 엔비디아 CEO가 합류했다.", "CNBC 등 외신은 공식 확인했다."],
+        )
+        timings_path = db.project_dir(project_id) / "tts" / "timings.json"
+        timings = json.loads(timings_path.read_text(encoding="utf-8"))
+        self.assertEqual(timings[0]["text"], "젠슨 황 엔비디아 CEO가 합류했다.")
+
+    def test_run_tts_job_full_passage_synthesizes_once_and_splits(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            script="Sentence one. Sentence two.",
+            sentences=["Sentence one.", "Sentence two."],
+            voice_preset="male-deep-calm",
+            tts_profile={"synthesis_mode": "full_passage", "seed_mode": "fixed", "seed": 321},
+            tts_state="running",
+            tts_progress=0,
+        )
+        fake_model = FakeOmniVoiceModel()
+
+        with patch("app.services.tts._get_model", return_value=fake_model), patch(
+            "app.services.tts._apply_seed"
+        ) as seed_mock, patch("soundfile.write") as write_mock:
+            tts.run_tts_job(project_id)
+
+        self.assertEqual(fake_model.seen, ["Sentence one.\nSentence two."])
+        self.assertEqual(seed_mock.call_count, 1)
+        self.assertEqual(write_mock.call_count, 2)
+        manifest_path = db.project_dir(project_id) / "tts" / "tts_run_manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual(manifest["tts_profile"]["synthesis_mode"], "full_passage")
+        self.assertEqual(manifest["sentences"][0]["seed"], 321)
+        self.assertEqual(manifest["sentences"][1]["seed"], 321)
+        timings_path = db.project_dir(project_id) / "tts" / "timings.json"
+        timings = json.loads(timings_path.read_text(encoding="utf-8"))
+        self.assertEqual(len(timings), 2)
+        self.assertEqual(timings[0]["end"], timings[1]["start"])
 
     def test_run_tts_job_clears_stale_outputs_after_empty_audio_error(self) -> None:
         project_id = self.create_project()
@@ -148,6 +246,78 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertFalse((output_dir / "0000.wav").exists())
         self.assertFalse((output_dir / "timings.json").exists())
         self.assertFalse((output_dir / "tts_run_manifest.json").exists())
+
+    def test_run_tts_job_applies_bible_region_speed_override(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            script="placeholder",
+            compiled_script="Intro sentence.\nBible sentence.",
+            sentences=["Intro sentence.", "Bible sentence."],
+            regional_sentences=[
+                {"idx": 0, "text": "Intro sentence.", "region": "intro"},
+                {"idx": 1, "text": "Bible sentence.", "region": "bible"},
+            ],
+            voice_preset="male-deep-calm",
+            tts_state="running",
+            tts_progress=0,
+        )
+        fake_model = FakeOmniVoiceModel()
+
+        with patch("app.services.tts._get_model", return_value=fake_model), patch(
+            "app.services.tts._apply_seed"
+        ), patch("soundfile.write"):
+            tts.run_tts_job(project_id)
+
+        self.assertEqual(fake_model.seen, ["Intro sentence.", "Bible sentence."])
+        self.assertEqual(fake_model.kwargs_seen[1]["speed"], 0.90)
+        timings_path = db.project_dir(project_id) / "tts" / "timings.json"
+        timings = json.loads(timings_path.read_text(encoding="utf-8"))
+        self.assertEqual([entry["region"] for entry in timings], ["intro", "bible"])
+        manifest_path = db.project_dir(project_id) / "tts" / "tts_run_manifest.json"
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        self.assertEqual([entry["region"] for entry in manifest["sentences"]], ["intro", "bible"])
+        self.assertEqual(manifest["sentences"][1]["effective_profile"]["speed"], 0.90)
+
+    def test_run_tts_job_cleans_generation_memory_every_five_sentences(self) -> None:
+        project_id = self.create_project()
+        sentences = [f"Sentence {index}." for index in range(10)]
+        db.update_project(
+            project_id,
+            script=" ".join(sentences),
+            sentences=sentences,
+            voice_preset="male-deep-calm",
+            tts_state="running",
+            tts_progress=0,
+        )
+        fake_model = FakeOmniVoiceModel()
+
+        with patch("app.services.tts._get_model", return_value=fake_model), patch(
+            "app.services.tts._apply_seed"
+        ), patch("app.services.tts._cleanup_generation_memory") as cleanup_mock, patch("soundfile.write"):
+            tts.run_tts_job(project_id)
+
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["tts_state"], "done")
+        self.assertEqual(cleanup_mock.call_count, 2)
+
+    def test_trim_trailing_silence_keeps_short_tail_and_trims_long_tail(self) -> None:
+        kept = tts._trim_trailing_silence([0.0, 0.2, -0.2, 0.0])
+        trimmed = tts._trim_trailing_silence([0.0, 0.3, -0.3] + ([0.0] * 4000))
+
+        self.assertEqual(len(kept), 4)
+        self.assertLess(len(trimmed), 4003)
+        self.assertGreater(len(trimmed), 3)
+
+    def test_unload_model_clears_cached_model(self) -> None:
+        fake_model = FakeOmniVoiceModel()
+        tts._model = fake_model
+
+        tts.unload_model()
+
+        self.assertIsNone(tts._model)
 
     def test_start_tts_route_persists_profile_payload(self) -> None:
         project_id = self.create_project()
@@ -187,6 +357,81 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertEqual(project["tts_profile"]["speed"], 1.05)
         self.assertEqual(project["tts_profile"]["num_step"], 42)
         self.assertIsInstance(project["tts_profile"]["seed"], int)
+        self.assertEqual(project["tts_profile"]["seed_mode"], "per_sentence")
+        self.assertEqual(project["tts_state"], "queued")
+        self.assertEqual(project["tts_progress"], 0)
+        self.assertEqual(project["tts_error"], "")
+
+    def test_start_tts_route_persists_fixed_seed_mode(self) -> None:
+        project_id = self.create_project()
+        save_response = self.client.put(
+            f"/api/projects/{project_id}/script",
+            data={
+                "title": "tts fixed seed mode",
+                "script": "First sentence. Second sentence.",
+            },
+        )
+        self.assertEqual(save_response.status_code, 200)
+
+        with patch("app.services.tts.run_tts_job"):
+            response = self.client.post(
+                f"/api/projects/{project_id}/tts",
+                json={
+                    "voice_preset": "female-bright-clear",
+                    "tts_profile": {
+                        "seed_mode": "fixed",
+                        "seed": 777,
+                    },
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["tts_profile"]["seed_mode"], "fixed")
+        self.assertEqual(project["tts_profile"]["seed"], 777)
+
+    def test_claim_next_queued_tts_sets_running_metadata(self) -> None:
+        project_id = self.create_project()
+        db.update_project(project_id, tts_state="queued", tts_progress=0)
+
+        claimed = db.claim_next_queued_tts()
+
+        self.assertEqual(claimed, project_id)
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["tts_state"], "running")
+        self.assertNotEqual(project["tts_job_id"], "")
+        self.assertNotEqual(project["tts_started_at"], "")
+        self.assertNotEqual(project["tts_heartbeat_at"], "")
+
+    def test_recover_stale_tts_jobs_marks_error_and_clears_metadata(self) -> None:
+        project_id = self.create_project()
+        stale_time = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat(timespec="seconds")
+        db.update_project(
+            project_id,
+            tts_state="running",
+            tts_progress=72,
+            tts_error="",
+            tts_job_id="ttsjob123",
+            tts_started_at=stale_time,
+            tts_heartbeat_at=stale_time,
+        )
+
+        recovered = db.recover_stale_tts_jobs(stale_after_sec=60, max_runtime_sec=120)
+
+        self.assertEqual(recovered, 1)
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["tts_state"], "error")
+        self.assertEqual(project["tts_progress"], 0)
+        self.assertEqual(project["tts_job_id"], "")
+        self.assertEqual(project["tts_started_at"], "")
+        self.assertEqual(project["tts_heartbeat_at"], "")
+        self.assertIn("heartbeat expired", project["tts_error"])
 
     def test_tts_preset_catalog_route_exposes_aliases(self) -> None:
         response = self.client.get("/api/tts/presets")
@@ -255,6 +500,42 @@ class TtsPipelineTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("Unsupported instruct items", response.text)
+
+    def test_tts_preview_route_returns_409_when_gpu_is_busy(self) -> None:
+        project_id = self.create_project()
+        with patch(
+            "app.services.tts.synthesize_preview_with_profile",
+            side_effect=RuntimeError("GPU is busy with source-draft:test"),
+        ):
+            response = self.client.post(
+                f"/api/projects/{project_id}/tts/preview",
+                json={"voice_preset": "male-deep-calm", "sample_text": "test"},
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("GPU is busy", response.text)
+
+    def test_run_tts_job_marks_error_when_gpu_is_busy(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            script="placeholder",
+            sentences=["첫 문장입니다."],
+            voice_preset="male-deep-calm",
+            tts_state="running",
+            tts_progress=0,
+        )
+
+        with patch(
+            "app.services.tts._acquire_tts_gpu",
+            side_effect=RuntimeError("GPU is busy with source-draft:test"),
+        ):
+            tts.run_tts_job(project_id)
+
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["tts_state"], "error")
 
     def test_start_tts_reuses_preview_lock_seed(self) -> None:
         project_id = self.create_project()
