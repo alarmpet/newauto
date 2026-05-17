@@ -4,10 +4,12 @@ from app.services.image_prompt import Z_IMAGE_DEFAULT_NEGATIVE_PROMPT, build_z_i
 
 
 class ZImagePromptTests(unittest.TestCase):
-    def test_keeps_korean_sentence_verbatim(self) -> None:
+    def test_keeps_korean_sentence_out_of_render_prompt(self) -> None:
         sentence = "젠슨 황이 트럼프 대통령 요청으로 방중 경제사절단에 합류했다."
         prompt = build_z_image_prompt(sentence)
-        self.assertIn(sentence, prompt.positive)
+        self.assertNotIn(sentence, prompt.positive)
+        self.assertIn("private jet", prompt.positive)
+        self.assertIn("No written words", prompt.positive)
         self.assertEqual(prompt.negative, Z_IMAGE_DEFAULT_NEGATIVE_PROMPT)
 
     def test_adds_visual_brief_hints_without_translation(self) -> None:

@@ -9,7 +9,8 @@ Z_IMAGE_DEFAULT_NEGATIVE_PROMPT = (
     "compression artifacts, oversharpened, haloing, ringing, artifact, watermark, signature, text, "
     "logo, username, caption, frame, border, edge noise, vignette, lens dirt, deformed, disfigured, "
     "bad anatomy, extra limbs, mutated hands, poorly drawn hands, poorly drawn face, ugly, disgusting, "
-    "mutated, duplicate, cropped, out of frame, off-center"
+    "mutated, duplicate, cropped, out of frame, off-center, aerial map, satellite map, city map, top-down map, "
+    "road map, labels, captions, Korean letters, Hangul text, gibberish text, broken typography"
 )
 
 
@@ -21,6 +22,32 @@ class ImagePrompt:
 
 def _clean_text(value: str) -> str:
     return " ".join(value.strip().split())
+
+
+def _scene_prompt_from_sentence(sentence: str) -> str:
+    lowered = sentence.lower()
+    if any(token in sentence for token in ("젠슨", "엔비디아", "트럼프", "방중", "경제사절단")):
+        return (
+            "a white round-headed technology CEO character in a navy suit and red tie standing beside a simple private jet icon "
+            "and small boarding stairs on a plain beige floor, a president figure calling on a phone from the side, AI semiconductor chip icon, "
+            "small United States flag icon, small China flag icon, business delegation folder"
+        )
+    if any(token in lowered for token in ("ai", "semiconductor", "chip", "nvidia")) or any(
+        token in sentence for token in ("반도체", "인공지능", "데이터센터")
+    ):
+        return (
+            "a business character explaining an AI semiconductor chip, glowing network nodes, server building, "
+            "money and investment arrows, simple editorial cartoon"
+        )
+    if any(token in sentence for token in ("전력", "인프라", "데이터센터")):
+        return (
+            "a worried business character beside an AI data center connected to power lines, warning sparks, "
+            "simple infrastructure bottleneck symbol"
+        )
+    return (
+        "a white round-headed business character explaining a news event with simple symbolic props, "
+        "clear center composition"
+    )
 
 
 def build_z_image_prompt(
@@ -45,9 +72,15 @@ def build_z_image_prompt(
 
     unique_hints = list(dict.fromkeys(hints))
     hint_text = ", ".join(unique_hints[:6])
+    scene_prompt = _scene_prompt_from_sentence(clean_sentence)
     positive = (
-        f"{clean_sentence}. 한국어 문장의 의미를 직접 반영한 뉴스 해설용 일러스트, "
-        "명확한 주제, 단순하고 읽기 쉬운 구도, 자연스러운 색감, 고품질."
+        "Create a flat YouTube news explainer cartoon, simple 2D vector illustration, beige background, "
+        "thick black outlines, clean infographic composition. "
+        f"Main scene: {scene_prompt}. "
+        "Use large readable visual objects instead of written labels. "
+        "Plain beige background with minimal shadow, no realistic location, no roads, no streets, no satellite texture. "
+        "Camera view is straight-on eye-level, not top-down. "
+        "No written words, no labels, no captions, no Hangul letters, no map, no road map, no city map, no aerial view."
     )
     if hint_text:
         positive = f"{positive} 핵심 시각 요소: {hint_text}."
