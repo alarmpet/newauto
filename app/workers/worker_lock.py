@@ -1,4 +1,6 @@
 import os
+import platform
+import subprocess
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -7,9 +9,17 @@ from typing import Iterator
 def _pid_exists(pid: int) -> bool:
     if pid <= 0:
         return False
+    if platform.system().lower() == "windows":
+        result = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            check=False,
+            text=True,
+        )
+        return f'"{pid}"' in result.stdout
     try:
         os.kill(pid, 0)
-    except OSError:
+    except (OSError, SystemError):
         return False
     return True
 
