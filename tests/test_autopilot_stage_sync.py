@@ -233,7 +233,7 @@ def test_tts_stage_applies_autopilot_profile_and_queues_tts(monkeypatch):
         db.delete_project(pid)
 
 
-def test_visual_asset_stage_marks_image_error_when_generation_disabled():
+def test_visual_asset_stage_queues_z_image_generation(monkeypatch):
     db.init_db()
     project = db.create_project(title="visual-stage")
     pid = str(project["id"])
@@ -259,14 +259,39 @@ def test_visual_asset_stage_marks_image_error_when_generation_disabled():
         )
         initialize_autopilot_stage_status(pid, input_text=options["script"])
 
+        def fake_wait_for_state(project_id: str, **kwargs):
+            assert project_id == pid
+            assert kwargs["field"] == "body_image_state"
+            db.update_project(
+                pid,
+                body_image_state="done",
+                body_image_mappings=[
+                    {
+                        "sentence_idx": 0,
+                        "sentence_hash": "",
+                        "path": "generated.png",
+                        "prompt": "First sentence visual",
+                        "selected_reason": "z_image_turbo_korean",
+                    }
+                ],
+            )
+            return autopilot._update_runtime(
+                pid,
+                project=db.get_project(pid) or project,
+                phase="image_wait",
+                progress=72,
+                last_log="Image generation completed.",
+                event="wait_done",
+            )
+
+        monkeypatch.setattr(autopilot, "_wait_for_state", fake_wait_for_state)
+
         updated = autopilot._run_visual_asset_stage(pid, db.get_project(pid) or project, options)
 
-        assert updated["autopilot_state"] == "paused"
-        assert updated["body_image_state"] == "error"
-        assert updated["body_image_error"] == autopilot.IMAGE_GEN_DISABLED_CODE
+        assert updated["autopilot_state"] == "running"
+        assert updated["body_image_state"] == "done"
         image_status = updated["pipeline_manifest"]["stage_status"]["image"]
-        assert image_status["state"] == "error"
-        assert image_status["error_code"] == autopilot.IMAGE_GEN_DISABLED_CODE
+        assert image_status["state"] == "done"
     finally:
         db.delete_project(pid)
 
