@@ -13,6 +13,38 @@ from .visual_relevance import validate_generated_image_mappings, write_final_sce
 from ..types import PreflightCheck, PreflightReport, ProjectRecord
 
 
+LOCAL_RENDER_BLOCKING_CHECKS = {
+    "script",
+    "tts_state",
+    "timings",
+    "subtitle_cues",
+    "subtitle_layout",
+    "tts_manifest_text",
+    "tts_consistency",
+    "media",
+    "media_files",
+    "media_metadata",
+    "media_aspect",
+    "plan_sync",
+    "render_plan",
+    "render_plan_media",
+    "visual_mapping",
+    "visual_relevance",
+    "operator_visual_review",
+    "ffmpeg",
+    "disk_space",
+    "hyperframes_overlay",
+}
+
+
+def local_render_blockers(report: PreflightReport) -> list[PreflightCheck]:
+    return [
+        check
+        for check in report["checks"]
+        if not check["ok"] and check["key"] in LOCAL_RENDER_BLOCKING_CHECKS
+    ]
+
+
 def _check(key: str, ok: bool, message: str) -> PreflightCheck:
     return {
         "key": key,

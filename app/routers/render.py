@@ -195,6 +195,18 @@ def start_render(pid: str) -> dict[str, bool]:
     if project["render_state"] in {"queued", "running"}:
         raise HTTPException(409, "render already running")
 
+    report = preflight_svc.build_preflight_report(project)
+    blockers = preflight_svc.local_render_blockers(report)
+    if blockers:
+        raise HTTPException(
+            409,
+            {
+                "message": "render preflight has blocking failures",
+                "blocking_checks": [check["key"] for check in blockers],
+                "checks": blockers,
+            },
+        )
+
     db.update_project(
         pid,
         render_state="queued",
