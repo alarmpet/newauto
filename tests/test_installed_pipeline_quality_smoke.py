@@ -4,6 +4,7 @@ from pathlib import Path
 import pytest
 
 from scripts.smoke_installed_longform_workflow import (
+    validate_installed_smoke_result,
     verify_image_manifest,
     verify_prompt_manifest,
     verify_render_report,
@@ -59,3 +60,23 @@ def test_prompt_manifest_rejects_low_diversity(tmp_path: Path):
 
     with pytest.raises(AssertionError, match="prompt diversity"):
         verify_prompt_manifest(tmp_path, min_unique_prompt_ratio=1.0)
+
+
+def test_installed_smoke_result_requires_visual_and_tts_quality():
+    bad = {
+        "script_contains_korean": True,
+        "sentence_count": 6,
+        "visual_mapping_count": 0,
+        "render_plan_media_count": 0,
+        "tts_consistency_passed": False,
+        "blocking_preflight_checks": ["tts_consistency", "visual_relevance"],
+        "render_state": "done",
+        "output_exists": True,
+    }
+
+    issues = validate_installed_smoke_result(bad)
+
+    assert "visual_mapping_count 0 does not match sentence_count 6" in issues
+    assert "render_plan_media_count 0 does not match sentence_count 6" in issues
+    assert "tts_consistency_passed is false" in issues
+    assert "blocking preflight checks remain: tts_consistency, visual_relevance" in issues
