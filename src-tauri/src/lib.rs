@@ -66,13 +66,18 @@ fn start_sidecar(app: &tauri::App) -> Result<(Child, u16), Box<dyn std::error::E
     let data_dir = app.path().app_local_data_dir()?;
     std::fs::create_dir_all(&data_dir)?;
 
-    let mut child = Command::new(&sidecar)
+    let mut command = Command::new(&sidecar);
+    command
         .args(["--serve", "--host", "127.0.0.1", "--port", "0"])
         .env("NEWAUTO_DATA_DIR", data_dir)
-        .env("NEWAUTO_DISABLE_BACKGROUND_WORKERS", "1")
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()?;
+        .stderr(Stdio::null());
+    if std::env::var_os("NEWAUTO_STUDIO_DISABLE_BACKGROUND_WORKERS").as_deref()
+        == Some(std::ffi::OsStr::new("1"))
+    {
+        command.env("NEWAUTO_DISABLE_BACKGROUND_WORKERS", "1");
+    }
+    let mut child = command.spawn()?;
 
     let stdout = child
         .stdout
