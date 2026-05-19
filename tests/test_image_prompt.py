@@ -34,6 +34,13 @@ class ZImagePromptTests(unittest.TestCase):
         prompt = build_z_image_prompt("AI 데이터센터 전력 병목을 설명한다.", negative_prompt_override="글자 깨짐, 로고")
         self.assertEqual(prompt.negative, "글자 깨짐, 로고")
 
+    def test_adds_genesis_creation_semantics(self) -> None:
+        prompt = build_z_image_prompt("땅이 혼돈하고 공허하며 흑암이 깊음 위에 있습니다.")
+        self.assertIn("formless chaos", prompt.positive)
+        self.assertIn("vast empty void", prompt.positive)
+        self.assertIn("deep darkness", prompt.positive)
+        self.assertIn("abyssal deep waters", prompt.positive)
+
 
 if __name__ == "__main__":
     unittest.main()

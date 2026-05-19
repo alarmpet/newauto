@@ -14,6 +14,20 @@ Z_IMAGE_DEFAULT_NEGATIVE_PROMPT = (
 )
 
 
+GENESIS_VISUAL_TERMS = {
+    "혼돈": "formless chaos, swirling primordial matter",
+    "공허": "vast empty void",
+    "흑암": "deep darkness",
+    "깊음": "abyssal deep waters",
+    "빛": "first light breaking through darkness",
+    "창세": "Genesis creation prologue",
+    "성경": "ancient Korean Bible page, sacred manuscript",
+    "무": "absolute nothingness before space and time",
+    "시간": "absence of time, cosmic stillness",
+    "공간": "absence of space, endless void",
+}
+
+
 @dataclass(frozen=True)
 class ImagePrompt:
     positive: str
@@ -26,6 +40,13 @@ def _clean_text(value: str) -> str:
 
 def _scene_prompt_from_sentence(sentence: str) -> str:
     lowered = sentence.lower()
+    genesis_terms = [term for key, term in GENESIS_VISUAL_TERMS.items() if key in sentence]
+    if genesis_terms:
+        return (
+            "a reverent cinematic biblical creation scene, "
+            + ", ".join(genesis_terms[:5])
+            + ", vast cosmic darkness, symbolic primordial waters, no human characters"
+        )
     if any(token in sentence for token in ("젠슨", "엔비디아", "트럼프", "방중", "경제사절단")):
         return (
             "a white round-headed technology CEO character in a navy suit and red tie standing beside a simple private jet icon "

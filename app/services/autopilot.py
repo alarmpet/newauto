@@ -8,7 +8,6 @@ from typing import cast
 from fastapi import HTTPException
 
 from .. import db
-from ..services.image_generation_disabled import IMAGE_GEN_DISABLED_CODE, IMAGE_GEN_DISABLED_MESSAGE
 from ..services.preflight import build_preflight_report
 from ..services.render_plan import build_render_plan
 from ..services.render_report import load_render_report
@@ -911,31 +910,49 @@ def _run_tts_stage(pid: str, project: ProjectRecord) -> ProjectRecord:
 
 def _run_visual_asset_stage(pid: str, project: ProjectRecord, options: AutopilotOptions) -> ProjectRecord:
     if options["visual_source_mode"] in {"comfyui_auto", "hybrid"}:
+        image_options = dict(project["body_image_options"])
+        image_options.update(
+            {
+                "image_backend_version": "v1",
+                "aspect_ratio": "9:16" if _preferred_render_format(project) == "shorts" else "16:9",
+                "negative_prompt_override": str(image_options.get("negative_prompt_override") or ""),
+                "image_count_per_sentence": int(image_options.get("image_count_per_sentence") or 1),
+                "autopilot_visual_source_mode": options["visual_source_mode"],
+            }
+        )
         db.update_project(
             pid,
-            body_image_state="error",
+            body_image_state="queued",
             body_image_progress=0,
-            body_image_error=IMAGE_GEN_DISABLED_CODE,
-            body_image_phase="disabled",
-            body_image_last_log=IMAGE_GEN_DISABLED_MESSAGE,
+            body_image_error="",
+            body_image_phase="queued",
+            body_image_last_log="Z-Image Turbo batch image job queued by autopilot.",
+            body_image_options=image_options,
             body_image_job_id="",
             body_image_started_at="",
             body_image_heartbeat_at="",
         )
-        updated = _pause_with_failure(
+        mark_stage_running(pid, "image", input_text=f"{len(project['sentences'])} sentence(s)")
+        project = _update_runtime(
             pid,
             project=_require_project(pid),
-            error_code=IMAGE_GEN_DISABLED_CODE,
-            message=IMAGE_GEN_DISABLED_MESSAGE,
-            action_hint="Upload media manually or wait for the D2 Z-Image backend.",
+            phase="image_enqueue",
+            progress=64,
+            last_log="Queued Z-Image Turbo generation.",
+            debug_summary="Waiting for Z-Image worker.",
+            event="phase_start",
         )
-        mark_stage_error(
+        project = _wait_for_state(
             pid,
-            "image",
-            error_code=IMAGE_GEN_DISABLED_CODE,
-            recovery_hint="Upload media manually or wait for the D2 Z-Image backend.",
+            field="body_image_state",
+            done_value="done",
+            phase="image_wait",
+            progress=72,
+            message="Waiting for Z-Image worker to complete.",
+            state_label="Image generation",
         )
-        return _require_project(pid) or updated
+        mark_stage_done(pid, "image", output_text=str(project["body_image_mappings"]))
+        return _require_project(pid)
     if not project["media_order"]:
         updated = _pause_with_failure(
             pid,
