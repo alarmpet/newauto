@@ -150,6 +150,7 @@ def submit_z_image_workflow(
     aspect_ratio: str = "16:9",
     filename_prefix: str = "newauto_z_image",
     timeout_sec: int = 180,
+    seed: int = 8,
     character_descriptor: dict[str, object] | None = None,
 ) -> tuple[str, list[ComfyImageResult]]:
     workflow = load_z_image_workflow(
@@ -157,6 +158,7 @@ def submit_z_image_workflow(
         negative_prompt=negative_prompt,
         aspect_ratio=aspect_ratio,
         filename_prefix=filename_prefix,
+        seed=seed,
         character_descriptor=character_descriptor,
     )
     submission = client.submit_workflow(workflow)

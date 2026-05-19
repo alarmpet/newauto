@@ -37,6 +37,44 @@ class ZImageWorkflowTests(unittest.TestCase):
         self.assertEqual(save, "smoke")
         self.assertNotIn("199", workflow)
 
+    def test_loads_workflow_with_custom_seed(self) -> None:
+        workflow = load_z_image_workflow(
+            positive_prompt="primordial darkness",
+            negative_prompt="text",
+            seed=12345,
+        )
+
+        self.assertEqual(workflow["106"]["inputs"]["seed"], 12345)
+
+    def test_submit_accepts_legacy_worker_seed_argument(self) -> None:
+        client = ComfyUIClient()
+        captured: dict[str, object] = {}
+
+        def fake_submit(workflow: dict[str, object]) -> ComfyPromptSubmission:
+            captured["workflow"] = workflow
+            return ComfyPromptSubmission(prompt_id="pid-seed", number=1, node_errors={})
+
+        with (
+            patch.object(client, "submit_workflow", side_effect=fake_submit),
+            patch.object(client, "get_history", return_value={"pid-seed": {"outputs": {"228": {"images": [{
+                "filename": "out.png",
+                "subfolder": "",
+                "type": "output",
+            }]}}}}),
+        ):
+            prompt_id, _results = submit_z_image_workflow(
+                client,
+                positive_prompt="primordial darkness",
+                negative_prompt="text",
+                timeout_sec=1,
+                seed=77,
+            )
+
+        workflow = captured["workflow"]
+        assert isinstance(workflow, dict)
+        self.assertEqual(workflow["106"]["inputs"]["seed"], 77)
+        self.assertEqual(prompt_id, "pid-seed")
+
     def test_submits_with_korean_positive_prompt(self) -> None:
         client = ComfyUIClient()
         captured: dict[str, object] = {}
