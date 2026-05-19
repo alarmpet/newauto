@@ -161,6 +161,25 @@ textarea {
   font-size: 14px;
 }
 
+.render-blockers {
+  margin: 12px 0 16px;
+  padding: 12px;
+  border: 1px solid #fecaca;
+  border-radius: 6px;
+  background: #fff1f2;
+  color: #7f1d1d;
+}
+
+.render-blockers h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.render-blockers ul {
+  margin: 0;
+  padding-left: 20px;
+}
+
 .operator-console {
   border-color: #d8dee8;
 }

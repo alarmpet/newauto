@@ -26,6 +26,8 @@ const generateAllButton = document.querySelector("#s2-generate-all");
 const promptPreview = /** @type {HTMLTextAreaElement | null} */ (document.querySelector("#s2-prompt-preview"));
 const imageStatus = /** @type {HTMLElement | null} */ (document.querySelector("#s2-status"));
 const workflowStageCards = /** @type {HTMLElement | null} */ (document.querySelector("#workflow-stage-cards"));
+const renderBlockersPanel = /** @type {HTMLElement | null} */ (document.querySelector("#render-blockers-panel"));
+const renderBlockersList = /** @type {HTMLElement | null} */ (document.querySelector("#render-blockers-list"));
 
 /** @type {ProjectRecord | null} */
 let currentProject = null;
@@ -42,6 +44,15 @@ async function api(path, options = {}) {
   });
   if (!response.ok) {
     const text = await response.text();
+    let payload = null;
+    try {
+      payload = text ? JSON.parse(text) : null;
+    } catch {
+      payload = null;
+    }
+    if (response.status === 409 && payload) {
+      renderBlockers(payload.detail || payload);
+    }
     throw new Error(text || `HTTP ${response.status}`);
   }
   return response.json();
@@ -138,6 +149,17 @@ function renderStageCards(cards) {
     `;
     workflowStageCards.appendChild(item);
   }
+}
+
+/**
+ * @param {unknown} detail
+ */
+function renderBlockers(detail) {
+  if (!renderBlockersPanel || !renderBlockersList) return;
+  const payload = /** @type {{blocking_checks?: unknown}} */ (detail || {});
+  const checks = Array.isArray(payload.blocking_checks) ? payload.blocking_checks : [];
+  renderBlockersPanel.hidden = checks.length === 0;
+  renderBlockersList.innerHTML = checks.map((key) => `<li>${escapeHtml(key)}</li>`).join("");
 }
 
 async function refreshWorkflowStatus() {
