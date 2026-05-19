@@ -527,6 +527,37 @@ def validate_generated_image_mappings(project: ProjectRecord) -> list[VisualRele
     return issues
 
 
+def render_blocking_visual_issues(project: ProjectRecord) -> list[str]:
+    issues: list[str] = []
+    sentence_count = len(project["sentences"])
+    if sentence_count == 0:
+        return issues
+
+    mappings = project["body_image_mappings"]
+    if project["visual_source_mode"] == "upload_only":
+        media_count = len(project["media_order"])
+        if media_count < sentence_count:
+            issues.append(f"upload_only media coverage is incomplete: {media_count}/{sentence_count}")
+        if not mappings:
+            issues.append("upload_only visuals have no sentence-level semantic mapping")
+            return issues
+
+    mappings_by_idx = {mapping["sentence_idx"]: mapping for mapping in mappings}
+    for sentence_idx in range(sentence_count):
+        mapping = mappings_by_idx.get(sentence_idx)
+        if mapping is None:
+            issues.append(f"sentence {sentence_idx} has no selected image mapping")
+            continue
+        if not str(mapping.get("prompt") or "").strip():
+            issues.append(f"sentence {sentence_idx} has empty visual prompt")
+        if not str(mapping.get("path") or "").strip():
+            issues.append(f"sentence {sentence_idx} has no selected image")
+        score = mapping.get("candidate_score")
+        if isinstance(score, (int, float)) and float(score) <= 0:
+            issues.append(f"sentence {sentence_idx} has zero semantic candidate score")
+    return issues
+
+
 def build_visual_relevance_rows(project: ProjectRecord) -> list[VisualRelevanceRow]:
     if not project["sentences"]:
         return []

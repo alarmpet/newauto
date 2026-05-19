@@ -605,6 +605,26 @@ class VisualRelevanceTests(unittest.TestCase):
         issues = validate_generated_image_mappings(project)
         self.assertEqual(issues[0]["code"], "IMAGE_PROMPT_MANIFEST_MISSING")
 
+    def test_upload_only_empty_visual_selection_blocks_render_preflight(self) -> None:
+        db.update_project(
+            self.project_id,
+            script="땅이 혼돈하고 공허하며 흑암이 깊음 위에 있습니다.",
+            compiled_script="땅이 혼돈하고 공허하며 흑암이 깊음 위에 있습니다.",
+            sentences=["땅이 혼돈하고 공허하며 흑암이 깊음 위에 있습니다."],
+            media_order=["abstract.png"],
+            visual_source_mode="upload_only",
+            tts_state="done",
+        )
+        project = db.get_project(self.project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+
+        report = build_preflight_report(project)
+        failed = {check["key"]: check for check in report["checks"] if not check["ok"]}
+
+        self.assertIn("visual_relevance", failed)
+        self.assertIn("semantic", failed["visual_relevance"]["message"].lower())
+
     def test_preflight_fails_when_visual_brief_is_missing(self) -> None:
         sentence = "현재 문장"
         manifest_path = self._write_manifest(sentence, include_visual_brief=False)

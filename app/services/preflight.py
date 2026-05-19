@@ -9,7 +9,12 @@ from .hyperframes_probe import probe_hyperframes_runtime
 from .render import find_invalid_media_files, probe_media_dimensions
 from .subtitle import subtitle_display_qa
 from .text_health import looks_mojibake
-from .visual_relevance import validate_generated_image_mappings, write_final_scene_review, write_visual_mismatch_report
+from .visual_relevance import (
+    render_blocking_visual_issues,
+    validate_generated_image_mappings,
+    write_final_scene_review,
+    write_visual_mismatch_report,
+)
 from ..types import PreflightCheck, PreflightReport, ProjectRecord
 
 
@@ -283,8 +288,10 @@ def build_preflight_report(project: ProjectRecord) -> PreflightReport:
     render_plan_media_total, render_plan_media_missing = _render_plan_media_summary(project)
     visual_mapping_ok, visual_mapping_message = _visual_mapping_summary(project)
     visual_relevance_issues = validate_generated_image_mappings(project)
+    render_visual_issues = render_blocking_visual_issues(project)
     if project["body_image_options"].get("allow_visual_relevance_warnings_for_render"):
         visual_relevance_issues = []
+        render_visual_issues = []
     operator_intervention_ok, operator_intervention_message = _operator_intervention_summary(project)
     tts_consistency_ok, tts_consistency_message = _tts_consistency_summary(project)
     tts_manifest_text_ok, tts_manifest_text_message = _tts_manifest_text_summary(project)
@@ -422,9 +429,11 @@ def build_preflight_report(project: ProjectRecord) -> PreflightReport:
         ),
         _check(
             "visual_relevance",
-            not visual_relevance_issues,
+            not visual_relevance_issues and not render_visual_issues,
             "Generated image mappings match the current script."
-            if not visual_relevance_issues
+            if not visual_relevance_issues and not render_visual_issues
+            else render_visual_issues[0]
+            if render_visual_issues
             else visual_relevance_issues[0]["message"],
         ),
         _check(
