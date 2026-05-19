@@ -361,6 +361,8 @@ class ScenePlanScene(TypedDict):
     vocab_refs: NotRequired[list[str]]
     domain: NotRequired[str]
     locked: NotRequired[bool]
+    visual_source_mode: NotRequired[VisualSourceMode]
+    uploaded_media_index: NotRequired[int]
     subtitle_override: NotRequired[SubtitleStyle | None]
 
 

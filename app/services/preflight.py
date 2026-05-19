@@ -98,6 +98,24 @@ def _render_plan_media_summary(project: ProjectRecord) -> tuple[int, int]:
     return (total, missing)
 
 
+def _visual_mapping_summary(project: ProjectRecord) -> tuple[bool, str]:
+    sentence_count = len(project["sentences"])
+    if sentence_count == 0:
+        return (False, "No compiled sentences are available.")
+    if project["visual_source_mode"] == "upload_only":
+        media_count = len(project["media_order"])
+        if media_count < sentence_count:
+            return (
+                False,
+                f"Upload-only visual coverage is incomplete: {media_count}/{sentence_count} media files.",
+            )
+        return (True, "Upload-only media covers every sentence.")
+    mapping_count = len(project["body_image_mappings"])
+    if mapping_count < sentence_count:
+        return (False, f"Generated visual mappings are incomplete: {mapping_count}/{sentence_count}.")
+    return (True, "Visual mappings cover every sentence.")
+
+
 def _tts_consistency_summary(project: ProjectRecord) -> tuple[bool, str]:
     report_path = db.project_dir(project["id"]) / "tts" / "tts_consistency_report.json"
     if not report_path.exists():
@@ -263,6 +281,7 @@ def build_preflight_report(project: ProjectRecord) -> PreflightReport:
     subtitle_layout_ok, subtitle_layout_message = _subtitle_layout_summary(project)
     media_aspect_ok, media_aspect_message = _media_aspect_summary(project, media_paths)
     render_plan_media_total, render_plan_media_missing = _render_plan_media_summary(project)
+    visual_mapping_ok, visual_mapping_message = _visual_mapping_summary(project)
     visual_relevance_issues = validate_generated_image_mappings(project)
     if project["body_image_options"].get("allow_visual_relevance_warnings_for_render"):
         visual_relevance_issues = []
@@ -395,6 +414,11 @@ def build_preflight_report(project: ProjectRecord) -> PreflightReport:
             "All render-plan segments have available media."
             if render_plan_media_total == 0 or render_plan_media_missing == 0
             else f"{render_plan_media_missing} render-plan segments are missing media files.",
+        ),
+        _check(
+            "visual_mapping",
+            visual_mapping_ok,
+            visual_mapping_message,
         ),
         _check(
             "visual_relevance",

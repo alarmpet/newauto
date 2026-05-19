@@ -107,6 +107,13 @@ def build_scene_plan(project: ProjectRecord, *, render_format: RenderFormat = "l
         if mapping is not None and mapping_matches_current_sentence(project, mapping):
             prompt = mapping["prompt"]
             media_path = mapping["path"]
+        elif project["visual_source_mode"] == "upload_only" and sentence_idx < len(project["media_order"]):
+            media_path = project["media_order"][sentence_idx]
+            prompt = (
+                visual_plan_entry["core_meaning"]
+                if visual_plan_entry is not None and visual_plan_entry["core_meaning"].strip()
+                else sentence
+            )
         else:
             prompt = (
                 visual_plan_entry["core_meaning"]
@@ -146,6 +153,9 @@ def build_scene_plan(project: ProjectRecord, *, render_format: RenderFormat = "l
             "style": style,
             "media_path": media_path,
         }
+        if project["visual_source_mode"] == "upload_only":
+            scene["visual_source_mode"] = "upload_only"
+            scene["uploaded_media_index"] = sentence_idx if sentence_idx < len(project["media_order"]) else -1
         if primary_prop:
             scene["key_concept"] = primary_prop
         elif visual_plan_entry is not None and visual_plan_entry["primary_keywords"]:
