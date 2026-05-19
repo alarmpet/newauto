@@ -580,6 +580,34 @@ def save_tts_consistency_report(output_dir: Path, manifest: TtsRunManifest) -> P
     return target
 
 
+def _load_tts_consistency_report(output_dir: Path) -> dict[str, object]:
+    report_path = output_dir / "tts_consistency_report.json"
+    if not report_path.exists():
+        return {}
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _raise_if_final_tts_quality_failed(pid: str, output_dir: Path) -> None:
+    payload = _load_tts_consistency_report(output_dir)
+    if payload.get("audio_consistency_checked") is not True:
+        return
+    if payload.get("audio_consistency_passed") is True and payload.get("metadata_consistent") is True:
+        return
+    project = db.get_project(pid)
+    profile = project["tts_profile"] if project is not None else {}
+    retry_attempted = isinstance(profile, dict) and bool(profile.get("_consistency_retry_attempted"))
+    if not retry_attempted:
+        return
+    raise RuntimeError(
+        "TTS quality gate failed after retry; refusing to mark TTS done. "
+        f"recommended={payload.get('recommended_tts_mode') or 'full_passage_or_reference_voice'}"
+    )
+
+
 def sync_tts_artifacts_to_pipeline_manifest(pid: str) -> None:
     project = db.get_project(pid)
     if project is None:
@@ -827,6 +855,7 @@ def run_tts_job(pid: str) -> None:
         )
         save_word_timings(output_dir / "timings_words.json", timings)
         save_tts_consistency_report(output_dir, manifest)
+        _raise_if_final_tts_quality_failed(pid, output_dir)
         sync_tts_artifacts_to_pipeline_manifest(pid)
         db.update_project(
             pid,
