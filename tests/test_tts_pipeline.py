@@ -159,6 +159,43 @@ class TtsPipelineTests(unittest.TestCase):
         self.assertFalse(consistency["audio_consistency_checked"])
         self.assertIn("max_estimated_pitch_relative_drift", consistency)
 
+    def test_sync_tts_artifacts_records_pipeline_manifest_segments(self) -> None:
+        project_id = self.create_project()
+        db.update_project(
+            project_id,
+            compiled_script="Sentence one.",
+            sentences=["Sentence one."],
+        )
+        output_dir = db.project_dir(project_id) / "tts"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        (output_dir / "timings.json").write_text(
+            json.dumps([{"idx": 0, "text": "Sentence one.", "start": 0.0, "end": 1.25, "dur": 1.25}]),
+            encoding="utf-8",
+        )
+        (output_dir / "tts_run_manifest.json").write_text(
+            json.dumps(
+                {
+                    "voice_preset": "male-deep-calm",
+                    "tts_profile": {"seed_mode": "fixed"},
+                    "sentences": [{"idx": 0, "text": "Sentence one.", "seed": 321}],
+                }
+            ),
+            encoding="utf-8",
+        )
+
+        tts.sync_tts_artifacts_to_pipeline_manifest(project_id)
+
+        project = db.get_project(project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+        artifact = project["pipeline_manifest"]["segments"][0]["tts"]
+        self.assertIsNotNone(artifact)
+        assert artifact is not None
+        self.assertEqual(artifact["wav_path"], "tts/0000.wav")
+        self.assertEqual(artifact["duration_sec"], 1.25)
+        self.assertEqual(artifact["seed"], 321)
+        self.assertEqual(project["pipeline_manifest"]["stage_status"]["tts"]["state"], "done")
+
     def test_run_tts_job_removes_latin_alias_after_korean_text(self) -> None:
         project_id = self.create_project()
         db.update_project(

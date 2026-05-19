@@ -154,6 +154,76 @@ class VisualRelevanceTests(unittest.TestCase):
         self.assertIn("IMAGE_CANDIDATE_SCORE_LOW", issue_codes)
         self.assertIn("IMAGE_CANDIDATE_RETRY_RECOMMENDED", issue_codes)
 
+    def test_batch_gate_reports_repeated_image_hashes(self) -> None:
+        sentences = ["First scene.", "Second scene."]
+        db.update_project(
+            self.project_id,
+            visual_source_mode="comfyui_auto",
+            sentences=sentences,
+            media_order=["scene-a.png", "scene-b.png"],
+            body_image_options={},
+            body_image_mappings=[
+                {
+                    "sentence_idx": 0,
+                    "path": "scene-a.png",
+                    "prompt": "prompt",
+                    "sentence_text": sentences[0],
+                    "sentence_hash": sentence_hash(sentences[0]),
+                    "project_id": self.project_id,
+                    "prompt_id": "prompt-1",
+                    "perceptual_hash": "abc123",
+                    "candidate_score": 0.9,
+                },
+                {
+                    "sentence_idx": 1,
+                    "path": "scene-b.png",
+                    "prompt": "prompt",
+                    "sentence_text": sentences[1],
+                    "sentence_hash": sentence_hash(sentences[1]),
+                    "project_id": self.project_id,
+                    "prompt_id": "prompt-2",
+                    "perceptual_hash": "abc123",
+                    "candidate_score": 0.9,
+                },
+            ],
+        )
+        project = db.get_project(self.project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+
+        issue_codes = [issue["code"] for issue in validate_generated_image_mappings(project)]
+
+        self.assertIn("IMAGE_BATCH_DUPLICATE_HASH", issue_codes)
+
+    def test_character_descriptor_required_must_be_applied_to_selected_mapping(self) -> None:
+        sentence = "Mina enters the studio."
+        db.update_project(
+            self.project_id,
+            visual_source_mode="comfyui_auto",
+            sentences=[sentence],
+            media_order=["scene.png"],
+            body_image_options={"character_descriptor_required": True},
+            body_image_mappings=[
+                {
+                    "sentence_idx": 0,
+                    "path": "scene.png",
+                    "prompt": "prompt",
+                    "sentence_text": sentence,
+                    "sentence_hash": sentence_hash(sentence),
+                    "project_id": self.project_id,
+                    "prompt_id": "prompt-1",
+                    "candidate_score": 0.9,
+                }
+            ],
+        )
+        project = db.get_project(self.project_id)
+        self.assertIsNotNone(project)
+        assert project is not None
+
+        issue_codes = [issue["code"] for issue in validate_generated_image_mappings(project)]
+
+        self.assertIn("IMAGE_CHARACTER_DESCRIPTOR_NOT_APPLIED", issue_codes)
+
     def test_allow_low_quality_does_not_skip_generated_metadata(self) -> None:
         sentence = "우베를 활용한 보라색 디저트가 편의점 매대에 출시됩니다."
         manifest_path = self._write_manifest(sentence)

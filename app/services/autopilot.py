@@ -13,6 +13,13 @@ from ..services.preflight import build_preflight_report
 from ..services.render_plan import build_render_plan
 from ..services.render_report import load_render_report
 from ..services.scene_plan import build_scene_plan
+from ..services.pipeline_runner import (
+    initialize_autopilot_stage_status,
+    mark_stage_done,
+    mark_stage_error,
+    mark_stage_running,
+    stage_for_autopilot_phase,
+)
 from ..services.source_draft import risk_threshold_for_mode
 from ..services.source_fetch import analyze_source_url
 from ..services.source_research import collect_sources_from_keyword
@@ -252,7 +259,42 @@ def _update_runtime(
         debug=debug,
     )
     save_debug_snapshot(pid, updated)
-    return updated
+    return _sync_pipeline_stage_status(
+        pid,
+        project=updated,
+        event=event,
+        phase=phase,
+        message=last_log or updated["autopilot_last_log"],
+        error_code=error_code or updated["autopilot_last_error_code"],
+    )
+
+
+def _sync_pipeline_stage_status(
+    pid: str,
+    *,
+    project: ProjectRecord,
+    event: str,
+    phase: str | None,
+    message: str,
+    error_code: str,
+) -> ProjectRecord:
+    stage = stage_for_autopilot_phase(phase or project["autopilot_phase"])
+    if stage is None:
+        return project
+    if event in {"phase_start", "wait_start"}:
+        mark_stage_running(pid, stage, input_text=message)
+    elif event == "wait_done":
+        mark_stage_done(pid, stage, output_text=message)
+    elif event == "paused":
+        mark_stage_error(
+            pid,
+            stage,
+            error_code=error_code or "SYSTEM_AUTOPILOT_STAGE_FAILED",
+            recovery_hint=project["autopilot_debug_summary"] or message,
+        )
+    else:
+        return project
+    return _require_project(pid)
 
 
 def load_last_failure(pid: str) -> AutopilotFailureSnapshot | None:
@@ -368,6 +410,8 @@ def start(pid: str, options: AutopilotOptions) -> ProjectRecord:
     )
     if updated is None:
         raise HTTPException(404, f"project {pid} not found")
+    initialize_autopilot_stage_status(pid, input_text=options.get("script", ""))
+    updated = _require_project(pid)
     append_event(
         pid,
         project=updated,
@@ -727,6 +771,290 @@ def _save_script_input(project: ProjectRecord, options: AutopilotOptions) -> Pro
     return updated
 
 
+def _run_prepare_input_stage(pid: str, project: ProjectRecord, options: AutopilotOptions) -> ProjectRecord:
+    project = _update_runtime(
+        pid,
+        project=project,
+        state="running",
+        phase="prepare_input",
+        progress=5,
+        last_log="Preparing autopilot input.",
+        debug_summary="Validating the selected input mode.",
+        event="phase_start",
+    )
+    if options["input_mode"] != "script":
+        return project
+    project = _save_script_input(project, options)
+    mark_stage_done(pid, "prepare_input", output_text=project["compiled_script"] or project["script"])
+    return _require_project(pid)
+
+
+def _run_source_collection_stage(pid: str, project: ProjectRecord, options: AutopilotOptions) -> ProjectRecord:
+    if options["input_mode"] == "url":
+        project = _update_runtime(
+            pid,
+            project=project,
+            phase="source_collect",
+            progress=10,
+            last_log="Analyzing source URL.",
+            debug_summary="Collecting fact notes from the source URL.",
+            event="phase_start",
+            debug={"url": options["url"]},
+        )
+        project = _collect_url_source(pid, options["url"])
+    elif options["input_mode"] == "keyword":
+        project = _update_runtime(
+            pid,
+            project=project,
+            phase="source_collect",
+            progress=10,
+            last_log="Collecting sources from keyword.",
+            debug_summary="Running Brave keyword research.",
+            event="phase_start",
+            debug={"keyword": options["keyword"]},
+        )
+        project = _collect_keyword_sources(pid, options["keyword"])
+    else:
+        return project
+    mark_stage_done(pid, "prepare_input", output_text=project["source_draft_query"])
+    project = _queue_source_draft(project, options)
+    return _update_runtime(
+        pid,
+        project=project,
+        phase="source_generate",
+        progress=20,
+        last_log="Queued source draft generation.",
+        debug_summary="Waiting for source draft worker.",
+        event="phase_start",
+    )
+
+
+def _run_source_draft_apply_stage(pid: str, project: ProjectRecord, options: AutopilotOptions) -> ProjectRecord:
+    if options["input_mode"] not in {"url", "keyword"}:
+        return project
+    threshold = risk_threshold_for_mode(project["source_draft_regenerate_mode"])
+    if project["source_draft_risk_score"] >= threshold:
+        return _pause_with_failure(
+            pid,
+            project=project,
+            error_code="COPY_RISK_HIGH",
+            message=f"Generated source draft risk score is too high ({project['source_draft_risk_score']:.0%}).",
+            action_hint="Source draft risk is above threshold. Review or regenerate before continuing.",
+        )
+    existing_user_script = project["user_script"].strip()
+    if existing_user_script and existing_user_script != project["source_draft_script"].strip():
+        _backup_user_script(pid, existing_user_script)
+        return _pause_with_failure(
+            pid,
+            project=project,
+            error_code="COPY_USER_SCRIPT_OVERWRITE",
+            message="Existing user_script would be overwritten by source draft apply.",
+            action_hint="Review the backup and decide whether to apply the source draft.",
+        )
+    project = _update_runtime(
+        pid,
+        project=project,
+        phase="source_apply",
+        progress=35,
+        last_log="Applying generated source draft to the script.",
+        debug_summary="Applying source draft.",
+        event="phase_start",
+    )
+    project = _apply_source_draft(project)
+    mark_stage_done(pid, "script_compile", output_text=project["compiled_script"] or project["script"])
+    return _require_project(pid)
+
+
+def _run_tts_stage(pid: str, project: ProjectRecord) -> ProjectRecord:
+    autopilot_preset, autopilot_tts_profile, tts_overridden = _effective_autopilot_tts_profile(project)
+    project = db.update_project(
+        pid,
+        voice_preset=autopilot_preset,
+        tts_profile=autopilot_tts_profile,
+    ) or _require_project(pid)
+    tts_debug = {
+        "voice_preset": autopilot_preset,
+        "mode": autopilot_tts_profile["mode"],
+        "seed_mode": autopilot_tts_profile["seed_mode"],
+        "instruct": autopilot_tts_profile["instruct"],
+        "autopilot_default_applied": tts_overridden,
+    }
+    project = _update_runtime(
+        pid,
+        project=project,
+        phase="tts_enqueue",
+        progress=40,
+        last_log="Queued TTS generation.",
+        debug_summary="Waiting for TTS worker.",
+        event="phase_start",
+        debug=tts_debug,
+    )
+    db.update_project(
+        pid,
+        tts_state="queued",
+        tts_progress=0,
+        tts_error="",
+        tts_job_id="",
+        tts_started_at="",
+        tts_heartbeat_at="",
+    )
+    return _wait_for_state(
+        pid,
+        field="tts_state",
+        done_value="done",
+        phase="tts_wait",
+        progress=52,
+        message="Waiting for TTS worker to complete.",
+        state_label="TTS generation",
+    )
+
+
+def _run_visual_asset_stage(pid: str, project: ProjectRecord, options: AutopilotOptions) -> ProjectRecord:
+    if options["visual_source_mode"] in {"comfyui_auto", "hybrid"}:
+        db.update_project(
+            pid,
+            body_image_state="error",
+            body_image_progress=0,
+            body_image_error=IMAGE_GEN_DISABLED_CODE,
+            body_image_phase="disabled",
+            body_image_last_log=IMAGE_GEN_DISABLED_MESSAGE,
+            body_image_job_id="",
+            body_image_started_at="",
+            body_image_heartbeat_at="",
+        )
+        updated = _pause_with_failure(
+            pid,
+            project=_require_project(pid),
+            error_code=IMAGE_GEN_DISABLED_CODE,
+            message=IMAGE_GEN_DISABLED_MESSAGE,
+            action_hint="Upload media manually or wait for the D2 Z-Image backend.",
+        )
+        mark_stage_error(
+            pid,
+            "image",
+            error_code=IMAGE_GEN_DISABLED_CODE,
+            recovery_hint="Upload media manually or wait for the D2 Z-Image backend.",
+        )
+        return _require_project(pid) or updated
+    if not project["media_order"]:
+        updated = _pause_with_failure(
+            pid,
+            project=project,
+            error_code="IMAGE_MEDIA_REQUIRED",
+            message="No uploaded media is available and visual mode is upload_only.",
+            action_hint="Upload media manually or switch to an automatic visual mode when available.",
+        )
+        mark_stage_error(
+            pid,
+            "image",
+            error_code="IMAGE_MEDIA_REQUIRED",
+            recovery_hint="Upload media manually or switch to an automatic visual mode when available.",
+        )
+        return _require_project(pid) or updated
+    return project
+
+
+def _run_render_plan_stage(pid: str, project: ProjectRecord) -> ProjectRecord:
+    project = _update_runtime(
+        pid,
+        project=project,
+        phase="plan_refresh",
+        progress=78,
+        last_log="Refreshing scene and render plans.",
+        debug_summary="Building scene and render plans.",
+        event="phase_start",
+    )
+    scene_plan = build_scene_plan(project, render_format=_preferred_render_format(project))
+    project = db.update_project(pid, scene_plan=scene_plan) or _require_project(pid)
+    render_plan = build_render_plan(project)
+    project = db.update_project(pid, render_plan=render_plan) or _require_project(pid)
+    mark_stage_done(pid, "render_plan", output_text=str(render_plan))
+    return _require_project(pid)
+
+
+def _run_preflight_stage(pid: str, project: ProjectRecord) -> ProjectRecord:
+    project = _update_runtime(
+        pid,
+        project=project,
+        phase="preflight",
+        progress=84,
+        last_log="Running preflight checks.",
+        debug_summary="Checking render readiness.",
+        event="phase_start",
+    )
+    report = build_preflight_report(project)
+    if report["ok"]:
+        mark_stage_done(pid, "preflight", output_text=str(report))
+        return _require_project(pid)
+    failed = _first_preflight_failure(report["checks"])
+    if failed is None:
+        raise RuntimeError("Preflight failed without a detailed check.")
+    error_code = f"PREFLIGHT_{failed['key'].upper()}"
+    updated = _pause_with_failure(
+        pid,
+        project=project,
+        error_code=error_code,
+        message=failed["message"],
+        action_hint="Review preflight results, fix the required item, and rerun.",
+    )
+    mark_stage_error(
+        pid,
+        "preflight",
+        error_code=error_code,
+        recovery_hint="Review preflight results, fix the required item, and rerun.",
+    )
+    return _require_project(pid) or updated
+
+
+def _run_render_stage(pid: str, project: ProjectRecord) -> ProjectRecord:
+    project = _update_runtime(
+        pid,
+        project=project,
+        phase="render_enqueue",
+        progress=88,
+        last_log="Queueing render job.",
+        debug_summary="Render queued.",
+        event="phase_start",
+    )
+    db.update_project(
+        pid,
+        render_state="queued",
+        render_progress=0,
+        render_phase="queued",
+        render_phase_pct=0,
+        render_progress_detail="",
+        render_speed_x=0.0,
+        render_eta_sec=0,
+        render_job_id="",
+        render_started_at="",
+        render_heartbeat_at="",
+        render_last_log="",
+    )
+    project = _wait_for_state(
+        pid,
+        field="render_state",
+        done_value="done",
+        phase="render_wait",
+        progress=96,
+        message="Waiting for render worker to complete.",
+        state_label="Render",
+    )
+    render_report = load_render_report(pid)
+    report_summary = "Render completed."
+    if render_report is not None:
+        report_summary = f"Render completed with {len(render_report['outputs'])} output(s)."
+    return _update_runtime(
+        pid,
+        project=project,
+        state="done",
+        phase="done",
+        progress=100,
+        last_log=report_summary,
+        debug_summary=report_summary,
+        event="done",
+    )
+
+
 def _first_preflight_failure(checks: list[PreflightCheck]) -> PreflightCheck | None:
     for check in checks:
         if not check["ok"]:
@@ -739,40 +1067,9 @@ def run_autopilot_job(pid: str) -> None:
     options = normalize_options(project["autopilot_options"])
 
     try:
-        project = _update_runtime(
-            pid,
-            project=project,
-            state="running",
-            phase="prepare_input",
-            progress=5,
-            last_log="Preparing autopilot input.",
-            debug_summary="Validating the selected input mode.",
-            event="phase_start",
-        )
-        if options["input_mode"] == "script":
-            project = _save_script_input(project, options)
-        elif options["input_mode"] == "url":
-            project = _update_runtime(
-                pid,
-                project=project,
-                phase="source_collect",
-                progress=10,
-                last_log="Analyzing source URL.",
-                debug_summary="Collecting fact notes from the source URL.",
-                event="phase_start",
-                debug={"url": options["url"]},
-            )
-            project = _collect_url_source(pid, options["url"])
-            project = _queue_source_draft(project, options)
-            project = _update_runtime(
-                pid,
-                project=project,
-                phase="source_generate",
-                progress=20,
-                last_log="Queued source draft generation.",
-                debug_summary="Waiting for source draft worker.",
-                event="phase_start",
-            )
+        project = _run_prepare_input_stage(pid, project, options)
+        if options["input_mode"] == "url":
+            project = _run_source_collection_stage(pid, project, options)
             project = _wait_for_state(
                 pid,
                 field="source_draft_state",
@@ -783,27 +1080,7 @@ def run_autopilot_job(pid: str) -> None:
                 state_label="Source draft generation",
             )
         elif options["input_mode"] == "keyword":
-            project = _update_runtime(
-                pid,
-                project=project,
-                phase="source_collect",
-                progress=10,
-                last_log="Collecting sources from keyword.",
-                debug_summary="Running Brave keyword research.",
-                event="phase_start",
-                debug={"keyword": options["keyword"]},
-            )
-            project = _collect_keyword_sources(pid, options["keyword"])
-            project = _queue_source_draft(project, options)
-            project = _update_runtime(
-                pid,
-                project=project,
-                phase="source_generate",
-                progress=20,
-                last_log="Queued source draft generation.",
-                debug_summary="Waiting for source draft worker.",
-                event="phase_start",
-            )
+            project = _run_source_collection_stage(pid, project, options)
             project = _wait_for_state(
                 pid,
                 field="source_draft_state",
@@ -813,159 +1090,32 @@ def run_autopilot_job(pid: str) -> None:
                 message="Waiting for source draft worker to complete.",
                 state_label="Source draft generation",
             )
-        else:
+        elif options["input_mode"] != "script":
             _pause_with_failure(
                 pid,
                 project=project,
                 error_code="INPUT_MODE_NOT_IMPLEMENTED",
                 message=f"{options['input_mode']} mode is not implemented yet.",
-                action_hint="지원되는 입력 모드로 다시 시작해 주세요.",
+                action_hint="Use script, url, or keyword input mode.",
             )
             return
 
         project = _require_project(pid)
         if options["input_mode"] in {"url", "keyword"}:
-            threshold = risk_threshold_for_mode(project["source_draft_regenerate_mode"])
-            if project["source_draft_risk_score"] >= threshold:
-                _pause_with_failure(
-                    pid,
-                    project=project,
-                    error_code="COPY_RISK_HIGH",
-                    message=f"Generated source draft risk score is too high ({project['source_draft_risk_score']:.0%}).",
-                    action_hint="초안 내용을 검토하고 재생성하거나 직접 수정한 뒤 다시 시작해 주세요.",
-                )
+            project = _run_source_draft_apply_stage(pid, project, options)
+            if project["autopilot_state"] in {"paused", "error", "canceled"}:
                 return
-            existing_user_script = project["user_script"].strip()
-            if existing_user_script and existing_user_script != project["source_draft_script"].strip():
-                _backup_user_script(pid, existing_user_script)
-                _pause_with_failure(
-                    pid,
-                    project=project,
-                    error_code="COPY_USER_SCRIPT_OVERWRITE",
-                    message="Existing user_script would be overwritten by source draft apply.",
-                    action_hint="백업 파일을 확인한 뒤 적용 여부를 결정해 주세요.",
-                )
-                return
-            project = _update_runtime(
-                pid,
-                project=project,
-                phase="source_apply",
-                progress=35,
-                last_log="Applying generated source draft to the script.",
-                debug_summary="Applying source draft.",
-                event="phase_start",
-            )
-            project = _apply_source_draft(project)
+        project = _run_tts_stage(pid, project)
 
-        autopilot_preset, autopilot_tts_profile, tts_overridden = _effective_autopilot_tts_profile(project)
-        project = db.update_project(
-            pid,
-            voice_preset=autopilot_preset,
-            tts_profile=autopilot_tts_profile,
-        ) or _require_project(pid)
-        tts_debug = {
-            "voice_preset": autopilot_preset,
-            "mode": autopilot_tts_profile["mode"],
-            "seed_mode": autopilot_tts_profile["seed_mode"],
-            "instruct": autopilot_tts_profile["instruct"],
-            "autopilot_default_applied": tts_overridden,
-        }
-        project = _update_runtime(
-            pid,
-            project=project,
-            phase="tts_enqueue",
-            progress=40,
-            last_log="Queued TTS generation.",
-            debug_summary="Waiting for TTS worker.",
-            event="phase_start",
-            debug=tts_debug,
-        )
-        db.update_project(
-            pid,
-            tts_state="queued",
-            tts_progress=0,
-            tts_error="",
-            tts_job_id="",
-            tts_started_at="",
-            tts_heartbeat_at="",
-        )
-        project = _wait_for_state(
-            pid,
-            field="tts_state",
-            done_value="done",
-            phase="tts_wait",
-            progress=52,
-            message="Waiting for TTS worker to complete.",
-            state_label="TTS generation",
-        )
-
-        if options["visual_source_mode"] in {"comfyui_auto", "hybrid"}:
-            db.update_project(
-                pid,
-                body_image_state="error",
-                body_image_progress=0,
-                body_image_error=IMAGE_GEN_DISABLED_CODE,
-                body_image_phase="disabled",
-                body_image_last_log=IMAGE_GEN_DISABLED_MESSAGE,
-                body_image_job_id="",
-                body_image_started_at="",
-                body_image_heartbeat_at="",
-            )
-            _pause_with_failure(
-                pid,
-                project=project,
-                error_code=IMAGE_GEN_DISABLED_CODE,
-                message=IMAGE_GEN_DISABLED_MESSAGE,
-                action_hint="Upload media manually or wait for the D2 Z-Image backend.",
-            )
-            return
-        elif not project["media_order"]:
-            _pause_with_failure(
-                pid,
-                project=project,
-                error_code="IMAGE_MEDIA_REQUIRED",
-                message="No uploaded media is available and visual mode is upload_only.",
-                action_hint="업로드 전용 모드에서는 미디어를 먼저 업로드하거나 comfyui_auto 모드로 시작해 주세요.",
-            )
+        project = _run_visual_asset_stage(pid, project, options)
+        if project["autopilot_state"] in {"paused", "error", "canceled"}:
             return
 
-        project = _require_project(pid)
-        project = _update_runtime(
-            pid,
-            project=project,
-            phase="plan_refresh",
-            progress=78,
-            last_log="Refreshing scene and render plans.",
-            debug_summary="Building scene and render plans.",
-            event="phase_start",
-        )
-        scene_plan = build_scene_plan(project, render_format=_preferred_render_format(project))
-        project = db.update_project(pid, scene_plan=scene_plan) or _require_project(pid)
-        render_plan = build_render_plan(project)
-        project = db.update_project(pid, render_plan=render_plan) or _require_project(pid)
-
-        project = _update_runtime(
-            pid,
-            project=project,
-            phase="preflight",
-            progress=84,
-            last_log="Running preflight checks.",
-            debug_summary="Checking render readiness.",
-            event="phase_start",
-        )
-        report = build_preflight_report(project)
-        if not report["ok"]:
-            failed = _first_preflight_failure(report["checks"])
-            if failed is None:
-                raise RuntimeError("Preflight failed without a detailed check.")
-            _pause_with_failure(
-                pid,
-                project=project,
-                error_code=f"PREFLIGHT_{failed['key'].upper()}",
-                message=failed["message"],
-                action_hint="Step 4 Preflight 결과를 확인하고 필요한 항목을 수정한 뒤 재개해 주세요.",
-            )
+        project = _run_render_plan_stage(pid, _require_project(pid))
+        project = _run_preflight_stage(pid, project)
+        if project["autopilot_state"] in {"paused", "error", "canceled"}:
             return
+
         if not options["render_after_preflight"]:
             _update_runtime(
                 pid,
@@ -979,59 +1129,14 @@ def run_autopilot_job(pid: str) -> None:
             )
             return
 
-        project = _update_runtime(
-            pid,
-            project=project,
-            phase="render_enqueue",
-            progress=88,
-            last_log="Queueing render job.",
-            debug_summary="Render queued.",
-            event="phase_start",
-        )
-        db.update_project(
-            pid,
-            render_state="queued",
-            render_progress=0,
-            render_phase="queued",
-            render_phase_pct=0,
-            render_progress_detail="",
-            render_speed_x=0.0,
-            render_eta_sec=0,
-            render_job_id="",
-            render_started_at="",
-            render_heartbeat_at="",
-            render_last_log="",
-        )
-        project = _wait_for_state(
-            pid,
-            field="render_state",
-            done_value="done",
-            phase="render_wait",
-            progress=96,
-            message="Waiting for render worker to complete.",
-            state_label="Render",
-        )
-        render_report = load_render_report(pid)
-        report_summary = "Render completed."
-        if render_report is not None:
-            report_summary = f"Render completed with {len(render_report['outputs'])} output(s)."
-        _update_runtime(
-            pid,
-            project=project,
-            state="done",
-            phase="done",
-            progress=100,
-            last_log=report_summary,
-            debug_summary=report_summary,
-            event="done",
-        )
+        _run_render_stage(pid, project)
     except HTTPException as exc:
         project = _require_project(pid)
         error_code = "SYSTEM_AUTOPILOT_HTTP_ERROR"
-        action_hint = "입력값과 도구 상태를 확인한 뒤 다시 시도해 주세요."
+        action_hint = "Check input and tool state, then retry."
         if exc.status_code == 429:
             error_code = "BRAVE_RATE_LIMIT"
-            action_hint = "Brave 무료 검색 한도를 초과했습니다. 다음 달 리셋 후 다시 시도하거나 직접 대본 입력으로 진행해 주세요."
+            action_hint = "Wait for search quota reset or continue with direct script input."
         _pause_with_failure(
             pid,
             project=project,
@@ -1046,5 +1151,5 @@ def run_autopilot_job(pid: str) -> None:
             project=project,
             error_code="SYSTEM_AUTOPILOT_RUN_FAILED",
             message=str(exc),
-            action_hint="오토파일럿 디버그 로그를 확인하고 입력 또는 도구 상태를 점검해 주세요.",
+            action_hint="Check autopilot debug logs and project state before retrying.",
         )

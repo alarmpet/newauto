@@ -1,5 +1,7 @@
 ## LLM Provider Migration (Ollama ↔ LM Studio)
 
+`docs/solutions/` stores documented fixes and workflow lessons with searchable frontmatter; relevant when debugging or changing prompt, image, TTS, render, or autopilot behavior.
+
 This project supports two LLM providers with the same script generation flow:
 
 - `ollama` (default)

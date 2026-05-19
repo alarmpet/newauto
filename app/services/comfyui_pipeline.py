@@ -12,6 +12,7 @@ from ..config import ALLOWED_IMAGE_EXT, COMFYUI_INSTALL_DIR
 from ..types import BodyImageMapping, ProjectRecord
 from .comfyui_client import ComfyImageResult, ComfyUIClient
 from .comfyui_workflows import PlaceholderMap, render_workflow_template
+from .pipeline_manifest import record_image_attempt, text_hash, update_stage_status
 from .visual_relevance import sentence_hash
 from .z_image_workflow import load_z_image_workflow
 
@@ -65,6 +66,10 @@ def import_history_image(
     prompt_id: str,
     sentence_idx: int = 0,
     selected_reason: str = "manual_import",
+    candidate_score: float = 1.0,
+    seed: int = 0,
+    issue_codes: list[str] | None = None,
+    character_descriptor_applied: bool = False,
 ) -> BodyImageMapping:
     source_path = resolve_comfy_output_path(result)
     media_dir = db.project_dir(project["id"]) / "media"
@@ -80,10 +85,38 @@ def import_history_image(
         "project_id": project["id"],
         "prompt_id": prompt_id,
         "selected_reason": selected_reason,
+        "candidate_score": candidate_score,
+        "candidate_score_version": "pipeline_manifest_v1",
+        "vision_qa_issue_codes": issue_codes or [],
+        "character_descriptor_applied": character_descriptor_applied,
     }
     mappings = [item for item in project["body_image_mappings"] if item["sentence_idx"] != sentence_idx]
     mappings.append(mapping)
-    db.update_project(project["id"], body_image_mappings=sorted(mappings, key=lambda item: item["sentence_idx"]))
+    prompt_hash = text_hash(prompt)
+    pipeline_manifest = record_image_attempt(
+        project["pipeline_manifest"],
+        sentence_idx=sentence_idx,
+        path=target.name,
+        prompt_id=prompt_id,
+        attempt=1,
+        seed=seed,
+        prompt_hash=prompt_hash,
+        candidate_score=candidate_score,
+        issue_codes=issue_codes or [],
+        selected=True,
+    )
+    pipeline_manifest = update_stage_status(
+        pipeline_manifest,
+        "image",
+        state="done",
+        input_hash=prompt_hash,
+        output_hash=text_hash(target.name),
+    )
+    db.update_project(
+        project["id"],
+        body_image_mappings=sorted(mappings, key=lambda item: item["sentence_idx"]),
+        pipeline_manifest=pipeline_manifest,
+    )
     return mapping
 
 
@@ -117,12 +150,14 @@ def submit_z_image_workflow(
     aspect_ratio: str = "16:9",
     filename_prefix: str = "newauto_z_image",
     timeout_sec: int = 180,
+    character_descriptor: dict[str, object] | None = None,
 ) -> tuple[str, list[ComfyImageResult]]:
     workflow = load_z_image_workflow(
         positive_prompt=positive_prompt,
         negative_prompt=negative_prompt,
         aspect_ratio=aspect_ratio,
         filename_prefix=filename_prefix,
+        character_descriptor=character_descriptor,
     )
     submission = client.submit_workflow(workflow)
     deadline = time.monotonic() + timeout_sec

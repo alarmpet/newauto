@@ -161,6 +161,31 @@ textarea {
   font-size: 14px;
 }
 
+.operator-console {
+  border-color: #d8dee8;
+}
+
+.stage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 8px;
+}
+
+.stage-card {
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: #f9fafb;
+}
+
+.stage-card span,
+.stage-card small,
+.stage-card em {
+  color: #4b5563;
+}
+
 code {
   display: inline-block;
   padding: 4px 6px;

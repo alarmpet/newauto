@@ -73,12 +73,79 @@ class TtsProfile(TypedDict):
     denoise: bool
     postprocess_output: bool
     seed: int | None
+    _consistency_retry_attempted: NotRequired[bool]
 
 
 class RegionalSentence(TypedDict):
     idx: int
     text: str
     region: Region
+    original_text: NotRequired[str]
+    normalized_text: NotRequired[str]
+    text_hash: NotRequired[str]
+    source_marker: NotRequired[str]
+
+
+class PipelineVisualArtifact(TypedDict):
+    positive_prompt: str
+    negative_prompt: str
+    preset_id: str
+    domain: str
+    required_props: list[str]
+    visual_intent: str
+    prompt_hash: str
+
+
+class PipelineImageAttempt(TypedDict):
+    attempt: int
+    seed: int
+    prompt_hash: str
+    candidate_score: float
+    issue_codes: list[str]
+    selected: bool
+
+
+class PipelineImageArtifact(TypedDict):
+    path: str
+    prompt_id: str
+    attempts: list[PipelineImageAttempt]
+
+
+class PipelineTtsArtifact(TypedDict):
+    wav_path: str
+    start: float
+    end: float
+    duration_sec: float
+    seed: int
+    issue_codes: list[str]
+
+
+class PipelineStageStatus(TypedDict):
+    state: str
+    error_code: str
+    recovery_hint: str
+    input_hash: str
+    output_hash: str
+
+
+class PipelineSegmentArtifact(TypedDict):
+    sentence_idx: int
+    script_text: str
+    script_hash: str
+    region: Region
+    visual: PipelineVisualArtifact | None
+    image: PipelineImageArtifact | None
+    tts: PipelineTtsArtifact | None
+
+
+class PipelineManifest(TypedDict):
+    version: int
+    project_id: str
+    title: str
+    created_at: str
+    updated_at: str
+    segments: list[PipelineSegmentArtifact]
+    stage_status: dict[str, PipelineStageStatus]
 
 
 class SelectedVerse(TypedDict):
@@ -101,6 +168,8 @@ class BodyImageMapping(TypedDict):
     candidate_score: NotRequired[float]
     candidate_score_version: NotRequired[str]
     vision_qa_issue_codes: NotRequired[list[str]]
+    perceptual_hash: NotRequired[str]
+    character_descriptor_applied: NotRequired[bool]
 
 
 class VisualBrief(TypedDict):
@@ -328,6 +397,7 @@ class ProjectRecord(TypedDict):
     user_script: str
     compiled_script: str
     regional_sentences: list[RegionalSentence]
+    pipeline_manifest: PipelineManifest | dict[str, object]
     bible_query: str
     selected_verses: list[SelectedVerse]
     bible_background_file: str

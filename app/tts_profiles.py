@@ -195,8 +195,20 @@ _PRESET_DEFINITIONS = cast(dict[str, TtsProfile], {
     },
 })
 
-for _profile in _PRESET_DEFINITIONS.values():
+_LONGFORM_STABLE_PRESETS = {
+    "male-announcer-40s-50s",
+    "male-pastor-40s-50s",
+    "male-pastor-60s",
+    "male-narration-60s",
+    "male-announcer-60s",
+    "elder-narration",
+}
+
+for _preset_id, _profile in _PRESET_DEFINITIONS.items():
     _profile.setdefault("seed_mode", DEFAULT_TTS_PROFILE["seed_mode"])
+    if _preset_id in _LONGFORM_STABLE_PRESETS:
+        _profile.setdefault("synthesis_mode", "full_passage")
+        _profile["seed_mode"] = "fixed"
 
 LEGACY_VOICE_PRESET_ALIASES: dict[str, str] = {
     "male-calm": "male-deep-calm",
@@ -370,6 +382,9 @@ def normalize_tts_profile(
 
     if base_profile["mode"] == "auto":
         base_profile["instruct"] = ""
+
+    if overrides.get("_consistency_retry_attempted") is True:
+        base_profile["_consistency_retry_attempted"] = True
 
     return canonical_preset, cast(TtsProfile, base_profile)
 

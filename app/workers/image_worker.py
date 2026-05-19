@@ -6,6 +6,7 @@ from .. import db
 from ..config import STORAGE_DIR
 from ..services.comfyui_client import ComfyUIClient
 from ..services.comfyui_pipeline import import_history_image, submit_z_image_workflow
+from ..services.character_sheet import load_character_descriptor
 from ..services.image_prompt import build_z_image_prompt
 from ..types import ProjectRecord
 from .worker_lock import single_instance_lock
@@ -55,6 +56,7 @@ def _process_project(pid: str) -> None:
     options = project["body_image_options"]
     aspect_ratio = str(options.get("aspect_ratio") or "16:9")
     negative_override = str(options.get("negative_prompt_override") or "")
+    character_descriptor = load_character_descriptor(pid)
     indices = _sentence_indices(project)
     if not indices:
         _mark_error(pid, "No sentences are available for Z-Image generation.")
@@ -91,6 +93,7 @@ def _process_project(pid: str) -> None:
                 aspect_ratio=aspect_ratio,
                 filename_prefix=f"newauto_{pid}_{sentence_idx}",
                 timeout_sec=600,
+                character_descriptor=character_descriptor,
             )
             import_history_image(
                 project,

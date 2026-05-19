@@ -1,5 +1,7 @@
 import re
 
+from .pipeline_manifest import text_hash
+from .text_health import looks_mojibake
 from ..text import split_sentences
 from ..types import ContentMode, Region, RegionalSentence, SelectedVerse
 
@@ -27,14 +29,21 @@ def _regionalize(script: str, default_region: Region = "body") -> list[RegionalS
         if not chunk:
             return
         for text in split_sentences(chunk):
+            normalized_text = text.strip()
             sentences.append(
                 {
                     "idx": len(sentences),
-                    "text": text,
+                    "text": normalized_text,
                     "region": region,
+                    "original_text": text,
+                    "normalized_text": normalized_text,
+                    "text_hash": text_hash(normalized_text),
+                    "source_marker": region,
                 }
             )
 
+    if looks_mojibake(script or ""):
+        raise ValueError("script contains mojibake text")
     for line in (script or "").splitlines():
         marker = _REGION_MARKER_RE.match(line)
         if marker is None:

@@ -28,6 +28,7 @@ from ..types import (
     VoiceRuntimeDType,
 )
 from . import gpu_guard
+from .pipeline_manifest import build_initial_pipeline_manifest, record_tts_artifact, text_hash, update_stage_status
 from .text_health import looks_mojibake
 from .transcribe import save_word_timings
 
@@ -579,6 +580,64 @@ def save_tts_consistency_report(output_dir: Path, manifest: TtsRunManifest) -> P
     return target
 
 
+def sync_tts_artifacts_to_pipeline_manifest(pid: str) -> None:
+    project = db.get_project(pid)
+    if project is None:
+        return
+    output_dir = db.project_dir(pid) / "tts"
+    timings_path = output_dir / "timings.json"
+    manifest_path = output_dir / "tts_run_manifest.json"
+    if not timings_path.exists() or not manifest_path.exists():
+        return
+    try:
+        timings_payload = json.loads(timings_path.read_text(encoding="utf-8"))
+        run_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return
+    if not isinstance(timings_payload, list) or not isinstance(run_payload, dict):
+        return
+    raw_manifest_sentences = run_payload.get("sentences")
+    manifest_sentences = raw_manifest_sentences if isinstance(raw_manifest_sentences, list) else []
+    seed_by_idx: dict[int, int] = {}
+    for item in manifest_sentences:
+        if not isinstance(item, dict):
+            continue
+        idx = item.get("idx")
+        seed = item.get("seed")
+        if isinstance(idx, int) and isinstance(seed, int):
+            seed_by_idx[idx] = seed
+    pipeline_manifest = project["pipeline_manifest"]
+    if len(pipeline_manifest.get("segments", [])) != len(project["sentences"]):
+        pipeline_manifest = build_initial_pipeline_manifest(project["id"], project["title"], project["sentences"])
+    for item in timings_payload:
+        if not isinstance(item, dict):
+            continue
+        idx = item.get("idx")
+        if not isinstance(idx, int):
+            continue
+        start = float(item.get("start") or 0.0)
+        end = float(item.get("end") or start)
+        duration = float(item.get("dur") or max(0.0, end - start))
+        pipeline_manifest = record_tts_artifact(
+            pipeline_manifest,
+            sentence_idx=idx,
+            wav_path=f"tts/{idx:04d}.wav",
+            start=start,
+            end=end,
+            duration_sec=duration,
+            seed=seed_by_idx.get(idx, 0),
+            issue_codes=[],
+        )
+    pipeline_manifest = update_stage_status(
+        pipeline_manifest,
+        "tts",
+        state="done",
+        input_hash=text_hash(json.dumps(manifest_sentences, ensure_ascii=False, sort_keys=True)),
+        output_hash=text_hash(json.dumps(timings_payload, ensure_ascii=False, sort_keys=True)),
+    )
+    db.update_project(pid, pipeline_manifest=pipeline_manifest)
+
+
 def _effective_sentence_profile(
     profile: TtsProfile,
     index: int,
@@ -768,6 +827,7 @@ def run_tts_job(pid: str) -> None:
         )
         save_word_timings(output_dir / "timings_words.json", timings)
         save_tts_consistency_report(output_dir, manifest)
+        sync_tts_artifacts_to_pipeline_manifest(pid)
         db.update_project(
             pid,
             voice_preset=preset,

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import cast
 
 from .config import DB_PATH, PROJECTS_DIR
+from .services.pipeline_manifest import build_initial_pipeline_manifest
 from .services.subtitle import normalize_subtitle_style
 from .tts_profiles import normalize_tts_profile
 from .types import (
@@ -45,6 +46,7 @@ CREATE TABLE IF NOT EXISTS projects (
     user_script TEXT NOT NULL DEFAULT '',
     compiled_script TEXT NOT NULL DEFAULT '',
     regional_sentences TEXT NOT NULL DEFAULT '[]',
+    pipeline_manifest TEXT NOT NULL DEFAULT '{}',
     bible_query TEXT NOT NULL DEFAULT '',
     selected_verses TEXT NOT NULL DEFAULT '[]',
     bible_background_file TEXT NOT NULL DEFAULT '',
@@ -146,6 +148,7 @@ MIGRATION_COLUMNS: dict[str, str] = {
     "user_script": "TEXT NOT NULL DEFAULT ''",
     "compiled_script": "TEXT NOT NULL DEFAULT ''",
     "regional_sentences": "TEXT NOT NULL DEFAULT '[]'",
+    "pipeline_manifest": "TEXT NOT NULL DEFAULT '{}'",
     "bible_query": "TEXT NOT NULL DEFAULT ''",
     "selected_verses": "TEXT NOT NULL DEFAULT '[]'",
     "bible_background_file": "TEXT NOT NULL DEFAULT ''",
@@ -424,13 +427,16 @@ def _load_regional_sentences(value: object) -> list[RegionalSentence]:
         region = item.get("region")
         if not isinstance(text, str) or region not in {"intro", "body", "bible"}:
             continue
-        regional_sentences.append(
-            {
-                "idx": len(regional_sentences),
-                "text": text,
-                "region": cast(Region, region),
-            }
-        )
+        sentence: RegionalSentence = {
+            "idx": len(regional_sentences),
+            "text": text,
+            "region": cast(Region, region),
+        }
+        for key in ("original_text", "normalized_text", "text_hash", "source_marker"):
+            value = item.get(key)
+            if isinstance(value, str):
+                sentence[key] = value
+        regional_sentences.append(sentence)
     return regional_sentences
 
 
@@ -467,6 +473,8 @@ def _load_body_image_mappings(value: object) -> list[BodyImageMapping]:
             candidate_score = item.get("candidate_score")
             candidate_score_version = item.get("candidate_score_version")
             vision_qa_issue_codes = item.get("vision_qa_issue_codes")
+            perceptual_hash = item.get("perceptual_hash")
+            character_descriptor_applied = item.get("character_descriptor_applied")
             if isinstance(sentence_text, str):
                 mapping["sentence_text"] = sentence_text
             if isinstance(sentence_hash, str):
@@ -491,6 +499,10 @@ def _load_body_image_mappings(value: object) -> list[BodyImageMapping]:
                 mapping["vision_qa_issue_codes"] = [
                     code for code in vision_qa_issue_codes if isinstance(code, str)
                 ]
+            if isinstance(perceptual_hash, str):
+                mapping["perceptual_hash"] = perceptual_hash
+            if isinstance(character_descriptor_applied, bool):
+                mapping["character_descriptor_applied"] = character_descriptor_applied
             mappings.append(mapping)
     return mappings
 
@@ -728,6 +740,19 @@ def _load_json_dict(value: object) -> dict[str, object]:
     return payload if isinstance(payload, dict) else {}
 
 
+def _coerce_sentence_list(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [item for item in value if isinstance(item, str)]
+    if isinstance(value, str):
+        try:
+            payload = json.loads(value)
+        except json.JSONDecodeError:
+            return [line.strip() for line in value.splitlines() if line.strip()]
+        if isinstance(payload, list):
+            return [item for item in payload if isinstance(item, str)]
+    return []
+
+
 def _content_mode(value: object) -> ContentMode:
     return "bible_longform" if value == "bible_longform" else "standard"
 
@@ -784,6 +809,7 @@ def _row_to_project(row: sqlite3.Row) -> ProjectRecord:
         "user_script": user_script,
         "compiled_script": compiled_script,
         "regional_sentences": _load_regional_sentences(row["regional_sentences"]),
+        "pipeline_manifest": _load_json_dict(row["pipeline_manifest"]),
         "bible_query": str(row["bible_query"] or ""),
         "selected_verses": _load_selected_verses(row["selected_verses"]),
         "bible_background_file": str(row["bible_background_file"] or ""),
@@ -879,10 +905,11 @@ def create_project(title: str = "") -> ProjectRecord:
     (PROJECTS_DIR / project_id / "media").mkdir(parents=True, exist_ok=True)
     (PROJECTS_DIR / project_id / "tts").mkdir(parents=True, exist_ok=True)
     now = _now()
+    pipeline_manifest = build_initial_pipeline_manifest(project_id, title, [])
     with tx() as connection:
         connection.execute(
-            "INSERT INTO projects (id, title, created_at, updated_at) VALUES (?,?,?,?)",
-            (project_id, title, now, now),
+            "INSERT INTO projects (id, title, pipeline_manifest, created_at, updated_at) VALUES (?,?,?,?,?)",
+            (project_id, title, json.dumps(pipeline_manifest, ensure_ascii=False), now, now),
         )
     project = get_project(project_id)
     if project is None:
@@ -919,6 +946,17 @@ def get_project(pid: str) -> ProjectRecord | None:
 def update_project(pid: str, **fields: object) -> ProjectRecord | None:
     if not fields:
         return get_project(pid)
+    if "compiled_script" in fields and "pipeline_manifest" not in fields:
+        current = get_project(pid)
+        title = str(fields.get("title") or (current["title"] if current else ""))
+        sentences = _coerce_sentence_list(fields.get("sentences"))
+        if not sentences:
+            sentences = [
+                line.strip()
+                for line in str(fields.get("compiled_script") or "").splitlines()
+                if line.strip()
+            ]
+        fields["pipeline_manifest"] = build_initial_pipeline_manifest(pid, title, sentences)
     for key in (
         "sentences",
         "media_order",
@@ -936,6 +974,7 @@ def update_project(pid: str, **fields: object) -> ProjectRecord | None:
         "autopilot_options",
         "scene_plan",
         "render_plan",
+        "pipeline_manifest",
     ):
         if key in fields and not isinstance(fields[key], str):
             fields[key] = json.dumps(fields[key], ensure_ascii=False)

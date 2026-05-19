@@ -54,10 +54,10 @@ class ScriptCompileTests(unittest.TestCase):
 
         self.assertIn("<<intro>>", compiled_script)
         self.assertEqual(
-            regional_sentences,
+            [(item["idx"], item["text"], item["region"]) for item in regional_sentences],
             [
-                {"idx": 0, "text": "Opening sentence.", "region": "intro"},
-                {"idx": 1, "text": "John 3:16 Verse text.", "region": "bible"},
+                (0, "Opening sentence.", "intro"),
+                (1, "John 3:16 Verse text.", "bible"),
             ],
         )
 
@@ -81,6 +81,10 @@ class ScriptCompileTests(unittest.TestCase):
             [item["region"] for item in payload["regional_sentences"]],
             ["intro", "body"],
         )
+        self.assertEqual(payload["regional_sentences"][0]["original_text"], "Opening sentence.")
+        self.assertEqual(payload["regional_sentences"][0]["normalized_text"], "Opening sentence.")
+        self.assertTrue(payload["regional_sentences"][0]["text_hash"])
+        self.assertEqual(payload["regional_sentences"][0]["source_marker"], "intro")
         self.assertTrue((db.project_dir(project_id) / "compiled_script.txt").exists())
 
 

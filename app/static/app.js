@@ -3,6 +3,7 @@
 /** @typedef {{id: string, title: string, updated_at?: string, body_image_state?: string}} ProjectCard */
 /** @typedef {{sentence_idx: number, positive_prompt: string, negative_prompt: string}} PromptSuggestion */
 /** @typedef {{id: string, title: string, script: string, sentences?: string[], body_image_state?: string, body_image_progress?: number, body_image_phase?: string, body_image_last_log?: string}} ProjectRecord */
+/** @typedef {{stage: string, state: string, issues?: string[], primary_action?: string}} StageCard */
 
 const projectsView = document.querySelector("#view-projects");
 const workflowView = document.querySelector("#view-workflow");
@@ -24,6 +25,7 @@ const generateOneButton = document.querySelector("#s2-generate-one");
 const generateAllButton = document.querySelector("#s2-generate-all");
 const promptPreview = /** @type {HTMLTextAreaElement | null} */ (document.querySelector("#s2-prompt-preview"));
 const imageStatus = /** @type {HTMLElement | null} */ (document.querySelector("#s2-status"));
+const workflowStageCards = /** @type {HTMLElement | null} */ (document.querySelector("#workflow-stage-cards"));
 
 /** @type {ProjectRecord | null} */
 let currentProject = null;
@@ -63,6 +65,7 @@ function showWorkflow(project) {
   if (scriptTitle) scriptTitle.value = project.title || "";
   if (scriptText) scriptText.value = project.script || "";
   renderImageControls(project);
+  void refreshWorkflowStatus();
 }
 
 /**
@@ -114,6 +117,35 @@ async function refreshCurrentProject() {
   if (!currentProject) return;
   currentProject = /** @type {ProjectRecord} */ (await api(`/api/projects/${currentProject.id}`));
   renderImageControls(currentProject);
+  await refreshWorkflowStatus();
+}
+
+/**
+ * @param {StageCard[]} cards
+ */
+function renderStageCards(cards) {
+  if (!workflowStageCards) return;
+  workflowStageCards.textContent = "";
+  for (const card of cards) {
+    const item = document.createElement("div");
+    item.className = "stage-card";
+    const issues = (card.issues || []).join(", ");
+    item.innerHTML = `
+      <strong>${escapeHtml(card.stage)}</strong>
+      <span>${escapeHtml(card.state)}</span>
+      <small>${escapeHtml(card.primary_action || "review")}</small>
+      ${issues ? `<em>${escapeHtml(issues)}</em>` : ""}
+    `;
+    workflowStageCards.appendChild(item);
+  }
+}
+
+async function refreshWorkflowStatus() {
+  if (!currentProject) return;
+  const response = await fetch(`/api/projects/${currentProject.id}/workflow-status`);
+  if (!response.ok) return;
+  const payload = await response.json();
+  renderStageCards(/** @type {StageCard[]} */ (payload.stage_cards || []));
 }
 
 async function loadProjects() {

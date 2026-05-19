@@ -78,6 +78,12 @@ class TtsPresetTests(unittest.TestCase):
         _, profile = normalize_tts_profile({"seed_mode": "fixed"}, "male-deep-calm")
         self.assertEqual(profile["seed_mode"], "fixed")
 
+    def test_announcer_longform_defaults_to_stable_full_passage(self) -> None:
+        _, profile = normalize_tts_profile({}, "male-announcer-40s-50s", "첫 문장입니다.\n둘째 문장입니다.")
+
+        self.assertEqual(profile["synthesis_mode"], "full_passage")
+        self.assertEqual(profile["seed_mode"], "fixed")
+
     def test_new_60s_presets_resolve(self) -> None:
         low_canonical, low_profile = normalize_tts_profile({}, "male-60s-low")
         pastor_canonical, pastor_profile = normalize_tts_profile({}, "male-pastor-60s")

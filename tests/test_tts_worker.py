@@ -206,3 +206,71 @@ class TtsWorkerTests(unittest.TestCase):
         self.assertEqual(project["tts_profile"]["seed_mode"], "fixed")
         self.assertIsInstance(project["tts_profile"]["seed"], int)
         self.assertEqual(fake_run.calls, 2)
+
+    def test_run_job_retries_noisy_sentence_mode_with_full_passage(self) -> None:
+        pid = self.project["id"]
+        db.update_project(
+            pid,
+            tts_state="running",
+            tts_progress=0,
+            tts_error="",
+            tts_profile={"synthesis_mode": "sentence", "seed_mode": "per_sentence"},
+        )
+
+        def fake_run(*_args: object, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            fake_run.calls += 1
+            output_dir = db.project_dir(pid) / "tts"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            if fake_run.calls == 1:
+                (output_dir / "tts_consistency_report.json").write_text(
+                    json.dumps(
+                        {
+                            "metadata_consistent": True,
+                            "audio_consistency_checked": True,
+                            "audio_consistency_passed": False,
+                            "recommended_tts_mode": "full_passage",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            else:
+                (output_dir / "tts_consistency_report.json").write_text(
+                    json.dumps(
+                        {
+                            "metadata_consistent": True,
+                            "audio_consistency_checked": True,
+                            "audio_consistency_passed": True,
+                            "recommended_tts_mode": "full_passage",
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+            db.update_project(pid, tts_state="done", tts_progress=100, tts_error="")
+            return subprocess.CompletedProcess(args=["python"], returncode=0, stdout="", stderr="")
+
+        fake_run.calls = 0
+
+        with patch(
+            "app.workers.tts_worker.resolve_omnivoice_python_with_probes",
+            return_value=(
+                {
+                    "resolved": True,
+                    "python_path": r"C:\omnivoice_env\Scripts\python.exe",
+                    "omnivoice_import_ok": True,
+                    "torch_import_ok": True,
+                    "cuda_available": True,
+                    "error": "",
+                },
+                [],
+            ),
+        ), patch("app.workers.tts_worker.subprocess.run", side_effect=fake_run):
+            tts_worker._run_job_with_heartbeat(pid)
+
+        project = db.get_project(pid)
+        self.assertIsNotNone(project)
+        assert project is not None
+        self.assertEqual(project["tts_state"], "done")
+        self.assertEqual(project["tts_profile"]["synthesis_mode"], "full_passage")
+        self.assertEqual(project["tts_profile"]["seed_mode"], "fixed")
+        self.assertTrue(project["tts_profile"]["_consistency_retry_attempted"])
+        self.assertEqual(fake_run.calls, 2)

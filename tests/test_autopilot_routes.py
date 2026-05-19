@@ -50,6 +50,39 @@ class AutopilotRouteTests(unittest.TestCase):
         self.assertTrue((autopilot_dir / "events.jsonl").exists())
         self.assertTrue((autopilot_dir / "debug_snapshot.json").exists())
 
+    def test_start_autopilot_records_pipeline_stage_boundaries(self) -> None:
+        response = self.client.post(
+            f"/api/projects/{self.project_id}/autopilot/start",
+            json={
+                "input_mode": "script",
+                "script": "First sentence. Second sentence.",
+                "image_count": "auto",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        manifest = response.json()["project"]["pipeline_manifest"]
+        expected = [
+            "prepare_input",
+            "script_compile",
+            "visual_plan",
+            "tts",
+            "image",
+            "render_plan",
+            "preflight",
+            "render",
+        ]
+        for stage in expected:
+            self.assertIn(stage, manifest["stage_status"])
+            status = manifest["stage_status"][stage]
+            self.assertIn("input_hash", status)
+            self.assertIn("output_hash", status)
+            self.assertIn("state", status)
+            self.assertIn("error_code", status)
+            self.assertIn("recovery_hint", status)
+        self.assertEqual(manifest["stage_status"]["prepare_input"]["state"], "queued")
+        self.assertNotEqual(manifest["stage_status"]["prepare_input"]["input_hash"], "")
+        self.assertEqual(manifest["stage_status"]["script_compile"]["state"], "idle")
+
     def test_start_autopilot_validates_required_input(self) -> None:
         response = self.client.post(
             f"/api/projects/{self.project_id}/autopilot/start",

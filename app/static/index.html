@@ -83,6 +83,20 @@
         <span id="s3-dirty-badge" class="muted" hidden>unsaved</span>
         <p class="muted">Existing TTS and render endpoints remain available. Full controls return in the rebuilt UI path.</p>
       </section>
+
+      <section id="stage-manifest-panel" class="card operator-console">
+        <h2>4. Operator Console</h2>
+        <div id="workflow-stage-cards" class="stage-grid"></div>
+        <div id="prompt-preview-panel" class="status-line">Prompt preview per sentence</div>
+        <div id="image-qa-panel" class="status-line">Image QA issues</div>
+        <div id="tts-consistency-panel" class="status-line">TTS consistency status</div>
+        <div id="render-preflight-panel" class="status-line">Render preflight failures</div>
+        <div class="actions">
+          <button id="retry-stage" class="btn" type="button">Retry Stage</button>
+          <button id="resume-autopilot" class="btn primary" type="button">Resume Autopilot</button>
+          <button id="cancel-autopilot" class="btn" type="button">Cancel Autopilot</button>
+        </div>
+      </section>
     </section>
   </main>
   <script src="/static/app.js" type="module"></script>

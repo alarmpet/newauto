@@ -215,6 +215,13 @@ def validate_generated_image_mappings(project: ProjectRecord) -> list[VisualRele
     manifest_by_idx = _prompt_manifest_by_sentence(project)
     candidate_reviews = _candidate_reviews(project)
     issues: list[VisualRelevanceIssue] = []
+    hash_counts: dict[str, int] = {}
+    for mapping in project["body_image_mappings"]:
+        perceptual_hash = mapping.get("perceptual_hash")
+        if isinstance(perceptual_hash, str) and perceptual_hash:
+            hash_counts[perceptual_hash] = hash_counts.get(perceptual_hash, 0) + 1
+    duplicate_hashes = {value for value, count in hash_counts.items() if count > 1}
+    character_required = _as_bool(project["body_image_options"].get("character_descriptor_required"))
     for sentence_idx, sentence in enumerate(project["sentences"]):
         mapping = mappings_by_idx.get(sentence_idx)
         prompt_item = manifest_by_idx.get(sentence_idx)
@@ -233,6 +240,24 @@ def validate_generated_image_mappings(project: ProjectRecord) -> list[VisualRele
             )
             continue
         path = mapping["path"]
+        if mapping.get("perceptual_hash") in duplicate_hashes:
+            issues.append(
+                {
+                    "code": "IMAGE_BATCH_DUPLICATE_HASH",
+                    "message": f"Sentence {sentence_idx} selected image repeats a perceptual hash used elsewhere in the batch.",
+                    "sentence_idx": sentence_idx,
+                    "path": path,
+                }
+            )
+        if character_required and mapping.get("character_descriptor_applied") is not True:
+            issues.append(
+                {
+                    "code": "IMAGE_CHARACTER_DESCRIPTOR_NOT_APPLIED",
+                    "message": f"Sentence {sentence_idx} requires a character descriptor but the selected image was not generated with it.",
+                    "sentence_idx": sentence_idx,
+                    "path": path,
+                }
+            )
         if path not in media_order:
             issues.append(
                 {

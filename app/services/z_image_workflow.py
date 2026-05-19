@@ -80,6 +80,7 @@ def load_z_image_workflow(
     unet_name: str = DEFAULT_UNET_NAME,
     clip_name: str = DEFAULT_CLIP_NAME,
     vae_name: str = DEFAULT_VAE_NAME,
+    character_descriptor: dict[str, object] | None = None,
     base_dir: Path = COMFYUI_WORKFLOW_DIR,
 ) -> dict[str, object]:
     workflow = copy.deepcopy(load_workflow_template(Z_IMAGE_TEMPLATE_ID, base_dir=base_dir))
@@ -89,7 +90,8 @@ def load_z_image_workflow(
     _set_first_widget(_find_node(workflow, CLIP_NODE_ID), clip_name)
     _set_first_widget(_find_node(workflow, VAE_NODE_ID), vae_name)
     width, height = _dimensions_for_aspect_ratio(aspect_ratio)
-    return {
+    sampler_model_input: list[object] = ["107", 0]
+    api_workflow: dict[str, object] = {
         str(CLIP_NODE_ID): {
             "class_type": "CLIPLoader",
             "inputs": {"clip_name": clip_name, "type": "lumina2", "device": "default"},
@@ -121,7 +123,7 @@ def load_z_image_workflow(
         "106": {
             "class_type": "KSampler",
             "inputs": {
-                "model": ["107", 0],
+                "model": sampler_model_input,
                 "positive": [str(POSITIVE_NODE_ID), 0],
                 "negative": [str(NEGATIVE_NODE_ID), 0],
                 "latent_image": [str(LATENT_NODE_ID), 0],
@@ -143,6 +145,28 @@ def load_z_image_workflow(
             "inputs": {"images": ["111", 0], "filename_prefix": filename_prefix},
         },
     }
+    if character_descriptor:
+        reference_image = str(
+            character_descriptor.get("reference_image")
+            or character_descriptor.get("image")
+            or character_descriptor.get("image_path")
+            or ""
+        )
+        weight = character_descriptor.get("weight", 0.75)
+        api_workflow["300"] = {
+            "class_type": "LoadImage",
+            "inputs": {"image": reference_image, "upload": "image"},
+        }
+        api_workflow["301"] = {
+            "class_type": "IPAdapterApply",
+            "inputs": {"image": ["300", 0], "weight": weight, "model": ["107", 0]},
+        }
+        sampler = api_workflow["106"]
+        if isinstance(sampler, dict):
+            inputs = sampler.get("inputs")
+            if isinstance(inputs, dict):
+                inputs["model"] = ["301", 0]
+    return api_workflow
 
 
 def convert_comfyui_graph_to_api(workflow: dict[str, Any]) -> dict[str, object]:

@@ -95,6 +95,45 @@ def _retry_with_sentence_mode(project: ProjectRecord) -> bool:
     return True
 
 
+def _tts_consistency_failed(pid: str) -> bool:
+    report_path = db.project_dir(pid) / "tts" / "tts_consistency_report.json"
+    if not report_path.exists():
+        return False
+    try:
+        payload = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return False
+    return (
+        payload.get("audio_consistency_checked") is True
+        and payload.get("audio_consistency_passed") is False
+    )
+
+
+def _retry_with_full_passage_after_consistency_failure(project: ProjectRecord) -> bool:
+    profile = project.get("tts_profile")
+    if not isinstance(profile, dict):
+        return False
+    if profile.get("synthesis_mode", "sentence") != "sentence":
+        return False
+    if profile.get("_consistency_retry_attempted") is True:
+        return False
+    if not _tts_consistency_failed(str(project["id"])):
+        return False
+    fallback_profile = dict(profile)
+    fallback_profile["synthesis_mode"] = "full_passage"
+    fallback_profile["seed_mode"] = "fixed"
+    fallback_profile["_consistency_retry_attempted"] = True
+    db.update_project(
+        str(project["id"]),
+        tts_profile=fallback_profile,
+        tts_state="running",
+        tts_progress=0,
+        tts_error="",
+        render_last_log="Retrying TTS with full_passage synthesis after audio consistency failure.",
+    )
+    return True
+
+
 def _run_tts_subprocess(python_exe: str, script_path: Path, pid: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [python_exe, str(script_path), "--project-id", pid],
@@ -145,6 +184,13 @@ def _run_job_with_heartbeat(pid: str) -> None:
         completed = _run_tts_subprocess(python_exe, script_path, pid)
         project = db.get_project(pid)
         if project is not None and project["tts_state"] != "done" and _retry_with_sentence_mode(project):
+            completed = _run_tts_subprocess(python_exe, script_path, pid)
+        project = db.get_project(pid)
+        if (
+            completed.returncode == 0
+            and project is not None
+            and _retry_with_full_passage_after_consistency_failure(project)
+        ):
             completed = _run_tts_subprocess(python_exe, script_path, pid)
         if completed.returncode != 0:
             project = db.get_project(pid)
