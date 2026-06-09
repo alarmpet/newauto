@@ -1,0 +1,6 @@
+Project ID: 1badb1a10381
+Current Step: tts_wait (TTS 음성 생성 대기 단계)
+Failure Count: 8+ times.
+Persistent Error Message: TTS subprocess exited successfully but did not mark the project done.
+Diagnosis Summary from last repair_tts run: The system detects a live tts_worker process (pid=5300) and attempts to restart it, but the state machine does not advance past 'running' or 'error'.
+Goal: Analyze why the TTS subprocess exits without updating the final project status in the database/API. Suggest specific code fixes or external workarounds for the `tts_wait` step failure when manual repair fails.

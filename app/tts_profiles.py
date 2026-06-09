@@ -1,7 +1,7 @@
 import re
 from typing import cast
 
-from .types import TtsMode, TtsPresetCatalogResponse, TtsProfile, VoicePresetArg
+from .types import TtsMode, TtsPresetCatalogResponse, TtsProfile, TtsSynthesisMode, VoicePresetArg
 
 VOICE_SAMPLE_TEXT = (
     "안녕하세요. 지금 들으시는 음성은 OmniVoice 보이스 비교 샘플입니다. "
@@ -10,6 +10,8 @@ VOICE_SAMPLE_TEXT = (
 
 DEFAULT_TTS_PROFILE: TtsProfile = {
     "mode": "auto",
+    "synthesis_mode": "sentence",
+    "seed_mode": "per_sentence",
     "language": "ko",
     "instruct": "",
     "speed": 1.0,
@@ -21,7 +23,7 @@ DEFAULT_TTS_PROFILE: TtsProfile = {
     "seed": None,
 }
 
-_PRESET_DEFINITIONS: dict[str, TtsProfile] = {
+_PRESET_DEFINITIONS = cast(dict[str, TtsProfile], {
     "auto": cast(TtsProfile, dict(DEFAULT_TTS_PROFILE)),
     "male-deep-calm": {
         "mode": "design",
@@ -191,7 +193,22 @@ _PRESET_DEFINITIONS: dict[str, TtsProfile] = {
         "postprocess_output": True,
         "seed": None,
     },
+})
+
+_LONGFORM_STABLE_PRESETS = {
+    "male-announcer-40s-50s",
+    "male-pastor-40s-50s",
+    "male-pastor-60s",
+    "male-narration-60s",
+    "male-announcer-60s",
+    "elder-narration",
 }
+
+for _preset_id, _profile in _PRESET_DEFINITIONS.items():
+    _profile.setdefault("seed_mode", DEFAULT_TTS_PROFILE["seed_mode"])
+    if _preset_id in _LONGFORM_STABLE_PRESETS:
+        _profile.setdefault("synthesis_mode", "full_passage")
+        _profile["seed_mode"] = "fixed"
 
 LEGACY_VOICE_PRESET_ALIASES: dict[str, str] = {
     "male-calm": "male-deep-calm",
@@ -308,6 +325,16 @@ def normalize_tts_profile(
     if mode_value in {"auto", "design", "clone"}:
         base_profile["mode"] = cast(TtsMode, mode_value)
 
+    seed_mode_value = overrides.get("seed_mode")
+    if seed_mode_value in {"fixed", "per_sentence"}:
+        base_profile["seed_mode"] = seed_mode_value
+
+    synthesis_mode_value = overrides.get("synthesis_mode")
+    if synthesis_mode_value in {"sentence", "full_passage"}:
+        base_profile["synthesis_mode"] = cast(TtsSynthesisMode, synthesis_mode_value)
+    else:
+        base_profile.setdefault("synthesis_mode", "sentence")
+
     language_value = overrides.get("language")
     if isinstance(language_value, str) and language_value in {"auto", "ko", "en"}:
         base_profile["language"] = language_value
@@ -356,12 +383,17 @@ def normalize_tts_profile(
     if base_profile["mode"] == "auto":
         base_profile["instruct"] = ""
 
+    if overrides.get("_consistency_retry_attempted") is True:
+        base_profile["_consistency_retry_attempted"] = True
+
     return canonical_preset, cast(TtsProfile, base_profile)
 
 
 def tts_profile_to_manifest_kwargs(profile: TtsProfile) -> dict[str, VoicePresetArg]:
     payload: dict[str, VoicePresetArg] = {
         "mode": profile["mode"],
+        "synthesis_mode": profile.get("synthesis_mode", "sentence"),
+        "seed_mode": profile["seed_mode"],
         "language": profile["language"],
         "speed": profile["speed"],
         "num_step": profile["num_step"],

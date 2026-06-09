@@ -1,0 +1,10 @@
+{
+  "id": "community/deno2026/z_image_turbo_korean",
+  "name": "Z-Image Turbo Korean Direct",
+  "source": "Local user-provided workflow at C:/Users/petbl/newauto/Z image/Z image turbo.json",
+  "imported_at": "2026-05-17",
+  "notes": [
+    "D2 rebuild workflow for Korean-direct Z-Image Turbo generation.",
+    "Requires Z-Image Turbo weights, Qwen-3 4B CLIP, ae.safetensors VAE, and referenced custom nodes in the ComfyUI install."
+  ]
+}

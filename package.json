@@ -2,9 +2,12 @@
   "name": "tube-factory-frontend",
   "private": true,
   "devDependencies": {
+    "@tauri-apps/cli": "^2.0.0",
     "typescript": "^5.9.3"
   },
   "scripts": {
-    "typecheck:frontend": "npx tsc -p tsconfig.json"
+    "typecheck:frontend": "npx tsc -p tsconfig.json",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
   }
 }

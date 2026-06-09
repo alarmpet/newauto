@@ -1,0 +1,24 @@
+from __future__ import annotations
+
+import argparse
+import sys
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from scripts import newauto_mcp as core
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Diagnose newauto runtime and project state.")
+    parser.add_argument("--project-id", default="", help="Optional newauto project id.")
+    args = parser.parse_args()
+    core._configure_stdout()
+    print(core.diagnose_newauto_runtime(str(args.project_id or "")))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

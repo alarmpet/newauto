@@ -2,440 +2,107 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8">
-  <title>TUBE FACTORY | OmniVoice</title>
+  <title>newauto Studio</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
   <aside class="sidebar">
     <div class="brand">
-      <div class="logo">YT</div>
+      <div class="logo">NA</div>
       <div>
-        <b>TUBE FACTORY</b>
-        <div class="muted">OmniVoice Studio</div>
+        <b>newauto Studio</b>
+        <div class="muted">Z-Image Korean backend</div>
       </div>
     </div>
-
-    <div class="group">
-      <div class="group-title">Projects</div>
-      <button id="nav-projects" class="nav active" type="button">All Projects</button>
-    </div>
-
-    <div class="group" id="workflow-nav" hidden>
-      <div class="group-title">Workflow</div>
-      <button class="nav step" data-step="1" type="button">1. Script</button>
-      <button class="nav step" data-step="2" type="button">2. Media</button>
-      <button class="nav step" data-step="3" type="button">3. TTS</button>
-      <button class="nav step" data-step="4" type="button">4. Render</button>
-      <button class="nav step" data-step="5" type="button">5. YouTube</button>
-    </div>
+    <button id="nav-projects" class="nav active" type="button">Projects</button>
   </aside>
 
   <main class="main">
     <section id="view-projects" class="view">
       <header class="header">
-        <h1>프로젝트</h1>
-        <div class="subtitle">스크립트 작성부터 미디어 업로드, TTS, 렌더, YouTube 업로드까지 한 화면에서 관리합니다.</div>
+        <h1>Projects</h1>
+        <div class="subtitle">TTS, render, source drafting, and existing project lifecycle remain available.</div>
       </header>
-
       <div class="actions">
-        <input id="new-title" placeholder="새 프로젝트 제목" />
-        <button id="btn-new" class="btn primary" type="button">프로젝트 만들기</button>
+        <input id="new-title" placeholder="Project title">
+        <button id="btn-new" class="btn primary" type="button">Create</button>
       </div>
-
       <div id="projects-list" class="projects-list"></div>
-
-      <div id="projects-empty" class="empty" hidden>
-        <div class="empty-icon">+</div>
-        <div class="empty-title">아직 프로젝트가 없습니다.</div>
-        <div class="muted">첫 프로젝트를 만들고 작업을 시작해 보세요.</div>
-      </div>
+      <div id="projects-empty" class="empty" hidden>No projects found.</div>
     </section>
 
     <section id="view-workflow" class="view" hidden>
       <header class="header row between">
         <div>
           <button id="back" class="linklike" type="button">Projects</button>
-          <h1 id="wf-title">프로젝트</h1>
-          <div class="subtitle" id="wf-id"></div>
-        </div>
-
-        <div class="row">
-          <button id="clone-project" class="btn" type="button">Clone Project</button>
-        </div>
-        <div class="progress-wrap">
-          <div class="progress-caption">전체 작업 진행률</div>
-          <div class="progress"><div id="progress-bar"></div></div>
-          <div class="muted" id="progress-label">0%</div>
+          <h1 id="wf-title">Project</h1>
+          <div id="wf-id" class="subtitle"></div>
         </div>
       </header>
 
-      <section id="step-1" class="step-view">
-        <h2>스크립트 작성</h2>
-        <input id="s1-title" placeholder="영상 제목" />
-        <textarea id="s1-script" placeholder="문장 단위 스크립트를 입력하세요. 저장하면 문장 단위로 자동 분리됩니다."></textarea>
-        <div class="row between">
-          <div class="muted" id="s1-count">문장 0개</div>
-          <button id="s1-save" class="btn primary" type="button">저장</button>
-        </div>
+      <section class="card">
+        <h2>1. Script</h2>
+        <input id="s1-title" placeholder="Title">
+        <textarea id="s1-script" placeholder="Write or paste script sentences."></textarea>
+        <button id="s1-save" class="btn primary" type="button">Save Script</button>
       </section>
 
-      <section id="step-2" class="step-view" hidden>
-        <div class="row between">
-          <div>
-            <h2>미디어 업로드</h2>
-            <div class="muted" id="media-workflow-hint">전체 작업 진행률과 별도로 아래 패널에서 미디어 업로드 상태를 보여줍니다.</div>
-          </div>
-        </div>
-
-        <div id="dropzone" class="dropzone" tabindex="0" role="button">
-          <div>이미지나 영상을 드래그해서 올리거나 클릭해서 업로드하세요.</div>
-          <div class="muted">지원 형식: jpg, jpeg, png, webp, mp4, mov, webm</div>
-          <input type="file" id="file-input" accept="image/*,video/*" multiple hidden>
-        </div>
-
-        <section class="card thumbnail-panel">
-          <div class="section-head row between">
-            <div>
-              <strong>YouTube Thumbnail</strong>
-              <div class="muted">영상 미디어와 별도로 업로드합니다. 권장: 1280x720, 16:9, JPG/PNG/WebP.</div>
-            </div>
-            <div class="thumbnail-actions">
-              <button id="thumbnail-upload" class="btn" type="button">Upload Thumbnail</button>
-              <button id="thumbnail-delete" class="btn danger" type="button">Delete</button>
-              <input type="file" id="thumbnail-input" accept="image/*" hidden>
-            </div>
-          </div>
-          <div id="thumbnail-preview" class="thumbnail-preview">
-            <div class="media-empty">아직 업로드한 썸네일이 없습니다.</div>
-          </div>
-          <div id="thumbnail-meta" class="media-preview-meta muted"></div>
-        </section>
-
-        <section class="card thumbnail-panel">
-          <div class="section-head row between">
-            <div>
-              <strong>Background Music</strong>
-              <div class="muted">렌더 중 섞을 BGM 트랙 하나를 업로드합니다.</div>
-            </div>
-            <div class="thumbnail-actions">
-              <button id="bgm-upload" class="btn" type="button">Upload BGM</button>
-              <button id="bgm-delete" class="btn danger" type="button">Delete</button>
-              <input type="file" id="bgm-input" accept="audio/*" hidden>
-            </div>
-          </div>
-          <div id="bgm-meta" class="media-preview-meta muted">No BGM uploaded.</div>
-        </section>
-
-        <div id="media-upload-panel" class="card upload-panel">
-          <div class="upload-panel-header">
-            <strong>업로드 상태</strong>
-            <span class="muted" id="media-upload-status">대기 중</span>
-          </div>
-
-          <div class="upload-metric">
-            <div class="row between">
-              <span>브라우저 전송</span>
-              <span class="muted" id="media-transfer-label">0%</span>
-            </div>
-            <div class="progress thin"><div id="media-transfer-bar"></div></div>
-          </div>
-
-          <div class="upload-metric">
-            <div class="row between">
-              <span>서버 처리</span>
-              <span class="muted" id="media-server-label">0%</span>
-            </div>
-            <div class="progress thin secondary"><div id="media-server-bar"></div></div>
-          </div>
-
-          <div id="media-upload-summary" class="upload-summary muted">업로드를 시작하면 파일별 진행 상황을 여기에서 확인할 수 있습니다.</div>
-        </div>
-
-        <div class="media-layout">
-          <section class="media-stage">
-            <div class="section-head row between">
-              <div>
-                <strong>업로드한 미디어</strong>
-                <div class="muted">썸네일로 확인하고 드래그 또는 이동 버튼으로 순서를 바꿀 수 있습니다.</div>
-              </div>
-              <div class="muted" id="media-count">0 items</div>
-            </div>
-            <div id="media-grid" class="media-grid"></div>
-          </section>
-
-          <aside class="card media-preview-card">
-            <div class="section-head">
-              <strong>선택한 미디어 미리보기</strong>
-            </div>
-            <div id="media-preview-stage" class="media-preview-stage">
-              <div class="media-empty">업로드한 이미지나 영상을 선택하면 여기에서 크게 볼 수 있습니다.</div>
-            </div>
-            <div id="media-preview-meta" class="media-preview-meta muted"></div>
-          </aside>
-        </div>
-      </section>
-
-      <section id="step-3" class="step-view" hidden>
-        <h2>TTS 생성</h2>
-        <label for="s3-voice">보이스 프리셋</label>
-        <select id="s3-voice">
-          <option value="auto">Auto</option>
-          <option value="male-calm">Male Calm</option>
-          <option value="female-bright">Female Bright</option>
-          <option value="narrator">Narrator</option>
-          <option value="male-30s-40s-lowmid">30~40대 중저음 남성</option>
-          <option value="male-40s-50s-lowmid">40~50대 중저음 남성</option>
-          <option value="male-announcer-30s-40s">30~40대 남성 아나운서</option>
-          <option value="male-low-30s-40s">30~40대 남성 저음</option>
-          <option value="male-pastor-30s-40s">30~40대 남성 목소리</option>
-          <option value="male-deep-calm">Male Deep Calm</option>
-          <option value="male-mid-clear">Male Mid Clear</option>
-          <option value="female-bright-clear">Female Bright Clear</option>
-          <option value="female-low-calm">Female Low Calm</option>
-          <option value="elder-narration">Elder Narration</option>
-          <option value="whisper-story">Whisper Story</option>
-          <option value="english-bright">English Bright</option>
-        </select>
-        <section class="card subtitle-style-panel">
-          <div class="section-head">
-            <strong>Voice Tuning</strong>
-          </div>
-          <div class="subtitle-controls">
-            <label for="s3-mode">Mode
-              <select id="s3-mode">
-                <option value="auto">Auto</option>
-                <option value="design">Design</option>
-              </select>
-            </label>
-            <label for="s3-language">Language
-              <select id="s3-language">
-                <option value="ko">Korean</option>
-                <option value="en">English</option>
-                <option value="auto">Auto</option>
-              </select>
-            </label>
-            <label for="s3-speed">Speed
-              <input id="s3-speed" type="number" min="0.75" max="1.25" step="0.01">
-            </label>
-            <label for="s3-duration">Duration Override
-              <input id="s3-duration" type="number" min="0" max="30" step="0.1" placeholder="Auto">
-            </label>
-            <label for="s3-num-step">Sampling Steps
-              <input id="s3-num-step" type="number" min="16" max="64" step="1">
-            </label>
-            <label for="s3-guidance">Guidance Scale
-              <input id="s3-guidance" type="number" min="1" max="5" step="0.1">
-            </label>
-            <label for="s3-denoise">Denoise
-              <select id="s3-denoise">
-                <option value="on">On</option>
-                <option value="off">Off</option>
-              </select>
-            </label>
-            <label for="s3-postprocess">Postprocess
-              <select id="s3-postprocess">
-                <option value="on">On</option>
-                <option value="off">Off</option>
-              </select>
-            </label>
-          </div>
-          <label for="s3-instruct">Instruction
-            <textarea id="s3-instruct" rows="3" placeholder="Design 모드에서만 목표 목소리 설명을 입력하세요."></textarea>
+      <section id="image-gen-panel" class="card">
+        <h2>2. Z-Image Turbo</h2>
+        <div class="grid two">
+          <label>
+            Sentence
+            <select id="s2-sentence"></select>
           </label>
-          <div class="muted">한국어 스크립트는 OmniVoice에 언어 힌트를 전달하고, 프리셋 차이가 더 크게 들리도록 기본 세트를 넓혔습니다.</div>
-        </section>
-        <div class="row">
-          <button id="s3-run" class="btn primary" type="button">TTS 시작</button>
-          <span id="s3-state" class="muted">idle 0%</span>
-        </div>
-        <div id="s3-effective-profile" class="card muted"></div>
-        <div id="s3-dirty-badge" class="card warn" hidden>수정된 고급 설정이 현재 프리셋보다 우선 적용됩니다.</div>
-        <section class="card tts-preview-panel">
-          <div class="section-head row between">
-            <div>
-              <strong>Voice Sample Preview</strong>
-              <div class="muted">현재 보이스 프리셋과 튜닝 값으로 짧은 샘플을 바로 들어볼 수 있습니다.</div>
-            </div>
-            <button id="s3-preview-run" class="btn" type="button">샘플 듣기</button>
-          </div>
-          <label for="s3-preview-text">Sample Text
-            <textarea id="s3-preview-text" rows="3" placeholder="샘플로 들어볼 문장을 입력하세요. 비워두면 기본 문장을 사용합니다."></textarea>
+          <label>
+            Aspect
+            <select id="s2-aspect">
+              <option value="16:9">16:9</option>
+              <option value="9:16">9:16</option>
+              <option value="1:1">1:1</option>
+            </select>
           </label>
-          <div id="s3-preview-state" class="muted">샘플을 생성하면 여기에서 바로 재생할 수 있습니다.</div>
-          <audio id="s3-preview-audio" controls preload="none"></audio>
-        </section>
-        <div id="s3-list" class="tts-list"></div>
+        </div>
+        <label for="s2-negative">Negative prompt override</label>
+        <input id="s2-negative" placeholder="Optional">
+        <div class="actions">
+          <button id="s2-preview" class="btn" type="button">Preview Prompt</button>
+          <button id="s2-generate-one" class="btn primary" type="button">Generate Sentence</button>
+          <button id="s2-generate-all" class="btn" type="button">Generate All</button>
+        </div>
+        <textarea id="s2-prompt-preview" readonly placeholder="Z-Image Korean prompt preview"></textarea>
+        <div id="s2-status" class="status-line"></div>
       </section>
 
-      <section id="step-4" class="step-view" hidden>
-        <h2>렌더와 미리보기</h2>
-        <section class="card subtitle-style-panel">
-          <div class="section-head row between">
-            <div>
-              <strong>Render Readiness</strong>
-              <div class="muted">로컬 상태를 점검하고 렌더 단계 로그를 확인합니다.</div>
-            </div>
-            <div class="row">
-              <button id="preflight-run" class="btn" type="button">Run Pre-flight</button>
-              <span class="inline-help" tabindex="0" data-help="렌더 전에 스크립트, TTS, 미디어, FFmpeg 같은 필수 조건이 준비됐는지 빠르게 점검합니다.">?</span>
-              <button id="system-health-run" class="btn" type="button">System Health</button>
-              <span class="inline-help" tabindex="0" data-help="현재 PC에서 FFmpeg, OmniVoice, OAuth 파일, 저장 경로, 디스크 여유 공간 상태를 확인합니다.">?</span>
-            </div>
-          </div>
-          <div id="preflight-results" class="card"></div>
-          <div id="system-health-results" class="card"></div>
-          <div class="subtitle-controls">
-            <label><span class="label-row">Ken Burns <span class="inline-help" tabindex="0" data-help="정지 이미지에 천천히 확대·이동 효과를 넣어 화면이 가만히 멈춰 보이지 않게 합니다.">?</span></span>
-              <select id="feature-kenburns">
-                <option value="off">Off</option>
-                <option value="on">On</option>
-              </select>
-            </label>
-            <label><span class="label-row">BGM Volume (dB) <span class="inline-help" tabindex="0" data-help="배경음악 크기를 조절합니다. 값이 더 작은 음수일수록 BGM이 더 조용해집니다.">?</span></span>
-              <input id="feature-bgm-volume" type="number" min="-40" max="6" step="1">
-            </label>
-            <label><span class="label-row">BGM Ducking <span class="inline-help" tabindex="0" data-help="내레이션이 나올 때 배경음악 볼륨을 자동으로 낮춰 목소리를 더 또렷하게 들리게 합니다.">?</span></span>
-              <select id="feature-bgm-ducking">
-                <option value="on">On</option>
-                <option value="off">Off</option>
-              </select>
-            </label>
-            <label><span class="label-row">Render Landscape <span class="inline-help" tabindex="0" data-help="일반 유튜브 영상용 가로형 16:9 결과물을 렌더합니다.">?</span></span>
-              <input id="feature-render-landscape" type="checkbox" checked>
-            </label>
-            <label><span class="label-row">Render Shorts <span class="inline-help" tabindex="0" data-help="쇼츠 업로드용 세로형 9:16 결과물을 추가로 렌더합니다.">?</span></span>
-              <input id="feature-render-shorts" type="checkbox">
-            </label>
-          </div>
-          <div class="row">
-            <button id="feature-save" class="btn" type="button">Save render settings</button>
-          </div>
-
-          <div class="section-head row between">
-            <div>
-              <strong>Subtitle Style</strong>
-              <div class="muted">자막 색상, 크기, 위치, 여백, 줄 길이와 효과를 조절합니다.</div>
-            </div>
-            <button id="subtitle-save" class="btn" type="button">Save subtitle style</button>
-          </div>
-
-          <div class="subtitle-controls">
-            <label><span class="label-row">Font <span class="inline-help" tabindex="0" data-help="자막에 사용할 글꼴입니다. PC에 실제로 설치된 폰트가 가장 안정적으로 적용됩니다.">?</span></span>
-              <input id="subtitle-font" value="Malgun Gothic">
-            </label>
-            <label><span class="label-row">Size <span class="inline-help" tabindex="0" data-help="자막 글자 크기입니다. 값이 클수록 영상에서 더 크게 표시됩니다.">?</span></span>
-              <input id="subtitle-size" type="number" min="24" max="96" step="1">
-            </label>
-            <label><span class="label-row">Text Color <span class="inline-help" tabindex="0" data-help="자막 본문 색상입니다. 배경과 대비가 큰 색을 쓰면 가독성이 좋아집니다.">?</span></span>
-              <input id="subtitle-primary-color" type="color">
-            </label>
-            <label><span class="label-row">Outline Color <span class="inline-help" tabindex="0" data-help="글자 바깥 테두리 색상입니다. 보통 검정이나 진한 색이 가장 안정적입니다.">?</span></span>
-              <input id="subtitle-outline-color" type="color">
-            </label>
-            <label><span class="label-row">Outline <span class="inline-help" tabindex="0" data-help="자막 테두리 두께입니다. 값을 높이면 복잡한 배경에서도 글자가 덜 묻힙니다.">?</span></span>
-              <input id="subtitle-outline-width" type="range" min="0" max="8" step="1">
-            </label>
-            <label><span class="label-row">Shadow <span class="inline-help" tabindex="0" data-help="자막 그림자 강도입니다. 윤곽이 살짝 뜨는 느낌을 줄 때 유용합니다.">?</span></span>
-              <input id="subtitle-shadow" type="range" min="0" max="8" step="1">
-            </label>
-            <label><span class="label-row">Position <span class="inline-help" tabindex="0" data-help="자막 세로 위치를 정합니다. Top, Upper, Middle, Lower, Bottom 중 하나를 선택할 수 있습니다.">?</span></span>
-              <select id="subtitle-position">
-                <option value="top">Top</option>
-                <option value="upper">Upper</option>
-                <option value="middle">Middle</option>
-                <option value="lower">Lower</option>
-                <option value="bottom">Bottom</option>
-              </select>
-            </label>
-            <label><span class="label-row">Horizontal Margin <span class="inline-help" tabindex="0" data-help="자막 좌우 여백입니다. 값을 키우면 자막 폭이 좁아져 줄바꿈이 더 빨라지고 화면 바깥 잘림도 줄어듭니다.">?</span></span>
-              <input id="subtitle-margin-h" type="number" min="0" max="400" step="4">
-            </label>
-            <label><span class="label-row">Vertical Margin <span class="inline-help" tabindex="0" data-help="위아래 여백입니다. Top이나 Bottom처럼 가장자리 위치에서 자막을 화면 안쪽으로 더 띄울 때 사용합니다.">?</span></span>
-              <input id="subtitle-margin-v" type="number" min="0" max="240" step="4">
-            </label>
-            <label><span class="label-row">Minimum Display <span class="inline-help" tabindex="0" data-help="짧은 문장도 너무 빨리 사라지지 않도록 자막이 최소한 유지되는 시간을 정합니다.">?</span></span>
-              <input id="subtitle-min-display-sec" type="number" min="0.5" max="3" step="0.1">
-            </label>
-            <label><span class="label-row">Background <span class="inline-help" tabindex="0" data-help="자막 뒤에 깔리는 배경 박스 색상입니다. 강한 영상 위에서는 어두운 색이 유리합니다.">?</span></span>
-              <input id="subtitle-background-color" type="color">
-            </label>
-            <label><span class="label-row">Background Opacity <span class="inline-help" tabindex="0" data-help="자막 배경의 진하기입니다. 값을 높이면 배경 박스가 더 선명하게 보입니다.">?</span></span>
-              <input id="subtitle-background-opacity" type="range" min="0" max="1" step="0.05">
-            </label>
-            <label><span class="label-row">Line Length <span class="inline-help" tabindex="0" data-help="한 줄에 담을 자막 길이 기준입니다. 값을 낮추면 한 화면에 보이는 자막이 더 짧고 읽기 쉽게 나뉩니다.">?</span></span>
-              <input id="subtitle-max-line-chars" type="number" min="16" max="40" step="1">
-            </label>
-            <label><span class="label-row">Effect <span class="inline-help" tabindex="0" data-help="자막 등장 방식입니다. None은 기본, Fade는 부드러운 등장, Pop은 튀는 효과, Karaoke는 단어 진행 강조입니다.">?</span></span>
-              <select id="subtitle-effect">
-                <option value="none">None</option>
-                <option value="fade">Fade</option>
-                <option value="pop">Pop</option>
-                <option value="karaoke">Karaoke</option>
-              </select>
-            </label>
-          </div>
-
-          <div class="subtitle-preset-row">
-            <span class="muted">Quick presets</span>
-            <div class="subtitle-preset-buttons">
-              <button class="btn subtitle-preset" type="button" data-preset="default">Default</button>
-              <button class="btn subtitle-preset" type="button" data-preset="bold">Bold</button>
-              <button class="btn subtitle-preset" type="button" data-preset="minimal">Minimal</button>
-              <button class="btn subtitle-preset" type="button" data-preset="highlight">Highlight</button>
-            </div>
-          </div>
-
-          <div id="subtitle-position-hint" class="muted subtitle-position-hint">
-            Upper, middle, and lower use fixed anchors. Top and bottom use the vertical margin directly.
-          </div>
-
-          <div class="subtitle-preview-stage">
-            <div id="subtitle-preview-caption" class="subtitle-preview-caption">자막 스타일 미리보기</div>
-          </div>
-        </section>
-        <div class="row">
-          <button id="s4-run" class="btn primary" type="button">렌더 시작</button>
-          <span id="s4-state" class="muted">idle 0%</span>
-        </div>
-        <div id="s4-log" class="card muted"></div>
-        <video id="s4-video" controls hidden></video>
+      <section class="card">
+        <h2>3. TTS / Render</h2>
+        <label for="s3-voice">Voice</label>
+        <select id="s3-voice"></select>
+        <div id="s3-effective-profile" class="muted"></div>
+        <span id="s3-dirty-badge" class="muted" hidden>unsaved</span>
+        <p class="muted">Existing TTS and render endpoints remain available. Full controls return in the rebuilt UI path.</p>
       </section>
 
-      <section id="step-5" class="step-view" hidden>
-        <h2>YouTube 업로드</h2>
-        <div id="oauth-panel" class="card"></div>
-
-        <label for="s5-title">제목</label>
-        <input id="s5-title" />
-
-        <label for="s5-desc">설명</label>
-        <textarea id="s5-desc" rows="4"></textarea>
-
-        <label for="s5-tags">태그</label>
-        <input id="s5-tags" placeholder="ai, omnivoice, tutorial" />
-
-        <label for="s5-privacy">공개 설정</label>
-        <select id="s5-privacy">
-          <option value="private">Private</option>
-          <option value="unlisted">Unlisted</option>
-          <option value="public">Public</option>
-        </select>
-
-        <label for="s5-schedule">Schedule At (ISO datetime)</label>
-        <input id="s5-schedule" placeholder="2026-04-25T09:00:00Z" />
-
-        <div class="row">
-          <button id="s5-run" class="btn primary" type="button">업로드 시작</button>
-          <span id="s5-state" class="muted">idle 0%</span>
+      <section id="stage-manifest-panel" class="card operator-console">
+        <h2>4. Operator Console</h2>
+        <div id="workflow-stage-cards" class="stage-grid"></div>
+        <div id="prompt-preview-panel" class="status-line">Prompt preview per sentence</div>
+        <div id="image-qa-panel" class="status-line">Image QA issues</div>
+        <div id="tts-consistency-panel" class="status-line">TTS consistency status</div>
+        <div id="render-preflight-panel" class="status-line">Render preflight failures</div>
+        <section id="render-blockers-panel" class="render-blockers" hidden>
+          <h3>Render blocked</h3>
+          <ul id="render-blockers-list"></ul>
+        </section>
+        <div class="actions">
+          <button id="retry-stage" class="btn" type="button">Retry Stage</button>
+          <button id="resume-autopilot" class="btn primary" type="button">Resume Autopilot</button>
+          <button id="cancel-autopilot" class="btn" type="button">Cancel Autopilot</button>
         </div>
-
-        <div id="s5-link"></div>
-        <div id="s5-stats-panel" class="card"></div>
       </section>
     </section>
   </main>
-
-  <script src="/static/app.js"></script>
+  <script src="/static/app.js" type="module"></script>
 </body>
 </html>

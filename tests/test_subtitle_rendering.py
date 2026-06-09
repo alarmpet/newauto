@@ -10,12 +10,15 @@ from app.services.subtitle import (
     _ass_margin_v,
     _effective_max_line_chars,
     _estimate_block_height_px,
+    _prepare_display_timings,
     _smart_wrap,
     normalize_subtitle_style,
+    shorts_subtitle_style,
+    subtitle_display_qa,
     write_ass,
     write_srt,
 )
-from app.types import SubtitleStyle, TimingEntry
+from app.types import SubtitleStyle, TimingEntry, WordTimingEntry
 
 
 class FakeCredentials:
@@ -201,6 +204,28 @@ class SubtitleRenderingTests(unittest.TestCase):
         self.assertRegex(lower_content, r"Dialogue: 0,0:00:00\.00,0:00:01\.00,Default,,0,0,\d+,,")
         self.assertIn("Dialogue: 0,0:00:00.00,0:00:01.40,", upper_content)
 
+    def test_write_ass_supports_caption_style_variants(self) -> None:
+        timings: list[TimingEntry] = [
+            {"idx": 0, "text": "첫 문장입니다.", "start": 0.0, "end": 1.0, "dur": 1.0},
+            {"idx": 1, "text": "둘째 문장입니다.", "start": 1.2, "end": 2.2, "dur": 1.0},
+        ]
+        with TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "variants.ass"
+            write_ass(
+                timings,
+                output_path,
+                DEFAULT_SUBTITLE_STYLE,
+                cue_style_map={0: "emphasis", 1: "quote"},
+            )
+            content = output_path.read_text(encoding="utf-8")
+
+        self.assertIn("Style: Emphasis,", content)
+        self.assertIn("Style: Quote,", content)
+        self.assertIn("Dialogue: 0,0:00:00.00,0:00:01.00,Emphasis", content)
+        self.assertIn("Dialogue: 0,0:00:01.20,0:00:02.20,Quote", content)
+        self.assertIn(r"{\fscx105\fscy105}", content)
+        self.assertIn(r"{\fad(120,120)}", content)
+
     def test_write_srt_extends_short_cues_without_overlap(self) -> None:
         timings: list[TimingEntry] = [
             {"idx": 0, "text": "첫 문장입니다.", "start": 0.0, "end": 0.4, "dur": 0.4},
@@ -220,12 +245,18 @@ class SubtitleRenderingTests(unittest.TestCase):
                 "position": "lower",
                 "margin_h": 180,
                 "min_display_sec": 2.25,
+                "cue_split_mode": "readable",
+                "max_cue_sec": 2.8,
+                "max_lines": 2,
             }
         )
 
         self.assertEqual(style["position"], "lower")
         self.assertEqual(style["margin_h"], 180)
         self.assertEqual(style["min_display_sec"], 2.25)
+        self.assertEqual(style["cue_split_mode"], "readable")
+        self.assertEqual(style["max_cue_sec"], 2.8)
+        self.assertEqual(style["max_lines"], 2)
         self.assertEqual(style["max_line_chars"], 26)
 
     def test_write_ass_wraps_long_lines_with_shorter_default_policy(self) -> None:
@@ -246,6 +277,145 @@ class SubtitleRenderingTests(unittest.TestCase):
         self.assertIn(r"\N", content)
         self.assertNotIn(r"\N\N", content)
         self.assertNotIn("화면에 너무 길게 보이지 않도록 더 짧은 두 줄 자막으로 나뉘어야 합니다.", content)
+
+    def test_prepare_display_timings_readable_mode_splits_long_sentence(self) -> None:
+        timings: list[TimingEntry] = [
+            {
+                "idx": 0,
+                "text": "이 문장은 화면에 한 번에 너무 길게 나오지 않도록 읽기 좋은 자막 단위로 나뉘어야 합니다.",
+                "start": 0.0,
+                "end": 4.0,
+                "dur": 4.0,
+            }
+        ]
+        style: SubtitleStyle = {
+            **DEFAULT_SUBTITLE_STYLE,
+            "cue_split_mode": "readable",
+            "max_line_chars": 12,
+            "max_lines": 2,
+        }
+        display_timings, _, is_readable = _prepare_display_timings(timings, style, None)
+        self.assertTrue(is_readable)
+        self.assertGreater(len(display_timings), 1)
+        self.assertEqual(display_timings[0]["source_idx"], 0)
+
+    def test_subtitle_display_qa_rejects_sentence_mode_for_shorts(self) -> None:
+        timings: list[TimingEntry] = [
+            {
+                "idx": 0,
+                "text": "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda",
+                "start": 0.0,
+                "end": 6.0,
+                "dur": 6.0,
+            }
+        ]
+        qa = subtitle_display_qa(timings, DEFAULT_SUBTITLE_STYLE, render_format="shorts")
+
+        self.assertFalse(qa["ok"])
+        self.assertIn("issues", qa)
+
+    def test_shorts_subtitle_style_passes_readable_layout_qa(self) -> None:
+        timings: list[TimingEntry] = [
+            {
+                "idx": 0,
+                "text": "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda",
+                "start": 0.0,
+                "end": 6.0,
+                "dur": 6.0,
+            }
+        ]
+        style = shorts_subtitle_style(DEFAULT_SUBTITLE_STYLE)
+        qa = subtitle_display_qa(timings, style, render_format="shorts")
+
+        self.assertTrue(qa["ok"])
+        self.assertGreater(qa["cue_count"], 1)
+
+    def test_prepare_display_timings_word_first_preserves_karaoke_mapping(self) -> None:
+        timings: list[TimingEntry] = [
+            {
+                "idx": 0,
+                "text": "alpha beta gamma delta epsilon",
+                "start": 0.0,
+                "end": 2.5,
+                "dur": 2.5,
+            }
+        ]
+        word_timings: list[WordTimingEntry] = [
+            {"cue_idx": 0, "word": "alpha", "start": 0.0, "end": 0.5},
+            {"cue_idx": 0, "word": "beta", "start": 0.5, "end": 1.0},
+            {"cue_idx": 0, "word": "gamma", "start": 1.0, "end": 1.5},
+            {"cue_idx": 0, "word": "delta", "start": 1.5, "end": 2.0},
+            {"cue_idx": 0, "word": "epsilon", "start": 2.0, "end": 2.5},
+        ]
+        style: SubtitleStyle = {
+            **DEFAULT_SUBTITLE_STYLE,
+            "cue_split_mode": "readable",
+            "max_line_chars": 8,
+            "max_lines": 1,
+            "effect": "karaoke",
+        }
+        display_timings, display_words, is_readable = _prepare_display_timings(timings, style, word_timings)
+        self.assertTrue(is_readable)
+        assert display_words is not None
+        self.assertGreater(len(display_timings), 1)
+        self.assertEqual(display_timings[0]["start"], 0.0)
+        self.assertEqual(display_words[0]["cue_idx"], display_timings[0]["idx"])
+
+    def test_prepare_display_timings_readable_mode_does_not_overlap(self) -> None:
+        timings: list[TimingEntry] = [
+            {
+                "idx": 0,
+                "text": "alpha beta gamma delta",
+                "start": 0.0,
+                "end": 1.2,
+                "dur": 1.2,
+            }
+        ]
+        word_timings: list[WordTimingEntry] = [
+            {"cue_idx": 0, "word": "alpha", "start": 0.0, "end": 0.3},
+            {"cue_idx": 0, "word": "beta", "start": 0.3, "end": 0.6},
+            {"cue_idx": 0, "word": "gamma", "start": 0.6, "end": 0.9},
+            {"cue_idx": 0, "word": "delta", "start": 0.9, "end": 1.2},
+        ]
+        style: SubtitleStyle = {
+            **DEFAULT_SUBTITLE_STYLE,
+            "cue_split_mode": "readable",
+            "max_line_chars": 5,
+            "max_lines": 1,
+        }
+        display_timings, _, _ = _prepare_display_timings(timings, style, word_timings)
+        for first, second in zip(display_timings, display_timings[1:]):
+            self.assertLessEqual(first["end"], second["start"])
+
+    def test_prepare_display_timings_falls_back_when_word_timings_are_garbled(self) -> None:
+        timings: list[TimingEntry] = [
+            {
+                "idx": 0,
+                "text": "AI 모델 학습 인프라가 빠르게 바뀌고 있습니다.",
+                "start": 0.0,
+                "end": 3.0,
+                "dur": 3.0,
+            }
+        ]
+        word_timings: list[WordTimingEntry] = [
+            {"cue_idx": 0, "word": "AI", "start": 0.0, "end": 0.5},
+            {"cue_idx": 0, "word": "紐⑤뜽", "start": 0.5, "end": 1.0},
+            {"cue_idx": 0, "word": "?숈뒿", "start": 1.0, "end": 1.5},
+            {"cue_idx": 0, "word": "?꾩씤?꾨씪媛?", "start": 1.5, "end": 2.0},
+            {"cue_idx": 0, "word": "?됯쾶", "start": 2.0, "end": 2.5},
+            {"cue_idx": 0, "word": "諛붾?怨?", "start": 2.5, "end": 3.0},
+        ]
+        style: SubtitleStyle = {
+            **DEFAULT_SUBTITLE_STYLE,
+            "cue_split_mode": "readable",
+            "max_line_chars": 10,
+            "max_lines": 1,
+        }
+        display_timings, display_words, is_readable = _prepare_display_timings(timings, style, word_timings)
+        self.assertTrue(is_readable)
+        self.assertIsNone(display_words)
+        self.assertGreater(len(display_timings), 1)
+        self.assertEqual(display_timings[0]["text"], "AI 모델 학습 인프라가")
 
     def test_youtube_upload_sets_thumbnail_when_present(self) -> None:
         db.init_db()
